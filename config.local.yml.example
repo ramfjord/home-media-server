@@ -1,0 +1,8 @@
+# Copy to config.local.yml and customize
+# These values override defaults in services.yml
+
+install_base: /opt/mediaserver
+media_path: /data
+
+vpn_user: media-vpn
+media_group: media

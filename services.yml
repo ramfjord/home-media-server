@@ -3,9 +3,9 @@ objectives:
   - streaming
   - monitoring
 
-# Base paths
-config_base: /home/tramfjord/projects/mediaserver/config
-compose_file: /home/tramfjord/projects/mediaserver/docker-compose.yml
+# Base paths (can be overridden in config.local.yml)
+install_base: /opt/mediaserver
+media_path: /data
 
 services:
 - name: wireguard
@@ -14,7 +14,7 @@ services:
   image: lscr.io/linuxserver/wireguard:latest
   is_vpn_gateway: true
   volumes:
-    - ${config_base}/wireguard:/config
+    - ${install_base}/config/wireguard:/config
     - /lib/modules:/lib/modules:ro
 
 - name: radarr
@@ -24,8 +24,8 @@ services:
   image: lscr.io/linuxserver/radarr:latest
   uses_vpn: true
   volumes:
-    - ${config_base}/radarr:/config
-    - /data:/data
+    - ${install_base}/config/radarr:/config
+    - ${media_path}:/data
 
 - name: sonarr
   partof: downloading
@@ -34,8 +34,8 @@ services:
   image: lscr.io/linuxserver/sonarr:latest
   uses_vpn: true
   volumes:
-    - ${config_base}/sonarr:/config
-    - /data:/data
+    - ${install_base}/config/sonarr:/config
+    - ${media_path}:/data
 
 - name: prowlarr
   partof: downloading
@@ -44,19 +44,17 @@ services:
   image: lscr.io/linuxserver/prowlarr:latest
   uses_vpn: true
   volumes:
-    - ${config_base}/prowlarr:/config
+    - ${install_base}/config/prowlarr:/config
 
 - name: qbittorrent
   partof: downloading
-  unit: qbittorrent-nox@tramfjord
-  desc: BT client
+  desc: torrent client
   port: 8080
-
-- name: deluge
-  partof: downloading
-  unit: deluge-web
-  desc: BT client
-  port: 8112
+  image: lscr.io/linuxserver/qbittorrent:latest
+  uses_vpn: true
+  volumes:
+    - ${install_base}/config/qbittorrent:/config
+    - ${media_path}:/data
 
 - name: plex
   partof: streaming

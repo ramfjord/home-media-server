@@ -1,0 +1,13 @@
+[Unit]
+Description=Media Stack (VPN + Arrs + Torrent)
+
+[Service]
+Type=simple
+Restart=on-failure
+RestartSec=10
+ExecStartPre=/bin/sh -c 'until docker info >/dev/null 2>&1; do sleep 1; done'
+ExecStart=/usr/bin/docker compose -f /opt/mediaserver/docker-compose.yml up
+ExecStop=/usr/bin/docker compose -f /opt/mediaserver/docker-compose.yml down
+
+[Install]
+WantedBy=default.target

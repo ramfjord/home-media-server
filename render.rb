@@ -8,13 +8,26 @@ text = ARGF.read
 template = ERB.new(text, trim_mode: '%<>')
 
 config_yaml = YAML.load(File.read('services.yml'))
-services = config_yaml['services']
-config_base = config_yaml['config_base'] || '/config'
-compose_file = config_yaml['compose_file'] || './docker-compose.yml'
 
-# Expand ${config_base} in volume paths
+# Load local config overrides if present
+if File.exist?('config.local.yml')
+  local_config = YAML.load(File.read('config.local.yml'))
+  config_yaml.merge!(local_config) if local_config
+end
+
+services = config_yaml['services']
+install_base = config_yaml['install_base'] || '/opt/mediaserver'
+media_path = config_yaml['media_path'] || '/data'
+compose_file = "#{install_base}/docker-compose.yml"
+
+# Expand variables in volume paths
 services.each do |svc|
-  svc['volumes'] = svc['volumes'].map { |v| v.gsub('${config_base}', config_base) } if svc['volumes']
+  if svc['volumes']
+    svc['volumes'] = svc['volumes'].map do |v|
+      v.gsub('${install_base}', install_base)
+       .gsub('${media_path}', media_path)
+    end
+  end
 end
 
 # If SERVICE_NAME is set, expose the specific service for single-service templates

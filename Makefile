@@ -1,27 +1,21 @@
 # Standard ERB files (1:1 mapping)
-ERBS := $(patsubst %.erb,%,$(wildcard prometheus/*/*.erb prometheus/*.erb alertmanager/*.erb))
-
-# Dynamic targets from services.yml using yq
-VPN_SERVICES := $(shell yq -r '.services[] | select(.uses_vpn == true) | .name' services.yml)
-VPN_SERVICE_UNITS := $(addprefix systemd/,$(addsuffix .service,$(VPN_SERVICES)))
+ERBS := $(patsubst %.erb,%,$(wildcard *.erb prometheus/*/*.erb prometheus/*.erb alertmanager/*.erb))
 
 # All generated files
-GENERATED := $(ERBS) $(VPN_SERVICE_UNITS) systemd/wireguard.service docker-compose.yml
+GENERATED := $(ERBS)
 
-.PHONY: clean all check deploy systemd gitignore
+.PHONY: clean all check deploy deploy-compose gitignore
 
-all: $(ERBS) systemd docker-compose.yml gitignore
-
-systemd: systemd/wireguard.service $(VPN_SERVICE_UNITS)
+all: $(ERBS) docker-compose.yml gitignore
 
 clean:
-	rm -rf $(ERBS) $(VPN_SERVICE_UNITS) systemd/wireguard.service docker-compose.yml
+	rm -rf $(ERBS) docker-compose.yml
 
 check: all
 	promtool check config prometheus/prometheus.yml
 	amtool check-config alertmanager/alertmanager.yml
 
-deploy: check
+deploy: check deploy-compose
 	chown -R $(USER):prometheus prometheus/
 	cp -r prometheus/* /etc/prometheus/
 	sudo systemctl reload prometheus
@@ -30,26 +24,19 @@ deploy: check
 	sudo chown -R root:root /etc/alertmanager
 	sudo systemctl reload alertmanager
 
+deploy-compose: docker-compose.yml
+	sudo mkdir -p /opt/mediaserver
+	sudo ln -sf $(CURDIR)/docker-compose.yml /opt/mediaserver/docker-compose.yml
+
 # Standard ERB rendering (1:1 mapping)
-$(ERBS): %: %.erb render.rb services.yml
+$(ERBS): %: %.erb render.rb services.yml $(wildcard config.local.yml)
 	./render.rb < $@.erb > $@
-
-# Wireguard service (uses vpn_gateway and vpn_services in template)
-systemd/wireguard.service: systemd/wireguard.service.erb render.rb services.yml
-	./render.rb < $< > $@
-
-# VPN-dependent services (pattern rule)
-$(VPN_SERVICE_UNITS): systemd/%.service: systemd/vpn-service.service.erb render.rb services.yml
-	SERVICE_NAME=$* ./render.rb < $< > $@
-
-# Docker Compose file
-docker-compose.yml: docker-compose.yml.erb render.rb services.yml
-	./render.rb < $< > $@
 
 # Update .gitignore with generated files
 gitignore:
 	@echo "# Auto-generated files (do not edit this section)" > .gitignore.generated
 	@for f in $(GENERATED); do echo "$$f" >> .gitignore.generated; done
+	@echo "config.local.yml" >> .gitignore.generated
 	@if [ -f .gitignore ]; then \
 		sed '/^# Auto-generated files/,/^# End auto-generated/d' .gitignore > .gitignore.tmp && mv .gitignore.tmp .gitignore; \
 	fi

@@ -1,10 +1,8 @@
 # Auto-generated files (do not edit this section)
+docker-compose.yml
 prometheus/rules/blackbox.yaml
 prometheus/rules/mediaserver.yaml
 prometheus/scrape_configs/mediaserver.yaml
-systemd/radarr.service
-systemd/sonarr.service
-systemd/prowlarr.service
-systemd/wireguard.service
-docker-compose.yml
+config.local.yml
 # End auto-generated
+tmp
