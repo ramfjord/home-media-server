@@ -1,7 +1,13 @@
+networks:
+  mediaserver:
+    driver: bridge
+
 services:
   wireguard:
     image: <%= vpn_gateway["image"] %>
     container_name: wireguard
+    networks:
+      - mediaserver
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
@@ -9,6 +15,8 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=Etc/UTC
+    sysctls:
+      net.ipv4.conf.all.src_valid_mark: 1
     volumes:
 % vpn_gateway["volumes"].each do |vol|
       - <%= vol %>
@@ -25,11 +33,13 @@ services:
       start_period: 10s
     restart: unless-stopped
 
-% vpn_services.each do |svc|
+% services.select { |s| s["dockerized"] }.each do |svc|
   <%= svc["name"] %>:
     image: <%= svc["image"] %>
     container_name: <%= svc["name"] %>
+% if svc["uses_vpn"]
     network_mode: "service:wireguard"
+% end
     environment:
       - PUID=1000
       - PGID=1000
