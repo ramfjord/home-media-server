@@ -1,7 +1,10 @@
 # Standard ERB files (1:1 mapping)
 ERBS := $(addprefix config/,$(patsubst %.erb,%,$(wildcard *.erb */*.erb */*/*.erb */*/*/*.erb)))
 
-.PHONY: clean all check deploy deploy-compose
+# Extract dockerized services from services.yml
+DOCKERIZED_SERVICES := $(shell yq eval '.services[] | select(.docker_config != null) | .name' services.yml 2>/dev/null)
+
+.PHONY: clean all check deploy deploy-compose $(addprefix deploy-,$(DOCKERIZED_SERVICES))
 
 all: $(ERBS)
 
@@ -20,3 +23,9 @@ check: all
 
 install: all
 	sudo rsync -av config/ /opt/mediaserver/config/
+
+# Deploy a single service: stop, update config, start
+deploy-%: config/docker-compose.yml
+	docker-compose -f config/docker-compose.yml stop $* || true
+	make install
+	docker-compose -f config/docker-compose.yml up -d $*
