@@ -1,9 +1,7 @@
 tmp
-# Auto-generated files (do not edit this section)
+config.local.yml
+config/
 docker-compose.yml
 prometheus/rules/blackbox.yaml
 prometheus/rules/mediaserver.yaml
 prometheus/scrape_configs/mediaserver.yaml
-homer/config.yml
-config.local.yml
-# End auto-generated
