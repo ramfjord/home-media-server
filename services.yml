@@ -6,6 +6,7 @@ objectives:
 # Base paths (can be overridden in config.local.yml)
 install_base: /opt/mediaserver
 media_path: /data
+hostname: localhost
 
 services:
 - name: wireguard
@@ -63,3 +64,13 @@ services:
   desc: Media streaming
   port: 32400
   healthz: /web/index.html
+
+- name: homer
+  partof: dashboard
+  desc: Service dashboard
+  port: 8000
+  container_port: 8080
+  dockerized: true
+  image: b4bz/homer:latest
+  volumes:
+    - ${install_base}/config/homer:/www/assets:ro

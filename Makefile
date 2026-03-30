@@ -1,5 +1,5 @@
 # Standard ERB files (1:1 mapping)
-ERBS := $(patsubst %.erb,%,$(wildcard *.erb prometheus/*/*.erb prometheus/*.erb alertmanager/*.erb))
+ERBS := $(patsubst %.erb,%,$(wildcard *.erb prometheus/*/*.erb prometheus/*.erb alertmanager/*.erb homer/*.erb))
 
 # All generated files
 GENERATED := $(ERBS)

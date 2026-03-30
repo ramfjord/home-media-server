@@ -1,0 +1,30 @@
+---
+title: Media Server
+subtitle: Service Dashboard
+logo: logo.png
+icon: fas fa-server
+
+# Group services by category
+<% categories = services.group_by { |s| s['partof'] }.reject { |k| k == 'dashboard' } %>
+<% icons = {
+  'downloading' => 'fas fa-cloud-download-alt',
+  'streaming' => 'fas fa-play-circle',
+  'vpn' => 'fas fa-shield-alt',
+  'monitoring' => 'fas fa-chart-line'
+} %>
+
+services:
+<% categories.sort.each do |category, svcs| %>
+  - name: "<%= category.capitalize %>"
+    icon: "<%= icons[category] || 'fas fa-folder' %>"
+    items:
+<% svcs.reject { |s| s['is_vpn_gateway'] || s['name'] == 'homer' }.each do |svc| %>
+  <% if svc['port'] %>
+      - name: "<%= svc['name'].capitalize %>"
+        subtitle: "<%= svc['desc'] %>"
+        logo: "assets/tools/<%= svc['name'] %>.png"
+        url: "http://<%= hostname %>:<%= svc['port'] %>"
+        target: "_blank"
+  <% end %>
+<% end %>
+<% end %>

@@ -44,6 +44,10 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=Etc/UTC
+% if svc["port"] && !svc["uses_vpn"]
+    ports:
+      - "<%= svc["port"] %>:<%= svc["container_port"] || svc["port"] %>"
+% end
     volumes:
 %   svc["volumes"].each do |vol|
       - <%= vol %>

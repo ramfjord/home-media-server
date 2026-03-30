@@ -18,6 +18,7 @@ end
 services = config_yaml['services']
 install_base = config_yaml['install_base'] || '/opt/mediaserver'
 media_path = config_yaml['media_path'] || '/data'
+hostname = config_yaml['hostname'] || 'localhost'
 compose_file = "#{install_base}/docker-compose.yml"
 
 # Expand variables in volume paths
