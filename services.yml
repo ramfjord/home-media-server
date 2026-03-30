@@ -72,10 +72,9 @@ services:
     volumes:
       - ${install_base}/config/qbittorrent:/config
       - ${media_path}:/data
-      - ${install_base}/scripts/qbittorrent-entrypoint.sh:/entrypoint.sh:ro
     cap_add:
       - NET_ADMIN
-    entrypoint: /entrypoint.sh
+    entrypoint: /config/entrypoint.sh
     restart: unless-stopped
 
 - name: plex
