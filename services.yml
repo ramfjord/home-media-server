@@ -84,8 +84,17 @@ services:
   partof: monitoring
   desc: Alert management
   port: 9093
+  dockerized: true
+  image: prom/alertmanager:latest
+  volumes:
+    - ${install_base}/config/alertmanager:/etc/alertmanager:ro
 
 - name: grafana
   partof: monitoring
   desc: Dashboards and visualization
   port: 3000
+  dockerized: true
+  image: grafana/grafana:latest
+  volumes:
+    - ${install_base}/config/grafana:/var/lib/grafana
+    - ${install_base}/config/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
