@@ -21,8 +21,8 @@ services:
   partof: downloading
   desc: find movies
   port: 7878
+  dockerized: true
   image: lscr.io/linuxserver/radarr:latest
-  uses_vpn: true
   volumes:
     - ${install_base}/config/radarr:/config
     - ${media_path}:/data
@@ -31,8 +31,8 @@ services:
   partof: downloading
   desc: find new shows
   port: 8989
+  dockerized: true
   image: lscr.io/linuxserver/sonarr:latest
-  uses_vpn: true
   volumes:
     - ${install_base}/config/sonarr:/config
     - ${media_path}:/data
@@ -41,8 +41,8 @@ services:
   partof: downloading
   desc: indexer manager
   port: 9696
+  dockerized: true
   image: lscr.io/linuxserver/prowlarr:latest
-  uses_vpn: true
   volumes:
     - ${install_base}/config/prowlarr:/config
 
@@ -52,6 +52,7 @@ services:
   port: 8080
   image: lscr.io/linuxserver/qbittorrent:latest
   uses_vpn: true
+  dockerized: true
   volumes:
     - ${install_base}/config/qbittorrent:/config
     - ${media_path}:/data
