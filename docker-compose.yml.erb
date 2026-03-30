@@ -1,60 +1,28 @@
-networks:
-  mediaserver:
-    driver: bridge
+<% services_config = services.select(&:dockerized?).map do |svc|
+  service_config = {
+    "container_name" => svc.name,
+    "environment" => ["PUID=1000", "PGID=1000", "TZ=Etc/UTC"]
+  }
 
-services:
-  wireguard:
-    image: <%= vpn_gateway["image"] %>
-    container_name: wireguard
-    networks:
-      - mediaserver
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Etc/UTC
-    sysctls:
-      net.ipv4.conf.all.src_valid_mark: 1
-    volumes:
-% vpn_gateway["volumes"].each do |vol|
-      - <%= vol %>
-% end
-    ports:
-% vpn_services.each do |svc|
-      - "<%= svc["port"] %>:<%= svc["port"] %>"
-% end
-    healthcheck:
-      test: ping -c 1 1.1.1.1 || exit 1
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-    restart: unless-stopped
+  if svc.uses_vpn?
+    service_config["network_mode"] = "service:wireguard"
+  else
+    service_config["networks"] = ["mediaserver"]
+  end
 
-% services.select { |s| s["dockerized"] }.each do |svc|
-  <%= svc["name"] %>:
-    image: <%= svc["image"] %>
-    container_name: <%= svc["name"] %>
-% if svc["uses_vpn"]
-    network_mode: "service:wireguard"
-% end
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Etc/UTC
-% if svc["port"] && !svc["uses_vpn"]
-    ports:
-      - "<%= svc["port"] %>:<%= svc["container_port"] || svc["port"] %>"
-% end
-    volumes:
-%   svc["volumes"].each do |vol|
-      - <%= vol %>
-%   end
-    depends_on:
-      wireguard:
-        condition: service_healthy
-    restart: unless-stopped
+  if svc.port && !svc.docker_config.key?("ports")
+    service_config["ports"] = ["#{svc.port}:#{svc.port}"]
+  end
 
-% end
+  service_config = service_config.merge(svc.docker_config)
+
+  service_config["depends_on"] = { "wireguard" => { "condition" => "service_healthy" } } unless svc.is_vpn_gateway?
+
+  [svc.name, service_config]
+end.to_h %>
+<%= {
+  "networks" => {
+    "mediaserver" => { "driver" => "bridge" }
+  },
+  "services" => services_config
+}.to_yaml %>

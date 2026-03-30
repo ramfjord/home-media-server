@@ -12,51 +12,71 @@ services:
 - name: wireguard
   partof: vpn
   desc: VPN container
-  image: lscr.io/linuxserver/wireguard:latest
   is_vpn_gateway: true
-  volumes:
-    - ${install_base}/config/wireguard:/config
-    - /lib/modules:/lib/modules:ro
+  docker_config:
+    image: lscr.io/linuxserver/wireguard:latest
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      net.ipv4.conf.all.src_valid_mark: 1
+    volumes:
+      - ${install_base}/config/wireguard:/config
+      - /lib/modules:/lib/modules:ro
+    healthcheck:
+      test: ping -c 1 1.1.1.1 || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
 
 - name: radarr
   partof: downloading
   desc: find movies
   port: 7878
-  dockerized: true
-  image: lscr.io/linuxserver/radarr:latest
-  volumes:
-    - ${install_base}/config/radarr:/config
-    - ${media_path}:/data
+  docker_config:
+    image: lscr.io/linuxserver/radarr:latest
+    volumes:
+      - ${install_base}/config/radarr:/config
+      - ${media_path}:/data
+    restart: unless-stopped
 
 - name: sonarr
   partof: downloading
   desc: find new shows
   port: 8989
-  dockerized: true
-  image: lscr.io/linuxserver/sonarr:latest
-  volumes:
-    - ${install_base}/config/sonarr:/config
-    - ${media_path}:/data
+  docker_config:
+    image: lscr.io/linuxserver/sonarr:latest
+    volumes:
+      - ${install_base}/config/sonarr:/config
+      - ${media_path}:/data
+    restart: unless-stopped
 
 - name: prowlarr
   partof: downloading
   desc: indexer manager
   port: 9696
-  dockerized: true
-  image: lscr.io/linuxserver/prowlarr:latest
-  volumes:
-    - ${install_base}/config/prowlarr:/config
+  docker_config:
+    image: lscr.io/linuxserver/prowlarr:latest
+    volumes:
+      - ${install_base}/config/prowlarr:/config
+    restart: unless-stopped
 
 - name: qbittorrent
   partof: downloading
   desc: torrent client
   port: 8080
-  image: lscr.io/linuxserver/qbittorrent:latest
-  uses_vpn: true
-  dockerized: true
-  volumes:
-    - ${install_base}/config/qbittorrent:/config
-    - ${media_path}:/data
+  docker_config:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    volumes:
+      - ${install_base}/config/qbittorrent:/config
+      - ${media_path}:/data
+      - ${install_base}/scripts/qbittorrent-entrypoint.sh:/entrypoint.sh:ro
+    cap_add:
+      - NET_ADMIN
+    entrypoint: /entrypoint.sh
+    restart: unless-stopped
 
 - name: plex
   partof: streaming
@@ -69,11 +89,13 @@ services:
   partof: dashboard
   desc: Service dashboard
   port: 8000
-  container_port: 8080
-  dockerized: true
-  image: b4bz/homer:latest
-  volumes:
-    - ${install_base}/config/homer:/www/assets:ro
+  docker_config:
+    image: b4bz/homer:latest
+    ports:
+      - 8000:8080
+    volumes:
+      - ${install_base}/config/homer:/www/assets:ro
+    restart: unless-stopped
 
 - name: prometheus
   partof: monitoring
@@ -84,17 +106,19 @@ services:
   partof: monitoring
   desc: Alert management
   port: 9093
-  dockerized: true
-  image: prom/alertmanager:latest
-  volumes:
-    - ${install_base}/config/alertmanager:/etc/alertmanager:ro
+  docker_config:
+    image: prom/alertmanager:latest
+    volumes:
+      - ${install_base}/config/alertmanager:/etc/alertmanager:ro
+    restart: unless-stopped
 
 - name: grafana
   partof: monitoring
   desc: Dashboards and visualization
   port: 3000
-  dockerized: true
-  image: grafana/grafana:latest
-  volumes:
-    - ${install_base}/config/grafana:/var/lib/grafana
-    - ${install_base}/config/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+  docker_config:
+    image: grafana/grafana:latest
+    volumes:
+      - ${install_base}/config/grafana:/var/lib/grafana
+      - ${install_base}/config/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+    restart: unless-stopped

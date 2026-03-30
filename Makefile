@@ -14,6 +14,7 @@ clean:
 check: all
 	promtool check config prometheus/prometheus.yml
 	amtool check-config alertmanager/alertmanager.yml
+	docker-compose -f docker-compose.yml config > /dev/null
 
 deploy: check deploy-compose
 	chown -R $(USER):prometheus prometheus/
