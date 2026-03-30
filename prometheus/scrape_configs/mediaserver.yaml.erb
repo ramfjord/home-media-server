@@ -48,6 +48,12 @@ scrape_configs:
      <% end %>
   <% end %>
 
+  - job_name: cadvisor
+    static_configs:
+      - targets: ["localhost:8081"]
+        labels:
+          exporter: cadvisor
+
   # - job_name: http_probe_google
   #   # Scrape this less often to not overburden plex homepage - if DNS goes down I should be able to fix it later
   #   # scrape_interval: 5m

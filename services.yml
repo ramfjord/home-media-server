@@ -122,3 +122,20 @@ services:
       - ${install_base}/config/grafana:/var/lib/grafana
       - ${install_base}/config/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
     restart: unless-stopped
+
+- name: cadvisor
+  partof: monitoring
+  desc: Container metrics exporter
+  port: 8081
+  docker_config:
+    image: gcr.io/cadvisor/cadvisor:latest
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    privileged: true
+    devices:
+      - /dev/kmsg
+    restart: unless-stopped
