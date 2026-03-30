@@ -18,7 +18,7 @@ services:
   - name: "<%= category.capitalize %>"
     icon: "<%= icons[category] || 'fas fa-folder' %>"
     items:
-<% svcs.reject { |s| s['is_vpn_gateway'] || s['name'] == 'homer' }.each do |svc| %>
+<% svcs.reject { |s| s['is_vpn_gateway'] || s['name'] == 'homer' || s['partof'] == 'dashboard' }.each do |svc| %>
   <% if svc['port'] %>
       - name: "<%= svc['name'].capitalize %>"
         subtitle: "<%= svc['desc'] %>"

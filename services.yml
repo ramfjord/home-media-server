@@ -74,3 +74,18 @@ services:
   image: b4bz/homer:latest
   volumes:
     - ${install_base}/config/homer:/www/assets:ro
+
+- name: prometheus
+  partof: monitoring
+  desc: Metrics and alerting
+  port: 9090
+
+- name: alertmanager
+  partof: monitoring
+  desc: Alert management
+  port: 9093
+
+- name: grafana
+  partof: monitoring
+  desc: Dashboards and visualization
+  port: 3000
