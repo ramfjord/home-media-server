@@ -50,6 +50,17 @@ scrape_configs:
       - targets: ["cadvisor:8080"]
         labels:
           exporter: cadvisor
+    metric_relabel_configs:
+      <% services.select(&:dockerized?).each do |svc| %>
+      - source_labels: [name]
+        target_label: service
+        replacement: <%= svc.name %>
+        regex: "<%= svc.name %>"
+      - source_labels: [name]
+        target_label: partof
+        replacement: <%= svc.partof %>
+        regex: "<%= svc.name %>"
+      <% end %>
 
   # - job_name: http_probe_google
   #   # Scrape this less often to not overburden plex homepage - if DNS goes down I should be able to fix it later
