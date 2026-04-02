@@ -1,10 +1,10 @@
 scrape_configs:
   - job_name: system_exporters
     static_configs:
-      - targets: ["localhost:9100"]
+      - targets: ["host.docker.internal:9100"]
         labels:
           exporter: node_exporter
-      - targets: ["localhost:9558"]
+      - targets: ["host.docker.internal:9558"]
         labels:
           exporter: systemd_exporter
     metric_relabel_configs:
@@ -33,7 +33,7 @@ scrape_configs:
       module: [http_basic]
     static_configs:
       - targets:
-        - http://localhost:<%= svc["port"] %><%= svc["healthz"] %>
+        - http://<%= svc.dockerized? ? svc["name"] : "localhost" %>:<%= svc["port"] %><%= svc["healthz"] %>
         labels:
           service: <%= svc["name"] %>
           partof: <%= svc["partof"] %>
@@ -44,13 +44,13 @@ scrape_configs:
       - source_labels: [__param_target]
         target_label: instance
       - target_label: __address__
-        replacement: "localhost:9115"  # The blackbox exporter's real hostname:port.
+        replacement: "host.docker.internal:9115"  # The blackbox exporter's real hostname:port.
      <% end %>
   <% end %>
 
   - job_name: cadvisor
     static_configs:
-      - targets: ["localhost:8081"]
+      - targets: ["cadvisor:8081"]
         labels:
           exporter: cadvisor
 

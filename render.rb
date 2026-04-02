@@ -81,22 +81,23 @@ hostname = config_yaml['hostname'] || 'localhost'
 compose_file = "#{install_base}/docker-compose.yml"
 
 # Expand variables in all service definitions (including docker_config)
-def expand_vars(obj, install_base, media_path)
+def expand_vars(obj, install_base, media_path, hostname)
   case obj
   when Hash
-    obj.each { |k, v| obj[k] = expand_vars(v, install_base, media_path) }
+    obj.each { |k, v| obj[k] = expand_vars(v, install_base, media_path, hostname) }
   when Array
-    obj.map! { |v| expand_vars(v, install_base, media_path) }
+    obj.map! { |v| expand_vars(v, install_base, media_path, hostname) }
   when String
     obj.gsub('${install_base}', install_base)
        .gsub('${media_path}', media_path)
+       .gsub('${hostname}', hostname)
   else
     obj
   end
 end
 
 services.each do |svc|
-  expand_vars(svc, install_base, media_path)
+  expand_vars(svc, install_base, media_path, hostname)
 end
 
 # Wrap services in ProjectService class

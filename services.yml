@@ -100,6 +100,14 @@ services:
   partof: monitoring
   desc: Metrics and alerting
   port: 9090
+  docker_config:
+    image: prom/prometheus:latest
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.external-url=http://${hostname}:9090/
+    volumes:
+      - ${install_base}/config/prometheus:/etc/prometheus:ro
+    restart: unless-stopped
 
 - name: alertmanager
   partof: monitoring
@@ -130,6 +138,8 @@ services:
   port: 8081
   docker_config:
     image: gcr.io/cadvisor/cadvisor:latest
+    ports:
+      - 8081:8080
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
