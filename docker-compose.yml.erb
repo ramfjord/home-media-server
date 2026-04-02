@@ -4,19 +4,13 @@
     "environment" => ["PUID=1000", "PGID=1000", "TZ=Etc/UTC"]
   }
 
-  if svc.uses_vpn?
-    service_config["network_mode"] = "service:wireguard"
-  else
-    service_config["networks"] = ["mediaserver"]
-  end
+  service_config["networks"] = ["mediaserver"]
 
   if svc.port && !svc.docker_config.key?("ports")
     service_config["ports"] = ["#{svc.port}:#{svc.port}"]
   end
 
   service_config = service_config.merge(svc.docker_config)
-
-  service_config["depends_on"] = { "wireguard" => { "condition" => "service_healthy" } } unless svc.is_vpn_gateway?
 
   [svc.name, service_config]
 end.to_h %>

@@ -12,7 +12,6 @@ services:
 - name: wireguard
   partof: vpn
   desc: VPN container
-  is_vpn_gateway: true
   docker_config:
     image: lscr.io/linuxserver/wireguard:latest
     cap_add:
@@ -76,6 +75,9 @@ services:
       - NET_ADMIN
     entrypoint: /config/entrypoint.sh
     restart: unless-stopped
+    depends_on:
+      wireguard:
+        condition: service_healthy
 
 - name: plex
   partof: streaming

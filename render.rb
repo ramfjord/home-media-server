@@ -12,14 +12,6 @@ class ProjectService
     @definition['name']
   end
 
-  def uses_vpn?
-    @definition['uses_vpn']
-  end
-
-  def is_vpn_gateway?
-    @definition['is_vpn_gateway']
-  end
-
   def dockerized?
     @definition.key?('docker_config')
   end
@@ -106,11 +98,5 @@ services = services.map { |s| ProjectService.new(s) }
 # If SERVICE_NAME is set, expose the specific service for single-service templates
 service_name = ENV['SERVICE_NAME']
 service = services.find { |s| s.name == service_name } if service_name
-
-# Helper: get all services that use VPN
-vpn_services = services.select { |s| s.uses_vpn? }
-
-# Helper: get the VPN gateway service (find by is_vpn_gateway in original definition)
-vpn_gateway = services.find { |s| s.is_vpn_gateway? }
 
 puts template.result

@@ -10,7 +10,7 @@ Services defined in `services.yml`: downloading (Radarr, Sonarr, Prowlarr, qBitt
 
 **`services.yml`**: Service definitions with properties:
 - `name`, `partof` (objective), `desc`, `port`, `docker_config` (image, volumes, etc.)
-- `is_vpn_gateway` (WireGuard), `unit` (systemd unit for non-Docker services like Plex)
+- `unit` (systemd unit for non-Docker services like Plex)
 - `healthz` (HTTP healthcheck path)
 
 **`config.local.yml`**: Optional overrides for `install_base` (/opt/mediaserver), `media_path` (/data), `hostname`, etc.
