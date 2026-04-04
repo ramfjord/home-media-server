@@ -1,0 +1,23 @@
+scrape_configs:
+  <% services.each do |svc| %>
+    <% if svc.has_key?("port") %>
+  - job_name: 'http_probe_<%= svc["name"] %>'
+    metrics_path: /probe
+    params:
+      module: [http_basic]
+    static_configs:
+      - targets:
+        - http://<%= svc.dockerized? ? svc["name"] : "localhost" %>:<%= svc["port"] %><%= svc["healthz"] %>
+        labels:
+          service: <%= svc["name"] %>
+          partof: <%= svc["partof"] %>
+          description: "<%= svc["desc"] %>"
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: "blackbox-exporter:9115"  # The blackbox exporter's real hostname:port.
+     <% end %>
+  <% end %>

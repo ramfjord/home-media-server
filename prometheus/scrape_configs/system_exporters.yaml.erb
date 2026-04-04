@@ -1,0 +1,23 @@
+scrape_configs:
+  - job_name: system_exporters
+    static_configs:
+      - targets: ["172.24.0.1:9100"]
+        labels:
+          exporter: node_exporter
+    metric_relabel_configs:
+      <% services.select{|s| s.has_key?("unit") }.each do |svc| %>
+      - target_label: service
+        action: replace
+        replacement: <%= svc["name"] %>
+        source_labels: [name]
+        regex: "<%= svc["unit"] %>.service"
+      <% end %>
+
+      <% goals = services.map{|s| s["partof"] }.compact.sort.uniq %>
+      <% goals.each do |goal| %>
+      - target_label: partof
+        replacement: <%= goal %>
+        source_labels: [name]
+        action: replace
+        regex: "(<%= services.select{|s| s["partof"] == goal }.map{|s| s["unit"] }.compact.join("|") %>).service"
+      <% end %>
