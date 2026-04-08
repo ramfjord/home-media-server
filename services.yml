@@ -102,6 +102,7 @@ services:
   partof: monitoring
   desc: Metrics and alerting
   port: 9090
+  healthz: /-/healthy
   docker_config:
     image: prom/prometheus:latest
     command:
@@ -127,6 +128,7 @@ services:
   partof: monitoring
   desc: Alert management
   port: 9093
+  healthz: /-/healthy
   docker_config:
     image: prom/alertmanager:latest
     volumes:
@@ -137,19 +139,25 @@ services:
   partof: monitoring
   desc: Dashboards and visualization
   port: 3000
+  healthz: /api/health
   docker_config:
     image: grafana/grafana:latest
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
       - ${install_base}/config/grafana:/var/lib/grafana
       - ${install_base}/config/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
       - ${install_base}/config/grafana/provisioning/dashboards:/var/lib/grafana/provisioning/dashboards
       - ${install_base}/config/grafana/provisioning/datasources:/var/lib/grafana/provisioning/datasources
+    user: "472"
     restart: unless-stopped
 
 - name: cadvisor
   partof: monitoring
   desc: Container metrics exporter
   port: 8081
+  healthz: /api/v1/machine
   docker_config:
     image: gcr.io/cadvisor/cadvisor:latest
     ports:

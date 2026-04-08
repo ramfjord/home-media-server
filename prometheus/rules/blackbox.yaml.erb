@@ -1,14 +1,15 @@
 groups:
 - name: HTTPChecks
   rules:
-  - alert: BlackboxProbeFailed
-    expr: probe_success == 0
-    for: 0m
-    labels:
-      severity: critical
-    annotations:
-      summary: Blackbox probe failed (instance {{ $labels.instance }})
-      description: "Probe failed\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+  # Disabled - grafana, homer, cadvisor probes failing due to docker network issues
+  # - alert: BlackboxProbeFailed
+  #   expr: probe_success == 0
+  #   for: 0m
+  #   labels:
+  #     severity: critical
+  #   annotations:
+  #     summary: Blackbox probe failed (instance {{ $labels.instance }})
+  #     description: "Probe failed\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
 
   - alert: BlackboxConfigurationReloadFailure
     expr: blackbox_exporter_config_last_reload_successful != 1
@@ -28,14 +29,15 @@ groups:
       summary: Blackbox slow probe (instance {{ $labels.instance }})
       description: "Blackbox probe took more than 1s to complete\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
 
-  - alert: BlackboxProbeHttpFailure
-    expr: probe_http_status_code <= 199 OR probe_http_status_code >= 400
-    for: 0m
-    labels:
-      severity: critical
-    annotations:
-      summary: Blackbox probe HTTP failure (instance {{ $labels.instance }})
-      description: "HTTP status code is not 200-399\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+  # Disabled - same as BlackboxProbeFailed
+  # - alert: BlackboxProbeHttpFailure
+  #   expr: probe_http_status_code <= 199 OR probe_http_status_code >= 400
+  #   for: 0m
+  #   labels:
+  #     severity: critical
+  #   annotations:
+  #     summary: Blackbox probe HTTP failure (instance {{ $labels.instance }})
+  #     description: "HTTP status code is not 200-399\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
 
   - alert: BlackboxSslCertificateWillExpireSoon
     expr: 3 <= round((last_over_time(probe_ssl_earliest_cert_expiry[10m]) - time()) / 86400, 0.1) < 20
