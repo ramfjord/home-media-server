@@ -89,11 +89,11 @@ services:
 - name: homer
   partof: dashboard
   desc: Service dashboard
-  port: 8000
+  port: 80
   docker_config:
     image: b4bz/homer:latest
     ports:
-      - 8000:8080
+      - 80:8080
     volumes:
       - ${install_base}/config/homer:/www/assets:ro
     restart: unless-stopped
