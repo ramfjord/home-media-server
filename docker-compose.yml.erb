@@ -4,7 +4,8 @@
     "environment" => ["PUID=1000", "PGID=1000", "TZ=Etc/UTC"]
   }
 
-  service_config["networks"] = ["mediaserver"]
+  # Only add networks if network_mode is not specified (they're mutually exclusive)
+  service_config["networks"] = ["mediaserver"] unless svc.docker_config.key?("network_mode")
 
   if svc.port && !svc.docker_config.key?("ports")
     service_config["ports"] = ["#{svc.port}:#{svc.port}"]

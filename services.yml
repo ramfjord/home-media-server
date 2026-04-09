@@ -76,9 +76,8 @@ services:
     volumes:
       - ${install_base}/config/qbittorrent:/config
       - ${media_path}:/data
-    cap_add:
-      - NET_ADMIN
-    entrypoint: /config/entrypoint.sh
+    network_mode: "service:wireguard"
+    ports: []
     restart: unless-stopped
     depends_on:
       wireguard:
