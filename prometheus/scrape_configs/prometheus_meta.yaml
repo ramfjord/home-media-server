@@ -5,10 +5,3 @@ scrape_configs:
         labels:
           service: prometheus
           partof: monitoring
-
-  - job_name: 'blackbox_exporter'
-    static_configs:
-      - targets: ['blackbox-exporter:9115']
-        labels:
-          service: blackbox
-          partof: monitoring

@@ -10,7 +10,7 @@ hostname: localhost
 
 services:
 - name: wireguard
-  uid: 1500
+
   partof: vpn
   desc: VPN container
   docker_config:
@@ -32,7 +32,6 @@ services:
     restart: unless-stopped
 
 - name: radarr
-  uid: 1501
   partof: downloading
   desc: find movies
   port: 7878
@@ -44,7 +43,6 @@ services:
     restart: unless-stopped
 
 - name: sonarr
-  uid: 1502
   partof: downloading
   desc: find new shows
   port: 8989
@@ -56,7 +54,6 @@ services:
     restart: unless-stopped
 
 - name: prowlarr
-  uid: 1503
   partof: downloading
   desc: indexer manager
   port: 9696
@@ -67,7 +64,6 @@ services:
     restart: unless-stopped
 
 - name: qbittorrent
-  uid: 1504
   partof: downloading
   desc: torrent client
   port: 8080
@@ -91,7 +87,6 @@ services:
   healthz: /web/index.html
 
 - name: homer
-  uid: 1505
   partof: dashboard
   desc: Service dashboard
   port: 80
@@ -104,7 +99,6 @@ services:
     restart: unless-stopped
 
 - name: prometheus
-  uid: 1506
   partof: monitoring
   desc: Metrics and alerting
   port: 9090
@@ -114,12 +108,16 @@ services:
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --web.external-url=http://${hostname}:9090/
+      - --web.enable-remote-write-receiver
     volumes:
       - ${install_base}/config/prometheus:/etc/prometheus:ro
+      - ${install_base}/config/prometheus/data:/prometheus/data
+    labels:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "9090"
     restart: unless-stopped
 
 - name: blackbox-exporter
-  uid: 1507
   partof: monitoring
   desc: Blackbox HTTP probe exporter
   port: 9115
@@ -129,10 +127,12 @@ services:
       - --config.file=/etc/blackbox-exporter/blackbox.yml
     volumes:
       - ${install_base}/config/prometheus/blackbox.yml:/etc/blackbox-exporter/blackbox.yml:ro
+    labels:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "9115"
     restart: unless-stopped
 
 - name: alertmanager
-  uid: 1508
   partof: monitoring
   desc: Alert management
   port: 9093
@@ -141,10 +141,12 @@ services:
     image: prom/alertmanager:latest
     volumes:
       - ${install_base}/config/alertmanager:/etc/alertmanager:ro
+    labels:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "9093"
     restart: unless-stopped
 
 - name: grafana
-  uid: 472
   partof: monitoring
   desc: Dashboards and visualization
   port: 3000
@@ -159,10 +161,12 @@ services:
       - ${install_base}/config/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
       - ${install_base}/config/grafana/provisioning/dashboards:/var/lib/grafana/provisioning/dashboards
       - ${install_base}/config/grafana/provisioning/datasources:/var/lib/grafana/provisioning/datasources
+    labels:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "3000"
     restart: unless-stopped
 
 - name: cadvisor
-  uid: 1509
   partof: monitoring
   desc: Container metrics exporter
   port: 8081
@@ -180,4 +184,23 @@ services:
     privileged: true
     devices:
       - /dev/kmsg
+    labels:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8080"
+    restart: unless-stopped
+
+- name: otelcol
+  partof: monitoring
+  desc: OpenTelemetry metrics collector
+  port: 8888
+  groups: [docker]
+  docker_config:
+    image: otel/opentelemetry-collector-contrib:latest
+    command:
+      - --config=/etc/otelcol/otelcol-config.yaml
+    volumes:
+      - ${install_base}/config/otelcol:/etc/otelcol:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped

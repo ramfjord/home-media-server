@@ -4,31 +4,33 @@ ERBS := $(addprefix config/,$(patsubst %.erb,%,$(wildcard *.erb */*.erb */*/*.er
 # Extract dockerized services from services.yml
 DOCKERIZED_SERVICES := $(shell yq eval '.services[] | select(.docker_config != null) | .name' services.yml 2>/dev/null)
 
-.PHONY: clean all check deploy deploy-compose setup-users $(addprefix deploy-,$(DOCKERIZED_SERVICES))
+.PHONY: clean all check deploy users $(addprefix deploy-,$(DOCKERIZED_SERVICES))
 
 all: $(ERBS)
+
+clean:
+	rm -rf config/
+
+users:
+	script/make_users.sh
 
 # Standard ERB rendering - this defines the ERBS targets
 config/%: %.erb render.rb services.yml $(wildcard config.local.yml)
 	mkdir -p $(dir $@)
 	./render.rb < $(patsubst config/%,%,$@).erb > $@
 
-clean:
-	rm -rf config/
-
 check: all
 	# TODO convert these to use the container versions of promtool/amtool
 	promtool check config config/prometheus/prometheus.yml
 	amtool check-config config/alertmanager/alertmanager.yml
 	docker-compose -f config/docker-compose.yml config > /dev/null
+	docker run --rm \
+		-v $(CURDIR)/config/otelcol:/etc/otelcol \
+		otel/opentelemetry-collector-contrib:latest \
+		validate --config=/etc/otelcol/otelcol-config.yaml
 
-setup-users: config/make_users.sh
-	sudo bash config/make_users.sh
-
-install: all
-	bash config/make_users.sh || true
+install: check
 	sudo rsync -av config/ /opt/mediaserver/config/
-	sudo bash config/make_users.sh
 
 # Deploy a single service: stop, update config, start
 deploy-%: config/docker-compose.yml

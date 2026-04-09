@@ -3,6 +3,10 @@
 require 'erb'
 require 'yaml'
 
+def get_group_id(group_name)
+  `getent group #{group_name} 2>/dev/null | cut -d: -f3`.strip
+end
+
 class ProjectService
   def initialize(definition)
     @definition = definition
@@ -18,6 +22,10 @@ class ProjectService
 
   def unit
     @definition['unit']
+  end
+
+  def user_id
+    @user_id ||= `id -u #{name} 2>/dev/null`.strip
   end
 
   def partof
@@ -40,12 +48,16 @@ class ProjectService
     @definition['docker_config'] || {}
   end
 
-  def has_unit?
-    @definition.key?('unit')
+  def groups
+    @definition['groups'] || []
   end
 
-  def uid
-    @definition['uid']
+  def group_ids
+    groups.map { |g| get_group_id(g) }.compact
+  end
+
+  def has_unit?
+    @definition.key?('unit')
   end
 
   # Access raw definition for backward compatibility if needed
