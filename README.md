@@ -1,1 +1,13 @@
-This is just some monitoring I use for my manjaro mediaserver.  I found it easiest to use the AUR packages to get a coherent system.  Perhaps docker + salt would be nice in the future.  I had fun playing around with the Makefile syntax to make it easy for me to update these alerts.
+# Mediaserver
+
+This is a docker compose setup for running a home media server with built in monitoring.
+
+## Services
+
+These are all defined in the services.yaml
+
+Notably, homer is a dashboard for all of them.  Visiting the host on port 80 will link to all the other services.
+
+## Deployment
+
+Run this on a server inside tailnet.
