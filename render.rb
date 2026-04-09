@@ -44,6 +44,10 @@ class ProjectService
     @definition.key?('unit')
   end
 
+  def uid
+    @definition['uid']
+  end
+
   # Access raw definition for backward compatibility if needed
   def [](key)
     @definition[key]

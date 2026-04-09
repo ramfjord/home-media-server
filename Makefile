@@ -28,6 +28,7 @@ setup-users: config/make_users.sh
 install: all
 	bash config/make_users.sh || true
 	sudo rsync -av config/ /opt/mediaserver/config/
+	sudo bash config/make_users.sh
 
 # Deploy a single service: stop, update config, start
 deploy-%: config/docker-compose.yml
