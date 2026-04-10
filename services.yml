@@ -103,6 +103,23 @@ services:
   port: 32400
   healthz: /web/index.html
 
+- name: jellyfin
+  partof: streaming
+  desc: Alternative media streaming server
+  port: 8096
+  groups: [mediaserver]
+  healthz: /health
+  docker_config:
+    image: jellyfin/jellyfin:latest
+    volumes:
+      - ${install_base}/config/jellyfin:/config
+      - ${media_path}/TV:/media/TV:ro
+      - ${media_path}/Movies:/media/Movies:ro
+      - /tmp:/tmp
+    environment:
+      - JELLYFIN_PublishedServerUrl=http://${hostname}:8096
+    restart: unless-stopped
+
 - name: homer
   partof: dashboard
   desc: Service dashboard
@@ -112,7 +129,7 @@ services:
     ports:
       - 80:8080
     volumes:
-      - ${install_base}/config/homer:/www/assets:ro
+      - ${install_base}/config/homer:/www/assets
     restart: unless-stopped
 
 - name: prometheus

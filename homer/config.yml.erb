@@ -13,6 +13,12 @@ icon: fas fa-server
   'monitoring' => 'fas fa-chart-line'
 } %>
 
+<% # Validate that all icon files exist for services with ports %>
+<% services.select { |s| s['port'] && s['name'] != 'homer' && s['partof'] != 'dashboard' }.each do |svc| %>
+  <% icon_path = "homer/assets/tools/#{svc['name']}.png" %>
+  <% raise "ERROR: Missing icon for #{svc['name']}: #{icon_path}" unless File.exist?(icon_path) %>
+<% end %>
+
 services:
 <% categories.sort.each do |category, svcs| %>
   - name: "<%= category.capitalize %>"
