@@ -23,11 +23,6 @@ services:
     volumes:
       - ${install_base}/config/wireguard:/config
       - /lib/modules:/lib/modules:ro
-    ports:
-      - "8080:8080"
-      - "7878:7878"
-      - "8989:8989"
-      - "9696:9696"
     healthcheck:
       test: ping -c 1 1.1.1.1 || exit 1
       interval: 30s
@@ -36,68 +31,66 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+- name: caddy
+  partof: dashboard
+  desc: Reverse proxy for VPN services
+  docker_config:
+    image: caddy:latest
+    volumes:
+      - ${install_base}/config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+    ports:
+      - "8080:8080"
+      - "7878:7878"
+      - "8989:8989"
+      - "9696:9696"
+    restart: unless-stopped
+
 - name: radarr
   partof: downloading
   desc: find movies
   port: 7878
+  use_vpn: true
   docker_config:
     image: lscr.io/linuxserver/radarr:latest
     volumes:
       - ${install_base}/config/radarr:/config
       - ${media_path}:/data
-    network_mode: "service:wireguard"
-    ports: []
     restart: unless-stopped
-    depends_on:
-      wireguard:
-        condition: service_healthy
 
 - name: sonarr
   partof: downloading
   desc: find new shows
   port: 8989
+  use_vpn: true
   docker_config:
     image: lscr.io/linuxserver/sonarr:latest
     volumes:
       - ${install_base}/config/sonarr:/config
       - ${media_path}:/data
-    network_mode: "service:wireguard"
-    ports: []
     restart: unless-stopped
-    depends_on:
-      wireguard:
-        condition: service_healthy
 
 - name: prowlarr
   partof: downloading
   desc: indexer manager
   port: 9696
+  use_vpn: true
   docker_config:
     image: lscr.io/linuxserver/prowlarr:latest
     volumes:
       - ${install_base}/config/prowlarr:/config
-    network_mode: "service:wireguard"
-    ports: []
     restart: unless-stopped
-    depends_on:
-      wireguard:
-        condition: service_healthy
 
 - name: qbittorrent
   partof: downloading
   desc: torrent client
   port: 8080
+  use_vpn: true
   docker_config:
     image: lscr.io/linuxserver/qbittorrent:latest
     volumes:
       - ${install_base}/config/qbittorrent:/config
       - ${media_path}:/data
-    network_mode: "service:wireguard"
-    ports: []
     restart: unless-stopped
-    depends_on:
-      wireguard:
-        condition: service_healthy
 
 - name: plex
   partof: streaming

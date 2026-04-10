@@ -1,0 +1,4 @@
+<% vpn_services = services.select { |s| s.use_vpn? && s.port } %><% vpn_services.each do |svc| %>:<%= svc.port %> {
+  reverse_proxy wireguard:<%= svc.port %>
+}
+<% end %>

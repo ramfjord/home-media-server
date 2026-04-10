@@ -2,14 +2,26 @@
   service_config = {
     "container_name" => svc.name,
     "environment" => ["PUID=1000", "PGID=1000", "TZ=Etc/UTC"],
-    "user" => svc.user_id,
   }
 
-  # Only add networks if network_mode is not specified (they're mutually exclusive)
-  service_config["networks"] = ["mediaserver"] unless svc.docker_config.key?("network_mode")
+  # Only set user if user_id is not nil (wireguard runs as root)
+  service_config["user"] = svc.user_id if svc.user_id
 
-  if svc.port && !svc.docker_config.key?("ports")
-    service_config["ports"] = ["#{svc.port}:#{svc.port}"]
+  # Handle VPN routing
+  if svc.use_vpn?
+    service_config["network_mode"] = "service:wireguard"
+    service_config["depends_on"] = {
+      "wireguard" => {
+        "condition" => "service_healthy"
+      }
+    }
+  else
+    # Only add networks if network_mode is not specified (they're mutually exclusive)
+    service_config["networks"] = ["mediaserver"]
+
+    if svc.port && !svc.docker_config.key?("ports")
+      service_config["ports"] = ["#{svc.port}:#{svc.port}"]
+    end
   end
 
   service_config = service_config.merge(svc.docker_config)

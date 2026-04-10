@@ -25,6 +25,8 @@ class ProjectService
   end
 
   def user_id
+    # Wireguard needs to run as root to set up network interfaces
+    return nil if name == 'wireguard'
     @user_id ||= `id -u #{name} 2>/dev/null`.strip
   end
 
@@ -67,6 +69,10 @@ class ProjectService
 
   def has_key?(key)
     @definition.has_key?(key)
+  end
+
+  def use_vpn?
+    @definition['use_vpn'] == true
   end
 end
 
