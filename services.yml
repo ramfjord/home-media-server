@@ -221,3 +221,54 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
+
+- name: exportarr-radarr
+  partof: monitoring
+  desc: Radarr metrics exporter
+  docker_config:
+    image: ghcr.io/onedr0p/exportarr:latest
+    command:
+      - radarr
+      - --url
+      - http://caddy:7878
+      - --api-key
+      - ${radarr_apikey}
+      - --port
+      - "9144"
+    labels:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "9144"
+    restart: unless-stopped
+
+- name: exportarr-sonarr
+  partof: monitoring
+  desc: Sonarr metrics exporter
+  docker_config:
+    image: ghcr.io/onedr0p/exportarr:latest
+    command:
+      - sonarr
+      - --url
+      - http://caddy:8989
+      - --api-key
+      - ${sonarr_apikey}
+      - --port
+      - "9145"
+    labels:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "9145"
+    restart: unless-stopped
+
+- name: qbittorrent-exporter
+  partof: monitoring
+  desc: qBittorrent metrics exporter
+  docker_config:
+    image: esanchezm/prometheus-qbittorrent-exporter:latest
+    environment:
+      - QBITTORRENT_HOST=qbittorrent
+      - QBITTORRENT_PORT=8080
+      - QBITTORRENT_USERNAME=${qbittorrent_username}
+      - QBITTORRENT_PASSWORD=${qbittorrent_password}
+    labels:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8000"
+    restart: unless-stopped
