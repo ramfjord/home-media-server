@@ -25,6 +25,9 @@ services:
       - /lib/modules:/lib/modules:ro
     ports:
       - "8080:8080"
+      - "7878:7878"
+      - "8989:8989"
+      - "9696:9696"
     healthcheck:
       test: ping -c 1 1.1.1.1 || exit 1
       interval: 30s
@@ -42,7 +45,12 @@ services:
     volumes:
       - ${install_base}/config/radarr:/config
       - ${media_path}:/data
+    network_mode: "service:wireguard"
+    ports: []
     restart: unless-stopped
+    depends_on:
+      wireguard:
+        condition: service_healthy
 
 - name: sonarr
   partof: downloading
@@ -53,7 +61,12 @@ services:
     volumes:
       - ${install_base}/config/sonarr:/config
       - ${media_path}:/data
+    network_mode: "service:wireguard"
+    ports: []
     restart: unless-stopped
+    depends_on:
+      wireguard:
+        condition: service_healthy
 
 - name: prowlarr
   partof: downloading
@@ -63,7 +76,12 @@ services:
     image: lscr.io/linuxserver/prowlarr:latest
     volumes:
       - ${install_base}/config/prowlarr:/config
+    network_mode: "service:wireguard"
+    ports: []
     restart: unless-stopped
+    depends_on:
+      wireguard:
+        condition: service_healthy
 
 - name: qbittorrent
   partof: downloading
