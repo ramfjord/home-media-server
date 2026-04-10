@@ -34,6 +34,7 @@ services:
 - name: caddy
   partof: dashboard
   desc: Reverse proxy for VPN services
+  sighup_reload: true
   docker_config:
     image: caddy:latest
     volumes:
@@ -141,6 +142,7 @@ services:
   desc: Metrics and alerting
   port: 9090
   healthz: /-/healthy
+  sighup_reload: true
   docker_config:
     image: prom/prometheus:latest
     command:
@@ -175,6 +177,7 @@ services:
   desc: Alert management
   port: 9093
   healthz: /-/healthy
+  sighup_reload: true
   docker_config:
     image: prom/alertmanager:latest
     volumes:
@@ -189,6 +192,7 @@ services:
   desc: Dashboards and visualization
   port: 3000
   healthz: /api/health
+  sighup_reload: true
   docker_config:
     image: grafana/grafana:latest
     environment:

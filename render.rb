@@ -74,6 +74,10 @@ class ProjectService
   def use_vpn?
     @definition['use_vpn'] == true
   end
+
+  def sighup_reload?
+    @definition['sighup_reload'] == true
+  end
 end
 
 # Just read from stdin
@@ -92,7 +96,7 @@ services = config_yaml['services']
 install_base = config_yaml['install_base'] || '/opt/mediaserver'
 media_path = config_yaml['media_path'] || '/data'
 hostname = config_yaml['hostname'] || 'localhost'
-compose_file = "#{install_base}/docker-compose.yml"
+compose_file = "#{install_base}/config/docker-compose.yml"
 
 # Expand variables in all service definitions (including docker_config)
 def expand_vars(obj, vars)

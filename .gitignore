@@ -3,3 +3,4 @@ config.local.yml
 config/
 docker-compose.yml
 .claude
+.make.services

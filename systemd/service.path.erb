@@ -1,0 +1,13 @@
+[Unit]
+Description=Config watcher for <%= service.name %>
+
+[Path]
+<% Dir.glob("#{service.name}/**/*").select { |f| File.file?(f) }.each do |src| %>
+<%   installed = "#{install_base}/config/#{src.sub(/\.erb$/, '')}" %>
+PathChanged=<%= installed %>
+<% end %>
+Unit=<%= service.sighup_reload? ? "#{service.name}-reload.service" : "#{service.name}.service" %>
+
+[Install]
+WantedBy=<%= service.name %>.service
+RequiredBy=<%= service.name %>.service
