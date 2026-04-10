@@ -14,10 +14,16 @@ clean:
 users:
 	script/make_users.sh
 
+config:
+	mkdir config
+	chown $(USER):mediaserver config
+
 # Standard ERB rendering - this defines the ERBS targets
 config/%: %.erb render.rb services.yml $(wildcard config.local.yml)
 	mkdir -p $(dir $@)
 	./render.rb < $(patsubst config/%,%,$@).erb > $@
+	@service=$$(echo $@ | cut -d'/' -f2); \
+	if grep -q "name: $$service" services.yml; then sudo chown -R $$service:mediaserver config/$$service; fi
 
 check: all
 	# TODO convert these to use the container versions of promtool/amtool

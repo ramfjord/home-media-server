@@ -1,7 +1,7 @@
 <% services_config = services.select(&:dockerized?).map do |svc|
   service_config = {
     "container_name" => svc.name,
-    "environment" => ["PUID=1000", "PGID=1000", "TZ=Etc/UTC"],
+    "environment" => ["TZ=Etc/UTC"],
   }
 
   # Only set user if user_id is not nil (wireguard runs as root)
