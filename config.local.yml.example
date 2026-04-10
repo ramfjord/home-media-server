@@ -3,6 +3,3 @@
 
 install_base: /opt/mediaserver
 media_path: /data
-
-vpn_user: media-vpn
-media_group: media

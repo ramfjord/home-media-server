@@ -50,6 +50,7 @@ services:
   desc: find movies
   port: 7878
   use_vpn: true
+  groups: [mediaserver]
   docker_config:
     image: lscr.io/linuxserver/radarr:latest
     volumes:
@@ -62,6 +63,7 @@ services:
   desc: find new shows
   port: 8989
   use_vpn: true
+  groups: [mediaserver]
   docker_config:
     image: lscr.io/linuxserver/sonarr:latest
     volumes:
@@ -85,6 +87,7 @@ services:
   desc: torrent client
   port: 8080
   use_vpn: true
+  groups: [mediaserver]
   docker_config:
     image: lscr.io/linuxserver/qbittorrent:latest
     volumes:
@@ -96,6 +99,7 @@ services:
   partof: streaming
   unit: plexmediaserver
   desc: Media streaming
+  groups: [mediaserver]
   port: 32400
   healthz: /web/index.html
 
