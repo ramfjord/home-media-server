@@ -116,6 +116,10 @@ services:
       - ${media_path}/TV:/media/TV:ro
       - ${media_path}/Movies:/media/Movies:ro
       - /tmp:/tmp
+    devices: # TODO - confiure this in config.local.yaml?
+      - /dev/nvidia0
+      - /dev/nvidiactl
+      - /dev/nvidia-uvm
     environment:
       - JELLYFIN_PublishedServerUrl=http://${hostname}:8096
     restart: unless-stopped
