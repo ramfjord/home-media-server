@@ -23,6 +23,8 @@ services:
     volumes:
       - ${install_base}/config/wireguard:/config
       - /lib/modules:/lib/modules:ro
+    ports:
+      - "8080:8080"
     healthcheck:
       test: ping -c 1 1.1.1.1 || exit 1
       interval: 30s
