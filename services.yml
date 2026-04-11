@@ -112,6 +112,7 @@ services:
   healthz: /health
   docker_config:
     image: jellyfin/jellyfin:latest
+    runtime: nvidia
     volumes:
       - ${install_base}/config/jellyfin:/config
       - ${media_path}/TV:/media/TV:ro
