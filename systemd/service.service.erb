@@ -1,6 +1,6 @@
 [Unit]
 Description=<%= service.desc %> (<%= service.name %>)
-After=docker.service
+After=docker.service<% if service.use_vpn? %> wireguard.service<% end %>
 Requires=docker.service
 
 [Service]
