@@ -3,7 +3,7 @@ Description=Docker compose change watcher for <%= service.name %>
 
 [Path]
 PathChanged=<%= install_base %>/config/docker-compose.yml
-Unit=<%= service.name %>.service
+Unit=<%= service.name %>-compose-reload.service
 
 [Install]
 WantedBy=<%= service.name %>.service

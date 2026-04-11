@@ -33,8 +33,9 @@ NON_ERB_CONFIG_TARGETS := $(addprefix config/,$(NON_ERB_CONFIGS))
 SYSTEMD_SERVICE_UNITS := $(addprefix config/systemd/,$(addsuffix .service,$(SYSTEMD_SERVICES)))
 SYSTEMD_PATH_UNITS    := $(addprefix config/systemd/,$(addsuffix .path,$(SERVICES_WITH_CONFIG)))
 SYSTEMD_COMPOSE_PATH_UNITS := $(addprefix config/systemd/,$(addsuffix -compose.path,$(SYSTEMD_SERVICES)))
+SYSTEMD_COMPOSE_RELOAD_UNITS := $(addprefix config/systemd/,$(addsuffix -compose-reload.service,$(SYSTEMD_SERVICES)))
 SIGHUP_RELOAD_UNITS   := $(addprefix config/systemd/,$(addsuffix -reload.service,$(SIGHUP_SERVICES)))
-SYSTEMD_UNITS := $(SYSTEMD_SERVICE_UNITS) $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS) $(SIGHUP_RELOAD_UNITS)
+SYSTEMD_UNITS := $(SYSTEMD_SERVICE_UNITS) $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS) $(SYSTEMD_COMPOSE_RELOAD_UNITS) $(SIGHUP_RELOAD_UNITS)
 
 .PHONY: clean check users install install-systemd $(addprefix systemd-,start stop restart enable disable status)
 
@@ -79,6 +80,14 @@ config/systemd/%-compose.path: systemd/service-compose.path.erb render.rb servic
 	mkdir -p $(dir $@)
 	SERVICE_NAME=$* ./render.rb < $< > $@
 
+config/systemd/%-compose-reload.service: systemd/service-compose-reload.service.erb render.rb services.yml $(wildcard config.local.yml)
+	mkdir -p $(dir $@)
+	SERVICE_NAME=$* ./render.rb < $< > $@
+
+config/systemd/%-reload.service: systemd/sighup-reload.service.erb render.rb services.yml $(wildcard config.local.yml)
+	mkdir -p $(dir $@)
+	SERVICE_NAME=$* ./render.rb < $< > $@
+
 check: all
 	# TODO convert these to use the container versions of promtool/amtool
 	promtool check config config/prometheus/prometheus.yml
@@ -101,10 +110,35 @@ install-systemd: install $(SYSTEMD_UNITS)
 	sudo mkdir -p $(SYSTEMD_DIR)
 	sudo rsync -av config/systemd/ $(SYSTEMD_DIR)/
 	sudo systemctl daemon-reload
+	@echo "Starting path units to monitor config changes..."
+	@sudo systemctl start $(notdir $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS))
 
-systemd-start systemd-stop systemd-restart systemd-enable systemd-disable systemd-status:
+systemd-start systemd-stop systemd-restart systemd-status:
 	@cmd=$$(echo $@ | sed 's/systemd-//'); \
+	units=$$(echo $(SYSTEMD_SERVICES) | sed 's/ /.service /g').service; \
+	echo "Running systemctl $$cmd on all services..."; \
+	sudo systemctl $$cmd $$units
+
+systemd-enable:
+	@echo "Enabling docker services..."; \
 	for svc in $(SYSTEMD_SERVICES); do \
-	  echo "Running systemctl $$cmd $$svc.service..."; \
-	  sudo systemctl $$cmd $$svc.service; \
+	  echo "  systemctl enable $$svc.service"; \
+	  sudo systemctl enable --force $$svc.service; \
+	done; \
+	echo "Enabling path units for auto-reload on config changes..."; \
+	for unit in $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS); do \
+	  echo "  systemctl enable $$(basename $$unit)"; \
+	  sudo systemctl enable --force $$unit; \
+	done
+
+systemd-disable:
+	@echo "Disabling docker services..."; \
+	for svc in $(SYSTEMD_SERVICES); do \
+	  echo "  systemctl disable $$svc.service"; \
+	  sudo systemctl disable $$svc.service; \
+	done; \
+	echo "Disabling path units..."; \
+	for unit in $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS); do \
+	  echo "  systemctl disable $$(basename $$unit)"; \
+	  sudo systemctl disable $$unit; \
 	done
