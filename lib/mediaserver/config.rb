@@ -1,4 +1,5 @@
 require 'yaml'
+require_relative 'validator'
 
 module Mediaserver
   DEFAULT_GLOBALS = {
@@ -137,6 +138,7 @@ module Mediaserver
       globals['hostname'] = raw['hostname'] || DEFAULT_GLOBALS['hostname']
       globals['compose_file'] = "#{globals['install_base']}/config/docker-compose.yml"
 
+      Validator.validate!(raw['services'])
       raw['services'].each { |svc| Mediaserver.expand_vars(svc, raw) }
       services = raw['services'].map { |s| ProjectService.new(s) }
 
