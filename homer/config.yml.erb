@@ -10,8 +10,11 @@ icon: fas fa-server
   'downloading' => 'fas fa-cloud-download-alt',
   'streaming' => 'fas fa-play-circle',
   'vpn' => 'fas fa-shield-alt',
+  'security' => 'fas fa-lock',
   'monitoring' => 'fas fa-chart-line'
 } %>
+<% # Filter to only categories with displayable services %>
+<% categories = categories.reject { |cat, svcs| svcs.reject { |s| s['name'] == 'homer' || s['partof'] == 'dashboard' || !s['port'] }.empty? } %>
 
 <% # Validate that all icon files exist for services with ports %>
 <% services.select { |s| s['port'] && s['name'] != 'homer' && s['partof'] != 'dashboard' }.each do |svc| %>
@@ -29,7 +32,7 @@ services:
       - name: "<%= svc['name'].capitalize %>"
         subtitle: "<%= svc['desc'] %>"
         logo: "assets/tools/<%= svc['name'] %>.png"
-        url: "http://<%= hostname %>:<%= svc['port'] %>"
+        url: "<% if svc['name'] == 'vaultwarden' %>https://fatlaptop.hippogriff-stonecat.ts.net:<%= svc['port'] %><% else %><%= svc['name'] == 'vaultwarden' ? 'https' : 'http' %>://<%= hostname %>:<%= svc['port'] %><% end %>"
         target: "_blank"
   <% end %>
 <% end %>

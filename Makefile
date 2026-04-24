@@ -103,6 +103,7 @@ SYSTEMD_DIR := /etc/systemd/system
 
 install: check
 	rsync -av --exclude='systemd/' config/ /opt/mediaserver/config/
+	rsync -av certs/ /opt/mediaserver/certs/
 	@for svc in $(ALL_SERVICES); do \
 	  if [ -d /opt/mediaserver/config/$$svc ]; then \
 	    chown -R $$svc:mediaserver /opt/mediaserver/config/$$svc; \

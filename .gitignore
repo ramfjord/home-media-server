@@ -1,6 +1,7 @@
 tmp
 config.local.yml
 config/
+certs/
 docker-compose.yml
 .claude
 .make.services
