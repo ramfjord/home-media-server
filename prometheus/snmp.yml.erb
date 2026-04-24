@@ -17,10 +17,10 @@ auths:
   synology_v3:
     version: 3
     security_level: authPriv
-    username: <%= config["snmp_username"] || "REPLACE_ME" %>
-    password: <%= config["snmp_auth_password"] || "REPLACE_ME" %>
+    username: <%= config_yaml["snmp_username"] || "REPLACE_ME" %>
+    password: <%= config_yaml["snmp_auth_password"] || "REPLACE_ME" %>
     auth_protocol: SHA
-    priv_password: <%= config["snmp_priv_password"] || "REPLACE_ME" %>
+    priv_password: <%= config_yaml["snmp_priv_password"] || "REPLACE_ME" %>
     priv_protocol: AES
 
 modules:

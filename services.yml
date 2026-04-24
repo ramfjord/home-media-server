@@ -2,6 +2,7 @@ objectives:
   - downloading
   - streaming
   - monitoring
+  - security
 
 # Base paths (can be overridden in config.local.yml)
 install_base: /opt/mediaserver
@@ -131,6 +132,21 @@ services:
       - 80:8080
     volumes:
       - ${install_base}/config/homer:/www/assets
+    restart: unless-stopped
+
+- name: vaultwarden
+  partof: security
+  desc: Password manager
+  port: 8000
+  healthz: /alive
+  docker_config:
+    image: vaultwarden/server:latest
+    ports:
+      - 8000:80
+    volumes:
+      - ${install_base}/config/vaultwarden:/data
+    environment:
+      - LOG_LEVEL=info
     restart: unless-stopped
 
 - name: prometheus

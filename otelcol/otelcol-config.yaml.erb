@@ -69,7 +69,7 @@ receivers:
         #     auth: [synology_v3]
         #   static_configs:
         #     - targets:
-        #       - <%= config["snmp_host"] || "synology.local" %>
+        #       - <%= config_yaml["snmp_host"] || "synology.local" %>
         #       labels:
         #         service: synology-nas
         #         partof: storage
