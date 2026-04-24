@@ -173,6 +173,28 @@ services:
       prometheus.io/port: "9115"
     restart: unless-stopped
 
+# Disabled until Synology NAS SNMP is configured. To enable:
+#   1. DSM -> Control Panel -> Terminal & SNMP -> enable SNMPv3, set creds
+#   2. Add snmp_host / snmp_username / snmp_auth_password / snmp_priv_password
+#      to config.local.yml
+#   3. Uncomment this block and the SNMP scrape job in
+#      otelcol/otelcol-config.yaml.erb
+#   4. make all && make check && make install && make deploy-snmp-exporter
+#
+# - name: snmp-exporter
+#   partof: monitoring
+#   desc: SNMP exporter (Synology NAS metrics)
+#   port: 9116
+#   docker_config:
+#     image: prom/snmp-exporter:latest
+#     command:
+#       - --config.file=/etc/snmp_exporter/snmp.yml
+#     volumes:
+#       - ${install_base}/config/prometheus/snmp.yml:/etc/snmp_exporter/snmp.yml:ro
+#     restart: unless-stopped
+#   # Note: no prometheus.io/scrape label here. snmp_exporter is a "scrape proxy" --
+#   # otelcol must scrape it with target=NAS, not scrape it directly.
+
 - name: alertmanager
   partof: monitoring
   desc: Alert management
