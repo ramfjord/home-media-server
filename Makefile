@@ -55,8 +55,6 @@ config:
 config/%: %.erb render.rb services.yml $(wildcard config.local.yml)
 	mkdir -p $(dir $@)
 	./render.rb < $(patsubst config/%,%,$@).erb > $@
-	@service=$$(echo $@ | cut -d'/' -f2); \
-	if grep -q "name: $$service" services.yml; then sudo chown -R $$service:mediaserver config/$$service; fi
 
 # Copy non-ERB files as-is to config/
 config/%: %
@@ -104,7 +102,12 @@ check: all
 SYSTEMD_DIR := /etc/systemd/system
 
 install: check
-	sudo rsync -av --exclude='systemd/' config/ /opt/mediaserver/config/
+	rsync -av --exclude='systemd/' config/ /opt/mediaserver/config/
+	@for svc in $(ALL_SERVICES); do \
+	  if [ -d /opt/mediaserver/config/$$svc ]; then \
+	    chown -R $$svc:mediaserver /opt/mediaserver/config/$$svc; \
+	  fi; \
+	done
 
 install-systemd: install $(SYSTEMD_UNITS)
 	sudo mkdir -p $(SYSTEMD_DIR)
