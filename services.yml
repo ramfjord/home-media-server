@@ -142,11 +142,14 @@ services:
   docker_config:
     image: vaultwarden/server:latest
     ports:
-      - 8000:80
+      - 8000:443
     volumes:
       - ${install_base}/config/vaultwarden:/data
+      - /var/run/tailscale/certs:/etc/vaultwarden/certs:ro
     environment:
       - LOG_LEVEL=info
+      - DOMAIN=https://fatlaptop.hippogriff-stonecat.ts.net:8000
+      - ROCKET_TLS={certs="/etc/vaultwarden/certs/fatlaptop.hippogriff-stonecat.ts.net.crt",key="/etc/vaultwarden/certs/fatlaptop.hippogriff-stonecat.ts.net.key"}
     restart: unless-stopped
 
 - name: prometheus
