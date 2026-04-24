@@ -37,7 +37,10 @@ SYSTEMD_COMPOSE_RELOAD_UNITS := $(addprefix config/systemd/,$(addsuffix -compose
 SIGHUP_RELOAD_UNITS   := $(addprefix config/systemd/,$(addsuffix -reload.service,$(SIGHUP_SERVICES)))
 SYSTEMD_UNITS := $(SYSTEMD_SERVICE_UNITS) $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS) $(SYSTEMD_COMPOSE_RELOAD_UNITS) $(SIGHUP_RELOAD_UNITS)
 
-.PHONY: clean check users install install-systemd $(addprefix systemd-,start stop restart enable disable status)
+.PHONY: clean check test users install install-systemd $(addprefix systemd-,start stop restart enable disable status)
+
+test:
+	ruby -Ilib -Itest -e 'Dir["test/*_test.rb"].each { |f| require "./#{f}" }'
 
 all: $(ERBS) $(NON_ERB_CONFIG_TARGETS) $(SYSTEMD_UNITS)
 
