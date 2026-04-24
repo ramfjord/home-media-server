@@ -22,20 +22,24 @@ ERBS := $(patsubst services/%.erb,config/%,$(SERVICE_ERBS)) \
 NON_ERB_CONFIGS := $(patsubst services/%,%,$(shell find services -type f ! -name '*.erb' ! -name 'service.yml' 2>/dev/null))
 NON_ERB_CONFIG_TARGETS := $(addprefix config/,$(NON_ERB_CONFIGS))
 
+# Per-service docker-compose.yml targets
+COMPOSE_TARGETS := $(foreach s,$(DOCKERIZED_SERVICES),config/$(s)/docker-compose.yml)
+
 # Systemd unit variables (derived from cached service lists above)
 SYSTEMD_SERVICE_UNITS := $(addprefix config/systemd/,$(addsuffix .service,$(SYSTEMD_SERVICES)))
 SYSTEMD_PATH_UNITS    := $(addprefix config/systemd/,$(addsuffix .path,$(SERVICES_WITH_CONFIG)))
 SYSTEMD_COMPOSE_PATH_UNITS := $(addprefix config/systemd/,$(addsuffix -compose.path,$(SYSTEMD_SERVICES)))
 SYSTEMD_COMPOSE_RELOAD_UNITS := $(addprefix config/systemd/,$(addsuffix -compose-reload.service,$(SYSTEMD_SERVICES)))
 SIGHUP_RELOAD_UNITS   := $(addprefix config/systemd/,$(addsuffix -reload.service,$(SIGHUP_SERVICES)))
-SYSTEMD_UNITS := $(SYSTEMD_SERVICE_UNITS) $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS) $(SYSTEMD_COMPOSE_RELOAD_UNITS) $(SIGHUP_RELOAD_UNITS)
+STATIC_SYSTEMD_UNITS := config/systemd/mediaserver-network.service
+SYSTEMD_UNITS := $(STATIC_SYSTEMD_UNITS) $(SYSTEMD_SERVICE_UNITS) $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS) $(SYSTEMD_COMPOSE_RELOAD_UNITS) $(SIGHUP_RELOAD_UNITS)
 
 .PHONY: clean check test users install install-systemd $(addprefix systemd-,start stop restart enable disable status)
 
 test:
 	ruby -Ilib -Itest -e 'Dir["test/*_test.rb"].each { |f| require "./#{f}" }'
 
-all: $(ERBS) $(NON_ERB_CONFIG_TARGETS) $(SYSTEMD_UNITS)
+all: $(ERBS) $(NON_ERB_CONFIG_TARGETS) $(COMPOSE_TARGETS) $(SYSTEMD_UNITS)
 
 clean:
 	rm -rf config/ .make.services
@@ -50,9 +54,6 @@ config:
 # --- Aggregator ERBs: depend on every service.yml (full iteration at render time). ---
 # Explicit rules take precedence over the implicit pattern rule below.
 AGGREGATOR_RULE = mkdir -p $(dir $@); ./render.rb < $< > $@
-
-config/docker-compose.yml: docker-compose.yml.erb $(RENDER_DEPS) $(SERVICE_YAMLS)
-	$(AGGREGATOR_RULE)
 
 config/caddy/Caddyfile: services/caddy/Caddyfile.erb $(RENDER_DEPS) $(SERVICE_YAMLS)
 	$(AGGREGATOR_RULE)
@@ -75,6 +76,16 @@ config/%: services/%.erb $(RENDER_DEPS) services/$$(call svc_of,$$*)/service.yml
 
 # Copy non-ERB files from services/<svc>/... to config/<svc>/...
 config/%: services/%
+	mkdir -p $(dir $@)
+	cp $< $@
+
+# Per-service docker-compose.yml (same template, different SERVICE_NAME per file).
+config/%/docker-compose.yml: systemd/service.compose.yml.erb $(RENDER_DEPS) services/$$*/service.yml
+	mkdir -p $(dir $@)
+	SERVICE_NAME=$* ./render.rb < $< > $@
+
+# Static systemd units (no rendering, just copy).
+config/systemd/%.service: systemd/%.service
 	mkdir -p $(dir $@)
 	cp $< $@
 
@@ -104,7 +115,9 @@ check: all
 	# TODO convert these to use the container versions of promtool/amtool
 	promtool check config config/prometheus/prometheus.yml
 	amtool check-config config/alertmanager/alertmanager.yml
-	docker-compose -f config/docker-compose.yml config > /dev/null
+	@for f in $(COMPOSE_TARGETS); do \
+	  docker compose -f "$$f" config > /dev/null || (echo "FAIL: $$f" && exit 1); \
+	done
 	docker run --rm \
 		-v $(CURDIR)/config/otelcol:/etc/otelcol \
 		otel/opentelemetry-collector-contrib:latest \
@@ -127,6 +140,8 @@ install-systemd: install $(SYSTEMD_UNITS)
 	sudo mkdir -p $(SYSTEMD_DIR)
 	sudo rsync -av config/systemd/ $(SYSTEMD_DIR)/
 	sudo systemctl daemon-reload
+	@echo "Enabling and starting mediaserver-network.service..."
+	@sudo systemctl enable --now mediaserver-network.service
 	@echo "Starting path units to monitor config changes..."
 	@sudo systemctl start $(notdir $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS))
 

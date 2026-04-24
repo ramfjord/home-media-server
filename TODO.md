@@ -3,6 +3,13 @@
 Things discussed during the per-service restructure that aren't in scope for
 the current phases. Roughly ordered by expected payoff.
 
+## Larger follow-up plans
+
+- [NixOS as a render target](plans/nixos-target.md) — emit NixOS config
+  instead of Debian systemd + compose. Motivated by the kernel-upgrade
+  incident and portable hardware migration. Depends on Phases 3 and 5 of
+  the restructure.
+
 ## Validation (extend `lib/mediaserver/validator.rb`)
 
 - **Port conflicts.** Detect duplicate host-side ports across services,

@@ -1,17 +1,22 @@
+<% compose = "#{install_base}/config/#{service.name}/docker-compose.yml" %>
 [Unit]
 Description=<%= service.desc %> (<%= service.name %>)
-After=docker.service<% if service.use_vpn? %> wireguard.service<% end %>
-Requires=docker.service
+After=docker.service mediaserver-network.service<% if service.use_vpn? %> wireguard.service<% end %>
+Requires=docker.service mediaserver-network.service
+PartOf=mediaserver-network.service
+<% if service.use_vpn? %>
+BindsTo=wireguard.service
+<% end %>
 
 [Service]
 Type=simple
 TimeoutStartSec=0
 Restart=on-failure
 RestartSec=10
-ExecStart=/usr/bin/docker compose -f <%= compose_file %> up <%= service.name %>
-ExecStop=/usr/bin/docker compose -f <%= compose_file %> stop <%= service.name %>
+ExecStart=/usr/bin/docker compose -f <%= compose %> up <%= service.name %>
+ExecStop=/usr/bin/docker compose -f <%= compose %> stop <%= service.name %>
 <% if service.sighup_reload? %>
-ExecReload=/usr/bin/docker compose -f <%= compose_file %> kill --signal SIGHUP <%= service.name %>
+ExecReload=/usr/bin/docker compose -f <%= compose %> kill --signal SIGHUP <%= service.name %>
 <% end %>
 
 [Install]

@@ -12,9 +12,4 @@ docker_config:
   - "${install_base}/config/qbittorrent:/config"
   - "${media_path}:/data"
   restart: unless-stopped
-  # Phase 3.5 prototype: explicit netns share (still legal inside one compose
-  # project; docker_config.network_mode overrides the implicit
-  # `service:wireguard` set by use_vpn). Phase 4 flips all VPN services
-  # to this when compose splits per-service.
-  network_mode: "container:wireguard"
 order: 50
