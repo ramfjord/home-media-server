@@ -18,7 +18,7 @@ icon: fas fa-server
 
 <% # Validate that all icon files exist for services with ports %>
 <% services.select { |s| s['port'] && s['name'] != 'homer' && s['partof'] != 'dashboard' }.each do |svc| %>
-  <% icon_path = "homer/assets/tools/#{svc['name']}.png" %>
+  <% icon_path = "services/homer/assets/tools/#{svc['name']}.png" %>
   <% raise "ERROR: Missing icon for #{svc['name']}: #{icon_path}" unless File.exist?(icon_path) %>
 <% end %>
 

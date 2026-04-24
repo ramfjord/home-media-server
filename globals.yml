@@ -1,0 +1,9 @@
+---
+objectives:
+- downloading
+- streaming
+- monitoring
+- security
+install_base: "/opt/mediaserver"
+media_path: "/data"
+hostname: localhost

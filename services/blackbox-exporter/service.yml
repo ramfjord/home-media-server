@@ -1,0 +1,16 @@
+---
+name: blackbox-exporter
+partof: monitoring
+desc: Blackbox HTTP probe exporter
+port: 9115
+docker_config:
+  image: prom/blackbox-exporter:latest
+  command:
+  - "--config.file=/etc/blackbox-exporter/blackbox.yml"
+  volumes:
+  - "${install_base}/config/prometheus/blackbox.yml:/etc/blackbox-exporter/blackbox.yml:ro"
+  labels:
+    prometheus.io/scrape: 'true'
+    prometheus.io/port: '9115'
+  restart: unless-stopped
+order: 110

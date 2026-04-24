@@ -1,18 +1,26 @@
+<% compose = service.compose_file %>
 [Unit]
 Description=<%= service.desc %> (<%= service.name %>)
-After=docker.service<% if service.use_vpn? %> wireguard.service<% end %>
-Requires=docker.service
+After=docker.service mediaserver-network.service<% if service.use_vpn? %> wireguard.service<% end %>
+Requires=docker.service mediaserver-network.service
+PartOf=mediaserver-network.service mediaserver.target
+<% if service.use_vpn? %>
+BindsTo=wireguard.service
+<% end %>
 
 [Service]
 Type=simple
 TimeoutStartSec=0
 Restart=on-failure
 RestartSec=10
-ExecStart=/usr/bin/docker compose -f <%= compose_file %> up <%= service.name %>
-ExecStop=/usr/bin/docker compose -f <%= compose_file %> stop <%= service.name %>
+<% if service.use_vpn? %>
+ExecStartPre=/bin/sh -c 'for i in {1..30}; do docker inspect wireguard --format="{{.State.Health.Status}}" 2>/dev/null | grep -q healthy && exit 0; sleep 1; done; exit 1'
+<% end %>
+ExecStart=/usr/bin/docker compose -f <%= compose %> up <%= service.name %>
+ExecStop=/usr/bin/docker compose -f <%= compose %> stop <%= service.name %>
 <% if service.sighup_reload? %>
-ExecReload=/usr/bin/docker compose -f <%= compose_file %> kill --signal SIGHUP <%= service.name %>
+ExecReload=/usr/bin/docker compose -f <%= compose %> kill --signal SIGHUP <%= service.name %>
 <% end %>
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=mediaserver.target

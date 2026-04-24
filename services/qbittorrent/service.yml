@@ -1,0 +1,15 @@
+---
+name: qbittorrent
+partof: downloading
+desc: torrent client
+port: 8080
+use_vpn: true
+groups:
+- mediaserver
+docker_config:
+  image: lscr.io/linuxserver/qbittorrent:latest
+  volumes:
+  - "${install_base}/config/qbittorrent:/config"
+  - "${media_path}:/data"
+  restart: unless-stopped
+order: 50

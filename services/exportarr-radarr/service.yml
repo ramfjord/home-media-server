@@ -1,0 +1,19 @@
+---
+name: exportarr-radarr
+partof: monitoring
+desc: Radarr metrics exporter
+docker_config:
+  image: ghcr.io/onedr0p/exportarr:latest
+  command:
+  - radarr
+  - "--url"
+  - http://caddy:7878
+  - "--api-key"
+  - "${radarr_apikey}"
+  - "--port"
+  - '9144'
+  labels:
+    prometheus.io/scrape: 'true'
+    prometheus.io/port: '9144'
+  restart: unless-stopped
+order: 160

@@ -1,0 +1,15 @@
+---
+name: sonarr
+partof: downloading
+desc: find new shows
+port: 8989
+use_vpn: true
+groups:
+- mediaserver
+docker_config:
+  image: lscr.io/linuxserver/sonarr:latest
+  volumes:
+  - "${install_base}/config/sonarr:/config"
+  - "${media_path}:/data"
+  restart: unless-stopped
+order: 30

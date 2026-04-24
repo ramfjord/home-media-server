@@ -1,33 +1,29 @@
-# Standard ERB files (1:1 mapping), exclude systemd templates (handled by separate rules)
-ERBS := $(filter-out config/systemd/%,$(addprefix config/,$(patsubst %.erb,%,$(wildcard *.erb */*.erb */*/*.erb */*/*/*.erb))))
+.SECONDEXPANSION:
 
-# Generate .make.services with service lists (cached until services.yml changes)
-# This caches the results of expensive $(shell yq ...) queries so they're not re-executed
-# on every 'make' invocation. Without this, Make would spawn yq every time, making
-# repeated 'make all' calls slow. By generating a file with the results, Make sees
-# a stable dependency and skips re-evaluation until services.yml actually changes.
-.make.services: services.yml $(wildcard config.local.yml)
-	@mkdir -p $(@D)
-	@{ \
-	  echo "# Generated service lists - do not edit"; \
-	  echo "ALL_SERVICES := $$(yq -r '.services[] | .name' services.yml 2>/dev/null | tr '\n' ' ')"; \
-	  echo "DOCKERIZED_SERVICES := $$(yq -r '.services[] | select(.docker_config != null) | .name' services.yml 2>/dev/null | tr '\n' ' ')"; \
-	  echo "SYSTEMD_SERVICES := $$(yq -r '.services[] | select(.docker_config != null) | select(.unit == null) | .name' services.yml 2>/dev/null | tr '\n' ' ')"; \
-	  echo "SIGHUP_SERVICES := $$(yq -r '.services[] | select(.sighup_reload == true) | .name' services.yml 2>/dev/null | tr '\n' ' ')"; \
-	  echo -n "SERVICES_WITH_CONFIG := "; \
-	  for svc in $$(yq -r '.services[] | select(.docker_config != null) | select(.unit == null) | .name' services.yml 2>/dev/null); do \
-	    [ -n "$$(find $$svc -type f 2>/dev/null)" ] && printf "%s " "$$svc"; \
-	  done; \
-	  echo ""; \
-	} > $@
+LIB_FILES := lib/mediaserver/config.rb lib/mediaserver/renderer.rb lib/mediaserver/validator.rb
+SERVICE_YAMLS := $(wildcard services/*/service.yml)
+RENDER_DEPS := render.rb $(LIB_FILES) globals.yml $(wildcard config.local.yml)
+
+# ERB source → target mapping:
+#   services/<svc>/<path>.erb  →  config/<svc>/<path>
+#   <aggregator>.erb           →  config/<aggregator>
+SERVICE_ERBS := $(shell find services -name '*.erb' 2>/dev/null)
+TOP_ERBS     := $(wildcard *.erb)
+ERBS := $(patsubst services/%.erb,config/%,$(SERVICE_ERBS)) \
+        $(patsubst %.erb,config/%,$(TOP_ERBS))
+
+# Cached service lists. Regenerated when any service.yml or globals.yml changes.
+.make.services: $(SERVICE_YAMLS) globals.yml $(wildcard config.local.yml) $(LIB_FILES) render.rb
+	@./render.rb --list-make > $@
 
 -include .make.services
 
-# Non-ERB config files (images, static assets, etc) to copy to config/
-# Finds all non-ERB files in service directories
-NON_ERB_CONFIGS := $(shell for svc in $(ALL_SERVICES); do find $$svc -type f ! -name "*.erb" 2>/dev/null; done | sed 's|^\./||')
-
+# Non-ERB files under services/ to copy to config/ (strip services/ prefix).
+NON_ERB_CONFIGS := $(patsubst services/%,%,$(shell find services -type f ! -name '*.erb' ! -name 'service.yml' 2>/dev/null))
 NON_ERB_CONFIG_TARGETS := $(addprefix config/,$(NON_ERB_CONFIGS))
+
+# Per-service docker-compose.yml targets
+COMPOSE_TARGETS := $(foreach s,$(DOCKERIZED_SERVICES),config/$(s)/docker-compose.yml)
 
 # Systemd unit variables (derived from cached service lists above)
 SYSTEMD_SERVICE_UNITS := $(addprefix config/systemd/,$(addsuffix .service,$(SYSTEMD_SERVICES)))
@@ -35,14 +31,19 @@ SYSTEMD_PATH_UNITS    := $(addprefix config/systemd/,$(addsuffix .path,$(SERVICE
 SYSTEMD_COMPOSE_PATH_UNITS := $(addprefix config/systemd/,$(addsuffix -compose.path,$(SYSTEMD_SERVICES)))
 SYSTEMD_COMPOSE_RELOAD_UNITS := $(addprefix config/systemd/,$(addsuffix -compose-reload.service,$(SYSTEMD_SERVICES)))
 SIGHUP_RELOAD_UNITS   := $(addprefix config/systemd/,$(addsuffix -reload.service,$(SIGHUP_SERVICES)))
-SYSTEMD_UNITS := $(SYSTEMD_SERVICE_UNITS) $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS) $(SYSTEMD_COMPOSE_RELOAD_UNITS) $(SIGHUP_RELOAD_UNITS)
+STATIC_SYSTEMD_UNITS := config/systemd/mediaserver-network.service
+AGGREGATOR_SYSTEMD_UNITS := config/systemd/mediaserver.target
+SYSTEMD_UNITS := $(STATIC_SYSTEMD_UNITS) $(AGGREGATOR_SYSTEMD_UNITS) $(SYSTEMD_SERVICE_UNITS) $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS) $(SYSTEMD_COMPOSE_RELOAD_UNITS) $(SIGHUP_RELOAD_UNITS)
 
-.PHONY: clean check users install install-systemd $(addprefix systemd-,start stop restart enable disable status)
+.PHONY: clean check test users install install-systemd $(addprefix systemd-,start stop restart enable disable status)
 
-all: $(ERBS) $(NON_ERB_CONFIG_TARGETS) $(SYSTEMD_UNITS)
+test:
+	ruby -Ilib -Itest -e 'Dir["test/*_test.rb"].each { |f| require "./#{f}" }'
+
+all: $(ERBS) $(NON_ERB_CONFIG_TARGETS) $(COMPOSE_TARGETS) $(SYSTEMD_UNITS)
 
 clean:
-	rm -rf config/
+	rm -rf config/ .make.services
 
 users:
 	script/make_users.sh
@@ -51,38 +52,66 @@ config:
 	mkdir config
 	chown $(USER):mediaserver config
 
-# Standard ERB rendering - this defines the ERBS targets
-config/%: %.erb render.rb services.yml $(wildcard config.local.yml)
-	mkdir -p $(dir $@)
-	./render.rb < $(patsubst config/%,%,$@).erb > $@
+# --- Aggregator ERBs: depend on every service.yml (full iteration at render time). ---
+# Explicit rules take precedence over the implicit pattern rule below.
+AGGREGATOR_RULE = mkdir -p $(dir $@); ./render.rb < $< > $@
 
-# Copy non-ERB files as-is to config/
-config/%: %
+config/caddy/Caddyfile: services/caddy/Caddyfile.erb $(RENDER_DEPS) $(SERVICE_YAMLS)
+	$(AGGREGATOR_RULE)
+
+config/homer/config.yml: services/homer/config.yml.erb $(RENDER_DEPS) $(SERVICE_YAMLS)
+	$(AGGREGATOR_RULE)
+
+config/otelcol/otelcol-config.yaml: services/otelcol/otelcol-config.yaml.erb $(RENDER_DEPS) $(SERVICE_YAMLS)
+	$(AGGREGATOR_RULE)
+
+config/prometheus/rules/mediaserver.yaml: services/prometheus/rules/mediaserver.yaml.erb $(RENDER_DEPS) $(SERVICE_YAMLS)
+	$(AGGREGATOR_RULE)
+
+config/systemd/mediaserver.target: systemd/mediaserver.target.erb $(RENDER_DEPS) $(SERVICE_YAMLS)
+	$(AGGREGATOR_RULE)
+
+# --- Per-service ERB rendering (narrow dep). Secondary expansion picks out the owning service. ---
+svc_of = $(firstword $(subst /, ,$(1)))
+
+config/%: services/%.erb $(RENDER_DEPS) services/$$(call svc_of,$$*)/service.yml
+	mkdir -p $(dir $@)
+	./render.rb < $< > $@
+
+# Copy non-ERB files from services/<svc>/... to config/<svc>/...
+config/%: services/%
 	mkdir -p $(dir $@)
 	cp $< $@
 
-# Systemd unit pattern rules
-config/systemd/%-reload.service: systemd/sighup-reload.service.erb render.rb services.yml $(wildcard config.local.yml)
+# Per-service docker-compose.yml (same template, different SERVICE_NAME per file).
+config/%/docker-compose.yml: systemd/service.compose.yml.erb $(RENDER_DEPS) services/$$*/service.yml
 	mkdir -p $(dir $@)
 	SERVICE_NAME=$* ./render.rb < $< > $@
 
-config/systemd/%.service: systemd/service.service.erb render.rb services.yml $(wildcard config.local.yml)
+# Static systemd units (no rendering, just copy).
+config/systemd/%.service: systemd/%.service
+	mkdir -p $(dir $@)
+	cp $< $@
+
+# --- Systemd unit pattern rules ---
+config/systemd/%-compose-reload.service: systemd/service-compose-reload.service.erb $(RENDER_DEPS) services/$$*/service.yml
 	mkdir -p $(dir $@)
 	SERVICE_NAME=$* ./render.rb < $< > $@
 
-config/systemd/%.path: systemd/service.path.erb render.rb services.yml $(wildcard config.local.yml)
+config/systemd/%-compose.path: systemd/service-compose.path.erb $(RENDER_DEPS) services/$$*/service.yml
 	mkdir -p $(dir $@)
 	SERVICE_NAME=$* ./render.rb < $< > $@
 
-config/systemd/%-compose.path: systemd/service-compose.path.erb render.rb services.yml $(wildcard config.local.yml)
+config/systemd/%-reload.service: systemd/sighup-reload.service.erb $(RENDER_DEPS) services/$$*/service.yml
 	mkdir -p $(dir $@)
 	SERVICE_NAME=$* ./render.rb < $< > $@
 
-config/systemd/%-compose-reload.service: systemd/service-compose-reload.service.erb render.rb services.yml $(wildcard config.local.yml)
+config/systemd/%.service: systemd/service.service.erb $(RENDER_DEPS) services/$$*/service.yml
 	mkdir -p $(dir $@)
 	SERVICE_NAME=$* ./render.rb < $< > $@
 
-config/systemd/%-reload.service: systemd/sighup-reload.service.erb render.rb services.yml $(wildcard config.local.yml)
+# .path units enumerate the service's source files; dep includes every file in the service dir.
+config/systemd/%.path: systemd/service.path.erb $(RENDER_DEPS) services/$$*/service.yml $$(shell find services/$$* -type f 2>/dev/null)
 	mkdir -p $(dir $@)
 	SERVICE_NAME=$* ./render.rb < $< > $@
 
@@ -90,7 +119,9 @@ check: all
 	# TODO convert these to use the container versions of promtool/amtool
 	promtool check config config/prometheus/prometheus.yml
 	amtool check-config config/alertmanager/alertmanager.yml
-	docker-compose -f config/docker-compose.yml config > /dev/null
+	@for f in $(COMPOSE_TARGETS); do \
+	  docker compose -f "$$f" config > /dev/null || (echo "FAIL: $$f" && exit 1); \
+	done
 	docker run --rm \
 		-v $(CURDIR)/config/otelcol:/etc/otelcol \
 		otel/opentelemetry-collector-contrib:latest \
@@ -114,35 +145,25 @@ install-systemd: install $(SYSTEMD_UNITS)
 	sudo mkdir -p $(SYSTEMD_DIR)
 	sudo rsync -av config/systemd/ $(SYSTEMD_DIR)/
 	sudo systemctl daemon-reload
+	@echo "Enabling and starting mediaserver-network.service..."
+	@sudo systemctl enable --now mediaserver-network.service
+	@echo "Enabling mediaserver.target..."
+	@sudo systemctl enable mediaserver.target
 	@echo "Starting path units to monitor config changes..."
 	@sudo systemctl start $(notdir $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS))
 
 systemd-start systemd-stop systemd-restart systemd-status:
-	@cmd=$$(echo $@ | sed 's/systemd-//'); \
-	units=$$(echo $(SYSTEMD_SERVICES) | sed 's/ /.service /g').service; \
-	echo "Running systemctl $$cmd on all services..."; \
-	sudo systemctl $$cmd $$units
+	@sudo systemctl $(patsubst systemd-%,%,$@) mediaserver.target
 
 systemd-enable:
-	@echo "Enabling docker services..."; \
-	for svc in $(SYSTEMD_SERVICES); do \
-	  echo "  systemctl enable $$svc.service"; \
-	  sudo systemctl enable --force $$svc.service; \
-	done; \
-	echo "Enabling path units for auto-reload on config changes..."; \
-	for unit in $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS); do \
-	  echo "  systemctl enable $$(basename $$unit)"; \
+	sudo systemctl enable --force mediaserver.target
+	@echo "Enabling path units for auto-reload on config changes..."
+	@for unit in $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS); do \
 	  sudo systemctl enable --force $$unit; \
 	done
 
 systemd-disable:
-	@echo "Disabling docker services..."; \
-	for svc in $(SYSTEMD_SERVICES); do \
-	  echo "  systemctl disable $$svc.service"; \
-	  sudo systemctl disable $$svc.service; \
-	done; \
-	echo "Disabling path units..."; \
-	for unit in $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS); do \
-	  echo "  systemctl disable $$(basename $$unit)"; \
-	  sudo systemctl disable $$unit; \
+	sudo systemctl disable mediaserver.target
+	@for unit in $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS); do \
+	  sudo systemctl disable $$(basename $$unit); \
 	done

@@ -1,0 +1,19 @@
+---
+name: exportarr-sonarr
+partof: monitoring
+desc: Sonarr metrics exporter
+docker_config:
+  image: ghcr.io/onedr0p/exportarr:latest
+  command:
+  - sonarr
+  - "--url"
+  - http://caddy:8989
+  - "--api-key"
+  - "${sonarr_apikey}"
+  - "--port"
+  - '9145'
+  labels:
+    prometheus.io/scrape: 'true'
+    prometheus.io/port: '9145'
+  restart: unless-stopped
+order: 170

@@ -1,0 +1,21 @@
+---
+name: prometheus
+partof: monitoring
+desc: Metrics and alerting
+port: 9090
+healthz: "/-/healthy"
+sighup_reload: true
+docker_config:
+  image: prom/prometheus:latest
+  command:
+  - "--config.file=/etc/prometheus/prometheus.yml"
+  - "--web.external-url=http://${hostname}:9090/"
+  - "--web.enable-remote-write-receiver"
+  volumes:
+  - "${install_base}/config/prometheus:/etc/prometheus:ro"
+  - "${install_base}/config/prometheus/data:/prometheus/data"
+  labels:
+    prometheus.io/scrape: 'true'
+    prometheus.io/port: '9090'
+  restart: unless-stopped
+order: 100
