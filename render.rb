@@ -86,10 +86,36 @@ template = ERB.new(text, trim_mode: '%<>')
 
 config_yaml = YAML.load(File.read('services.yml'))
 
+# Minimal deep merge — not worth pulling in the deep_merge gem for one function.
+# Array handling (union) adapted from:
+# https://github.com/danielsdeleo/deep_merge/blob/master/lib/deep_merge/core.rb
+def deep_merge!(base, overrides)
+  overrides.each do |key, value|
+    if value.is_a?(Hash) && base[key].is_a?(Hash)
+      deep_merge!(base[key], value)
+    elsif value.is_a?(Array) && base[key].is_a?(Array)
+      base[key] = (base[key] | value)
+    else
+      base[key] = value
+    end
+  end
+  base
+end
+
 # Load local config overrides if present
 if File.exist?('config.local.yml')
   local_config = YAML.load(File.read('config.local.yml'))
-  config_yaml.merge!(local_config) if local_config
+  if local_config
+    service_overrides = local_config.delete('service_overrides') || {}
+    config_yaml.merge!(local_config)
+
+    # Apply per-service overrides via deep merge
+    service_overrides.each do |svc_name, overrides|
+      svc_def = config_yaml['services'].find { |s| s['name'] == svc_name }
+      next unless svc_def
+      deep_merge!(svc_def, overrides)
+    end
+  end
 end
 
 services = config_yaml['services']

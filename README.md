@@ -65,6 +65,65 @@ All services are defined in **`services.yml`** and organized by objective:
    sonarr_apikey: "your-key"
    ```
 
+3. **Override individual service config** with `service_overrides`. Any key is deep-merged into the named service's definition. For example, to enable NVIDIA GPU transcoding in Jellyfin:
+
+   ```yaml
+   service_overrides:
+     jellyfin:
+       docker_config:
+         runtime: nvidia
+         devices:
+           - /dev/nvidia0
+           - /dev/nvidiactl
+           - /dev/nvidia-uvm
+   ```
+
+   This requires the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) installed on the host.
+
+### First-time setup
+
+A few things aren't automated and must be done manually before (or just after) the first run.
+
+#### 1. WireGuard VPN config
+
+The WireGuard container expects a `wg0.conf` at:
+
+```
+/opt/mediaserver/config/wireguard/wg0.conf
+```
+
+This directory is not generated — place your VPN provider's config there manually before starting the stack. Get `wg0.conf` from your provider's dashboard (Mullvad, ProtonVPN, etc.).
+
+Without it, the WireGuard container won't connect and Radarr, Sonarr, Prowlarr, and qBittorrent will all be down (they route all traffic through it).
+
+#### 2. Plex
+
+Plex runs as a native systemd service (`plexmediaserver`), not a Docker container. Install the Plex Media Server package on the host before running `make install`:
+
+- Download from [plex.tv/media-server-downloads](https://www.plex.tv/media-server-downloads/)
+
+#### 3. Arr API keys (chicken-and-egg)
+
+Radarr and Sonarr generate their API keys on first run — you can't know them in advance. The workflow:
+
+1. Start the stack without API keys set
+2. Open each app's web UI and find the key under **Settings > General > API Key**:
+   - Radarr — port 7878
+   - Sonarr — port 8989
+   - qBittorrent — set a username/password on first login (port 8080)
+3. Add the keys to `config.local.yml`:
+
+   ```yaml
+   radarr_apikey: "abc123..."
+   sonarr_apikey: "def456..."
+   qbittorrent_username: "admin"
+   qbittorrent_password: "yourpassword"
+   ```
+
+4. Re-run `make install` to push the updated config
+
+These keys are required for the Prometheus exporters (exportarr-radarr, exportarr-sonarr, qbittorrent-exporter) to scrape metrics.
+
 ### Commands
 
 ```bash
@@ -116,7 +175,7 @@ Currently configured to export to local Prometheus and Grafana, but try other ba
 ## Storage & Performance
 
 - **Hardlinks**: All "arr" apps are configured for hardlink moves to avoid duplicate storage
-- **GPU Acceleration**: Jellyfin supports NVIDIA GPU for transcoding (configure device mappings in `config.local.yml`)
+- **GPU Acceleration**: Jellyfin supports NVIDIA GPU for transcoding via `service_overrides` in `config.local.yml` (see Configuration above)
 - **Persistent Data**: Prometheus and Grafana data stored in `config/` (git-ignored)
 
 ## Architecture: Networking & VPN
