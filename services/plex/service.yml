@@ -1,0 +1,10 @@
+---
+name: plex
+partof: streaming
+unit: plexmediaserver
+desc: Media streaming
+groups:
+- mediaserver
+port: 32400
+healthz: "/web/index.html"
+order: 60

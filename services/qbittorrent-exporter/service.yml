@@ -1,0 +1,16 @@
+---
+name: qbittorrent-exporter
+partof: monitoring
+desc: qBittorrent metrics exporter
+docker_config:
+  image: esanchezm/prometheus-qbittorrent-exporter:latest
+  environment:
+  - QBITTORRENT_HOST=qbittorrent
+  - QBITTORRENT_PORT=8080
+  - QBITTORRENT_USERNAME=${qbittorrent_username}
+  - QBITTORRENT_PASSWORD=${qbittorrent_password}
+  labels:
+    prometheus.io/scrape: 'true'
+    prometheus.io/port: '8000'
+  restart: unless-stopped
+order: 180

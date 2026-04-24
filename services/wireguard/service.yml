@@ -1,0 +1,22 @@
+---
+name: wireguard
+partof: vpn
+desc: VPN container
+docker_config:
+  image: lscr.io/linuxserver/wireguard:latest
+  cap_add:
+  - NET_ADMIN
+  - SYS_MODULE
+  sysctls:
+    net.ipv4.conf.all.src_valid_mark: 1
+  volumes:
+  - "${install_base}/config/wireguard:/config"
+  - "/lib/modules:/lib/modules:ro"
+  healthcheck:
+    test: ping -c 1 1.1.1.1 || exit 1
+    interval: 30s
+    timeout: 10s
+    retries: 3
+    start_period: 10s
+  restart: unless-stopped
+order: 0

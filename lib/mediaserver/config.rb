@@ -102,6 +102,10 @@ module Mediaserver
       @definition.has_key?(key)
     end
 
+    def source_dir
+      "services/#{name}"
+    end
+
     def use_vpn?
       @definition['use_vpn'] == true
     end
@@ -115,9 +119,18 @@ module Mediaserver
     attr_reader :services, :globals, :raw
 
     def self.load(root: '.')
-      services_path = File.join(root, 'services.yml')
+      globals_path = File.join(root, 'globals.yml')
       local_path = File.join(root, 'config.local.yml')
-      raw = YAML.load(File.read(services_path))
+      services_glob = File.join(root, 'services', '*', 'service.yml')
+
+      globals_raw = File.exist?(globals_path) ? (YAML.load(File.read(globals_path)) || {}) : {}
+      service_defs = Dir[services_glob].sort.map do |path|
+        YAML.load(File.read(path)) or raise "empty service file: #{path}"
+      end
+      # Stable sort by optional `order` field; missing order goes to the end.
+      service_defs = service_defs.sort_by.with_index { |s, i| [s['order'] || Float::INFINITY, i] }
+
+      raw = globals_raw.merge('services' => service_defs)
 
       if File.exist?(local_path)
         local = YAML.load(File.read(local_path))

@@ -1,0 +1,19 @@
+---
+name: jellyfin
+partof: streaming
+desc: Alternative media streaming server
+port: 8096
+groups:
+- mediaserver
+healthz: "/health"
+docker_config:
+  image: jellyfin/jellyfin:latest
+  volumes:
+  - "${install_base}/config/jellyfin:/config"
+  - "${media_path}/TV:/media/TV:ro"
+  - "${media_path}/Movies:/media/Movies:ro"
+  - "/tmp:/tmp"
+  environment:
+  - JELLYFIN_PublishedServerUrl=http://${hostname}:8096
+  restart: unless-stopped
+order: 70

@@ -70,10 +70,10 @@ class ValidatorTest < Minitest::Test
     assert_match(/use_vpn/, err.message)
   end
 
-  def test_real_services_yml_passes
+  def test_real_services_validate
     require 'yaml'
-    path = File.expand_path('../services.yml', __dir__)
-    raw = YAML.load(File.read(path))
-    Mediaserver::Validator.validate!(raw['services'])
+    defs = Dir[File.expand_path('../services/*/service.yml', __dir__)]
+      .map { |p| YAML.load(File.read(p)) }
+    Mediaserver::Validator.validate!(defs)
   end
 end

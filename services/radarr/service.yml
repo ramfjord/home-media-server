@@ -1,0 +1,15 @@
+---
+name: radarr
+partof: downloading
+desc: find movies
+port: 7878
+use_vpn: true
+groups:
+- mediaserver
+docker_config:
+  image: lscr.io/linuxserver/radarr:latest
+  volumes:
+  - "${install_base}/config/radarr:/config"
+  - "${media_path}:/data"
+  restart: unless-stopped
+order: 20

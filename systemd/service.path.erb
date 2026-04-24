@@ -2,8 +2,9 @@
 Description=Config watcher for <%= service.name %>
 
 [Path]
-<% Dir.glob("#{service.name}/**/*").select { |f| File.file?(f) }.each do |src| %>
-<%   installed = "#{install_base}/config/#{src.sub(/\.erb$/, '')}" %>
+<% Dir.glob("#{service.source_dir}/**/*").select { |f| File.file?(f) && File.basename(f) != 'service.yml' }.each do |src| %>
+<%   relative = src.sub(/^#{Regexp.escape(service.source_dir)}\//, '') %>
+<%   installed = "#{install_base}/config/#{service.name}/#{relative.sub(/\.erb$/, '')}" %>
 PathChanged=<%= installed %>
 <% end %>
 Unit=<%= service.sighup_reload? ? "#{service.name}-reload.service" : "#{service.name}.service" %>

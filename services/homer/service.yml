@@ -1,0 +1,13 @@
+---
+name: homer
+partof: dashboard
+desc: Service dashboard
+port: 80
+docker_config:
+  image: b4bz/homer:latest
+  ports:
+  - 80:8080
+  volumes:
+  - "${install_base}/config/homer:/www/assets"
+  restart: unless-stopped
+order: 80

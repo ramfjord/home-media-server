@@ -128,22 +128,29 @@ class ConfigLoadTest < Minitest::Test
   end
 
   def write(path, content)
-    File.write(File.join(@dir, path), content)
+    full = File.join(@dir, path)
+    FileUtils.mkdir_p(File.dirname(full))
+    File.write(full, content)
+  end
+
+  def write_service(name, body)
+    write("services/#{name}/service.yml", body)
   end
 
   def test_loads_services_and_globals
-    write('services.yml', <<~YAML)
+    write('globals.yml', <<~YAML)
       install_base: /opt/test
       media_path: /srv/data
       hostname: example
-      services:
-        - name: svc1
-          desc: first
-          docker_config:
-            image: img:latest
-            volumes:
-              - ${install_base}/config:/c
-              - ${media_path}:/data
+    YAML
+    write_service('svc1', <<~YAML)
+      name: svc1
+      desc: first
+      docker_config:
+        image: img:latest
+        volumes:
+          - ${install_base}/config:/c
+          - ${media_path}:/data
     YAML
 
     cfg = Mediaserver::Config.load(root: @dir)
@@ -159,10 +166,7 @@ class ConfigLoadTest < Minitest::Test
   end
 
   def test_default_globals_when_missing
-    write('services.yml', <<~YAML)
-      services:
-        - name: svc1
-    YAML
+    write_service('svc1', "name: svc1\n")
 
     cfg = Mediaserver::Config.load(root: @dir)
     assert_equal '/opt/mediaserver', cfg.globals['install_base']
@@ -171,27 +175,21 @@ class ConfigLoadTest < Minitest::Test
   end
 
   def test_local_override_merges_globals
-    write('services.yml', <<~YAML)
-      install_base: /default
-      services:
-        - name: svc1
-    YAML
-    write('config.local.yml', <<~YAML)
-      install_base: /override
-    YAML
+    write('globals.yml', "install_base: /default\n")
+    write_service('svc1', "name: svc1\n")
+    write('config.local.yml', "install_base: /override\n")
 
     cfg = Mediaserver::Config.load(root: @dir)
     assert_equal '/override', cfg.globals['install_base']
   end
 
   def test_service_overrides_deep_merge
-    write('services.yml', <<~YAML)
-      services:
-        - name: svc1
-          docker_config:
-            image: old:v1
-            volumes:
-              - /a:/a
+    write_service('svc1', <<~YAML)
+      name: svc1
+      docker_config:
+        image: old:v1
+        volumes:
+          - /a:/a
     YAML
     write('config.local.yml', <<~YAML)
       service_overrides:
@@ -209,13 +207,25 @@ class ConfigLoadTest < Minitest::Test
   end
 
   def test_raw_exposed
-    write('services.yml', <<~YAML)
-      snmp_host: box.local
-      services:
-        - name: svc1
-    YAML
+    write('globals.yml', "snmp_host: box.local\n")
+    write_service('svc1', "name: svc1\n")
 
     cfg = Mediaserver::Config.load(root: @dir)
     assert_equal 'box.local', cfg.raw['snmp_host']
+  end
+
+  def test_order_field_sorts_services
+    write_service('a', "name: a\norder: 20\n")
+    write_service('b', "name: b\norder: 10\n")
+    write_service('c', "name: c\n")  # no order → end
+
+    cfg = Mediaserver::Config.load(root: @dir)
+    assert_equal %w[b a c], cfg.services.map(&:name)
+  end
+
+  def test_source_dir
+    write_service('svc1', "name: svc1\n")
+    cfg = Mediaserver::Config.load(root: @dir)
+    assert_equal 'services/svc1', cfg.services.first.source_dir
   end
 end

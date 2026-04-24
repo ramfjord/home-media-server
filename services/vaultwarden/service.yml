@@ -1,0 +1,16 @@
+---
+name: vaultwarden
+partof: security
+desc: Password manager
+port: 8000
+healthz: "/alive"
+docker_config:
+  image: vaultwarden/server:latest
+  ports:
+  - 8000:80
+  volumes:
+  - "${install_base}/config/vaultwarden:/data"
+  environment:
+  - LOG_LEVEL=info
+  restart: unless-stopped
+order: 90
