@@ -4,5 +4,5 @@ After=<%= service.name %>.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/docker compose -f <%= compose_file %> kill --signal SIGHUP <%= service.name %>
+ExecStart=/usr/bin/docker compose -f <%= service.compose_file %> kill --signal SIGHUP <%= service.name %>
 RemainAfterExit=no

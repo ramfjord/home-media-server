@@ -41,8 +41,9 @@ module Mediaserver
   end
 
   class ProjectService
-    def initialize(definition)
+    def initialize(definition, install_base = '/opt/mediaserver')
       @definition = definition
+      @install_base = install_base
     end
 
     def name
@@ -113,6 +114,10 @@ module Mediaserver
     def sighup_reload?
       @definition['sighup_reload'] == true
     end
+
+    def compose_file
+      "#{@install_base}/config/#{name}/docker-compose.yml"
+    end
   end
 
   class Config
@@ -153,7 +158,8 @@ module Mediaserver
 
       Validator.validate!(raw['services'])
       raw['services'].each { |svc| Mediaserver.expand_vars(svc, raw) }
-      services = raw['services'].map { |s| ProjectService.new(s) }
+      install_base = globals['install_base']
+      services = raw['services'].map { |s| ProjectService.new(s, install_base) }
 
       new(services: services, globals: globals, raw: raw)
     end
