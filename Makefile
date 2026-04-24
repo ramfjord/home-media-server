@@ -32,7 +32,8 @@ SYSTEMD_COMPOSE_PATH_UNITS := $(addprefix config/systemd/,$(addsuffix -compose.p
 SYSTEMD_COMPOSE_RELOAD_UNITS := $(addprefix config/systemd/,$(addsuffix -compose-reload.service,$(SYSTEMD_SERVICES)))
 SIGHUP_RELOAD_UNITS   := $(addprefix config/systemd/,$(addsuffix -reload.service,$(SIGHUP_SERVICES)))
 STATIC_SYSTEMD_UNITS := config/systemd/mediaserver-network.service
-SYSTEMD_UNITS := $(STATIC_SYSTEMD_UNITS) $(SYSTEMD_SERVICE_UNITS) $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS) $(SYSTEMD_COMPOSE_RELOAD_UNITS) $(SIGHUP_RELOAD_UNITS)
+AGGREGATOR_SYSTEMD_UNITS := config/systemd/mediaserver.target
+SYSTEMD_UNITS := $(STATIC_SYSTEMD_UNITS) $(AGGREGATOR_SYSTEMD_UNITS) $(SYSTEMD_SERVICE_UNITS) $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS) $(SYSTEMD_COMPOSE_RELOAD_UNITS) $(SIGHUP_RELOAD_UNITS)
 
 .PHONY: clean check test users install install-systemd $(addprefix systemd-,start stop restart enable disable status)
 
@@ -65,6 +66,9 @@ config/otelcol/otelcol-config.yaml: services/otelcol/otelcol-config.yaml.erb $(R
 	$(AGGREGATOR_RULE)
 
 config/prometheus/rules/mediaserver.yaml: services/prometheus/rules/mediaserver.yaml.erb $(RENDER_DEPS) $(SERVICE_YAMLS)
+	$(AGGREGATOR_RULE)
+
+config/systemd/mediaserver.target: systemd/mediaserver.target.erb $(RENDER_DEPS) $(SERVICE_YAMLS)
 	$(AGGREGATOR_RULE)
 
 # --- Per-service ERB rendering (narrow dep). Secondary expansion picks out the owning service. ---
@@ -142,35 +146,23 @@ install-systemd: install $(SYSTEMD_UNITS)
 	sudo systemctl daemon-reload
 	@echo "Enabling and starting mediaserver-network.service..."
 	@sudo systemctl enable --now mediaserver-network.service
+	@echo "Enabling mediaserver.target..."
+	@sudo systemctl enable mediaserver.target
 	@echo "Starting path units to monitor config changes..."
 	@sudo systemctl start $(notdir $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS))
 
 systemd-start systemd-stop systemd-restart systemd-status:
-	@cmd=$$(echo $@ | sed 's/systemd-//'); \
-	units=$$(echo $(SYSTEMD_SERVICES) | sed 's/ /.service /g').service; \
-	echo "Running systemctl $$cmd on all services..."; \
-	sudo systemctl $$cmd $$units
+	@sudo systemctl $(patsubst systemd-%,%,$@) mediaserver.target
 
 systemd-enable:
-	@echo "Enabling docker services..."; \
-	for svc in $(SYSTEMD_SERVICES); do \
-	  echo "  systemctl enable $$svc.service"; \
-	  sudo systemctl enable --force $$svc.service; \
-	done; \
-	echo "Enabling path units for auto-reload on config changes..."; \
-	for unit in $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS); do \
-	  echo "  systemctl enable $$(basename $$unit)"; \
+	sudo systemctl enable --force mediaserver.target
+	@echo "Enabling path units for auto-reload on config changes..."
+	@for unit in $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS); do \
 	  sudo systemctl enable --force $$unit; \
 	done
 
 systemd-disable:
-	@echo "Disabling docker services..."; \
-	for svc in $(SYSTEMD_SERVICES); do \
-	  echo "  systemctl disable $$svc.service"; \
-	  sudo systemctl disable $$svc.service; \
-	done; \
-	echo "Disabling path units..."; \
-	for unit in $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS); do \
-	  echo "  systemctl disable $$(basename $$unit)"; \
-	  sudo systemctl disable $$unit; \
+	sudo systemctl disable mediaserver.target
+	@for unit in $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS); do \
+	  sudo systemctl disable $$(basename $$unit); \
 	done

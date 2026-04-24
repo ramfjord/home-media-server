@@ -3,7 +3,7 @@
 Description=<%= service.desc %> (<%= service.name %>)
 After=docker.service mediaserver-network.service<% if service.use_vpn? %> wireguard.service<% end %>
 Requires=docker.service mediaserver-network.service
-PartOf=mediaserver-network.service
+PartOf=mediaserver-network.service mediaserver.target
 <% if service.use_vpn? %>
 BindsTo=wireguard.service
 <% end %>
@@ -20,4 +20,4 @@ ExecReload=/usr/bin/docker compose -f <%= compose %> kill --signal SIGHUP <%= se
 <% end %>
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=mediaserver.target
