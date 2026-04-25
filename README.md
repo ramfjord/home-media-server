@@ -1,202 +1,107 @@
 # Home Media Server
 
-Yet another self-hosted media server setup using Docker Compose, but with a focus on **observability, flexibility, and Infrastructure-as-Code principles**. This is a hobby project with opinionated choices different from similar projects like [docker-compose-nas](https://github.com/AdrienPoupa/docker-compose-nas).
+Yet another self-hosted media server, with a focus on **observability, flexibility, and Infrastructure-as-Code**. Hobby project — see [docker-compose-nas](https://github.com/AdrienPoupa/docker-compose-nas) for a more battle-tested alternative.
 
 ## Philosophy
 
-Rather than providing a rigid, production-optimized setup, this project prioritizes:
-
-- **Configuration as Code**: All service definitions live in `services.yml` — edit one file, regenerate all container configs
-- **Monitoring First**: Comprehensive monitoring and alerting stack built-in from the start, designed for experimentation
-- **Flexible Observability**: Uses OpenTelemetry Collector as the foundation, allowing you to try different monitoring backends without restructuring everything
-- **Dynamic Configuration**: `.erb` templates generate Prometheus configs, Docker Compose files, and service dashboards from a single source of truth
+- **Configuration as Code**: each service lives in `services/<name>/` (a `service.yml` plus any `.erb` templates it owns). `globals.yml` and `config.local.yml` cover the rest.
+- **Templated everything**: `render.rb` turns the per-service definitions into Prometheus configs, Caddy routes, per-service `docker-compose.yml` files, systemd units, and Homer dashboard entries.
+- **Systemd-native**: every service is a systemd unit on a shared `mediaserver-network`. A `.path` watcher hot-reloads each service when its config changes; `mediaserver.target` brings the whole stack up or down.
+- **Vendor-agnostic monitoring**: OpenTelemetry Collector sits in front of Prometheus/Grafana so the backend can be swapped without restructuring.
 
 ## Services
 
-All services are defined in **`services.yml`** and organized by objective:
+The table below is a map of what's in the repo. Day-to-day, you don't need it — once the stack is up, the **Homer dashboard** at `http://<host>/` is the entry point: it lists every running service, its URL, and its health, so that's where you go to actually use the thing.
 
-### Downloading (Media Acquisition)
+Detailed setup notes for individual services live in their own folders under `services/<name>/README.md` where applicable.
 
-- **Radarr** — Movie discovery and management
-- **Sonarr** — TV show discovery and management  
-- **Prowlarr** — Indexer management and aggregation
-- **qBittorrent** — Torrent client (runs through WireGuard VPN)
-- **Caddy** — Reverse proxy for VPN services
+| Service | Group | Port | Description |
+|---|---|---|---|
+| [Radarr](services/radarr/) | downloading | 7878 | Movie discovery and management |
+| [Sonarr](services/sonarr/) | downloading | 8989 | TV show discovery and management |
+| [Prowlarr](services/prowlarr/) | downloading | 9696 | Indexer manager feeding Radarr/Sonarr |
+| [qBittorrent](services/qbittorrent/) | downloading | 8080 | Torrent client (shares WireGuard's netns) |
+| [Plex](services/plex/) | streaming | 32400 | Media streaming (native systemd, not Docker) |
+| [Jellyfin](services/jellyfin/) | streaming | 8096 | Alternative media server with optional GPU transcoding |
+| [Vaultwarden](services/vaultwarden/) | security | 8000 | Self-hosted Bitwarden-compatible password manager |
+| [Prometheus](services/prometheus/) | monitoring | 9090 | Metrics storage and alerting |
+| [OpenTelemetry Collector](services/otelcol/) | monitoring | 8888 | Metrics aggregation hub |
+| [Grafana](services/grafana/) | monitoring | 3000 | Dashboards and visualization |
+| [Alertmanager](services/alertmanager/) | monitoring | 9093 | Alert routing |
+| [cAdvisor](services/cadvisor/) | monitoring | 8081 | Container metrics |
+| [Blackbox Exporter](services/blackbox-exporter/) | monitoring | 9115 | HTTP/TCP endpoint probes |
+| [exportarr-radarr](services/exportarr-radarr/) | monitoring | — | Radarr metrics exporter |
+| [exportarr-sonarr](services/exportarr-sonarr/) | monitoring | — | Sonarr metrics exporter |
+| [qbittorrent-exporter](services/qbittorrent-exporter/) | monitoring | — | qBittorrent metrics exporter |
+| [Homer](services/homer/) | dashboard | 80 | Service-discovery landing page |
+| [Caddy](services/caddy/) | dashboard | — | Reverse proxy bridging WireGuard-isolated services and HTTPS for Vaultwarden |
+| [WireGuard](services/wireguard/) | vpn | — | VPN tunnel; Radarr/Sonarr/Prowlarr/qBittorrent share its netns via `network_mode: container:wireguard` |
 
-### Streaming (Media Playback)
+## Networking
 
-- **Plex** — Media server (systemd service, non-Docker)
-- **Jellyfin** — Alternative media streaming with GPU acceleration support
+Two distinct VPNs:
 
-### Monitoring & Observability
+- **WireGuard** (container) — routes the downloading stack through an external VPN provider for privacy on their outbound traffic.
+- **Tailscale** (host) — encrypted remote access to the box from personal devices. No internet-facing ports.
 
-- **Prometheus** — Metrics collection and time-series database
-- **OpenTelemetry Collector** — Metrics aggregation layer (enables experimentation with different backends)
-- **Grafana** — Dashboards and visualization
-- **Alertmanager** — Alert routing and management
-- **cAdvisor** — Container metrics exporter
-- **Blackbox Exporter** — HTTP/TCP endpoint probing
-- **Exportarr** (Radarr/Sonarr/qBittorrent) — Application-specific metrics exporters
-
-### Dashboard
-
-- **Homer** — Service discovery dashboard (visit `http://host:80` to see all services)
-- **WireGuard** — VPN container for secure access
+Caddy bridges the two and terminates HTTPS for the few services that require it (e.g. Vaultwarden).
 
 ## Getting Started
 
 ### Prerequisites
 
-- Docker and Docker Compose V2
-- Linux host with `make`, `ruby`, and standard utilities
-- A VPN subscription (for routing qBittorrent and indexer traffic)
-- Optional: Tailscale for remote access
+- Docker + Docker Compose V2
+- Linux host with `make` and `ruby`
+- A WireGuard VPN subscription (Mullvad, ProtonVPN, etc.)
+- Optional: Tailscale
 
-### Configuration
+### Configure
 
-1. **Review defaults** in `services.yml`
-2. **Override** in `config.local.yml`:
-
-   ```yaml
-   hostname: myserver.local
-   media_path: /mnt/media
-   install_base: /opt/mediaserver
-   radarr_apikey: "your-key"
-   sonarr_apikey: "your-key"
-   ```
-
-3. **Override individual service config** with `service_overrides`. Any key is deep-merged into the named service's definition. For example, to enable NVIDIA GPU transcoding in Jellyfin:
-
-   ```yaml
-   service_overrides:
-     jellyfin:
-       docker_config:
-         runtime: nvidia
-         devices:
-           - /dev/nvidia0
-           - /dev/nvidiactl
-           - /dev/nvidia-uvm
-   ```
-
-   This requires the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) installed on the host.
-
-### First-time setup
-
-A few things aren't automated and must be done manually before (or just after) the first run.
-
-#### 1. WireGuard VPN config
-
-The WireGuard container expects a `wg0.conf` at:
-
-```
-/opt/mediaserver/config/wireguard/wg0.conf
-```
-
-This directory is not generated — place your VPN provider's config there manually before starting the stack. Get `wg0.conf` from your provider's dashboard (Mullvad, ProtonVPN, etc.).
-
-Without it, the WireGuard container won't connect and Radarr, Sonarr, Prowlarr, and qBittorrent will all be down (they route all traffic through it).
-
-#### 2. Plex
-
-Plex runs as a native systemd service (`plexmediaserver`), not a Docker container. Install the Plex Media Server package on the host before running `make install`:
-
-- Download from [plex.tv/media-server-downloads](https://www.plex.tv/media-server-downloads/)
-
-#### 3. Arr API keys (chicken-and-egg)
-
-Radarr and Sonarr generate their API keys on first run — you can't know them in advance. The workflow:
-
-1. Start the stack without API keys set
-2. Open each app's web UI and find the key under **Settings > General > API Key**:
-   - Radarr — port 7878
-   - Sonarr — port 8989
-   - qBittorrent — set a username/password on first login (port 8080)
-3. Add the keys to `config.local.yml`:
-
-   ```yaml
-   radarr_apikey: "abc123..."
-   sonarr_apikey: "def456..."
-   qbittorrent_username: "admin"
-   qbittorrent_password: "yourpassword"
-   ```
-
-4. Re-run `make install` to push the updated config
-
-These keys are required for the Prometheus exporters (exportarr-radarr, exportarr-sonarr, qbittorrent-exporter) to scrape metrics.
+1. Copy `config.local.yml.example` → `config.local.yml` and set at least `hostname`, `media_path`, and `install_base`.
+2. Override any service field via `service_overrides:` (deep-merged into that service's `service.yml`).
+3. See `services/wireguard/README.md` and `services/plex/README.md` for one-time manual setup, and `services/radarr/README.md` for the API-key bootstrap.
 
 ### Commands
 
 ```bash
-make all              # Render all .erb templates → config/
-make check            # Validate Prometheus, Alertmanager, Docker Compose configs
-make install          # rsync config/ to /opt/mediaserver/config/
-make deploy-<service> # Stop, reinstall, and restart a specific service
-make clean            # Remove generated config/
+make install          # check + render + rsync to $install_base
+make deploy-<service> # stop, reinstall, restart one service
+make clean            # remove generated config/
 ```
 
-### Workflow
+Once installed, drive the stack via systemd:
 
-1. Edit `services.yml` or `config.local.yml`
-2. Run `make all && make check` to validate
-3. Run `make install` to deploy
-4. Run `make deploy-plex` (or another service) to restart if needed
+```bash
+systemctl start mediaserver.target
+systemctl stop  mediaserver.target
+systemctl status <service>
+```
 
-## Design Decisions
+Editing files under `$install_base/config/<service>/` triggers a reload via that service's `.path` watcher — no manual restart needed.
 
-### vs. docker-compose-nas
+### Day-to-day workflow
 
-**If you don't enjoy configuring and debugging infrastructure**, [docker-compose-nas](https://github.com/AdrienPoupa/docker-compose-nas) is a much more mature, battle-tested solution and is strongly recommended. It just works.
+1. Edit `services/<name>/service.yml`, its templates, or `config.local.yml`
+2. `make install`
+3. Affected services hot-reload; use `make deploy-<service>` to force a full restart.
 
-**Similarities**: Both use the "arr" stack (Radarr, Sonarr, Prowlarr) with qBittorrent, WireGuard VPN, and media streaming.
-
-**Key Differences**:
+## vs. docker-compose-nas
 
 | Aspect | This Project | docker-compose-nas |
-|--------|--------------|-------------------|
-| **Service Management** | Systemd units per service + Docker | Pure Docker Compose |
-| **VPN Isolation** | All download/indexing traffic protected (Radarr, Sonarr, Prowlarr, qBittorrent) | All download/indexing traffic protected (Radarr, Sonarr, Prowlarr, qBittorrent) |
-| **Remote Access** | Tailscale (private, encrypted) | Internet-facing (with Traefik + Let's Encrypt) |
-| **Streaming** | Plex + Jellyfin option | Jellyfin focused |
-| **Reverse Proxy** | Caddy (routes WireGuard-isolated services) | Traefik (internet ingress) |
-| **Monitoring** | Metrics + dashboards (Prometheus, Grafana, Alertmanager) | Live dashboard only, no historical metrics |
-| **Config Management** | ERB templates + single YAML source | Individual docker-compose files |
-| **Observability Layer** | OpenTelemetry Collector (vendor-agnostic) | None |
+|---|---|---|
+| Service management | Per-service systemd units + Docker | Pure Docker Compose |
+| Remote access | Tailscale (private) | Internet-facing (Traefik + Let's Encrypt) |
+| Reverse proxy | Caddy (internal + HTTPS where required) | Traefik (internet ingress) |
+| Monitoring | Prometheus + Grafana + Alertmanager + OTel | Live dashboard only |
+| Config | Per-service YAML + ERB templates | Individual compose files |
+| Compose layout | One compose file per service on shared `mediaserver-network` | Single monolithic compose file |
 
-### Monitoring Philosophy
+## Storage
 
-Rather than shipping with Prometheus as the final destination, we use **OpenTelemetry Collector** as the hub. This allows:
-
-- **Easy backend swaps**: Point metrics to Prometheus, Grafana Cloud, Datadog, New Relic, etc.
-- **Vendor independence**: Change decisions without rebuilding the entire stack
-- **Experimentation**: Test new monitoring tools without breaking existing alerts
-
-Currently configured to export to local Prometheus and Grafana, but try other backends if interested.
-
-## Storage & Performance
-
-- **Hardlinks**: All "arr" apps are configured for hardlink moves to avoid duplicate storage
-- **GPU Acceleration**: Jellyfin supports NVIDIA GPU for transcoding via `service_overrides` in `config.local.yml` (see Configuration above)
-- **Persistent Data**: Prometheus and Grafana data stored in `config/` (git-ignored)
-
-## Architecture: Networking & VPN
-
-This setup uses VPNs in two distinct ways:
-
-- **WireGuard** container: Routes Radarr, Sonarr, Prowlarr, and qBittorrent through a VPN tunnel for privacy/anonymity on their external traffic
-- **Caddy** reverse proxy: Required to expose these WireGuard-routed services (which live on the VPN network interface) to the rest of your services
-- **Tailscale**: Provides secure remote access to your entire server — access the Homer dashboard and all services from anywhere without exposing ports to the internet. Traffic is encrypted end-to-end.
-
-Notably, **HTTPS is not needed** on Caddy since all remote access goes through Tailscale's encrypted tunnel.
-
-## Contributing
-
-This is a hobby project, but improvements and additions are welcome. Some potential extensions:
-
-- Lidarr (music management)
-- FlareSolverr (bypass Cloudflare)
-- AdGuard Home (DNS filtering)
-- Additional exporters (system, network, etc.)
+- **Hardlinks**: arr apps configured for hardlink moves to avoid duplicate storage.
+- **GPU**: Jellyfin can use NVIDIA via `service_overrides` (see `services/jellyfin/README.md`).
+- **Persistent data**: lives under `$install_base/config/` (git-ignored).
 
 ## License
 
-No specific license — feel free to adapt for your own use.
+No specific license — adapt freely.
