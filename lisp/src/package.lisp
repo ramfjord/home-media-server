@@ -7,6 +7,9 @@
    :field
    :*derived-fields*
    :*globals*
+   ;; Template helpers
+   :service-source-files
+   :installed-path
    ;; Render driver
    :render-tree
    :render-template-to-string

@@ -4,19 +4,20 @@
   :author "Thomas Ramfjord"
   :license "MIT"
   :depends-on ("cl-yaml" "elp")
-  :pathname "src/"
+  :pathname "lisp/src/"
   :serial t
   :components
   ((:file "package")
    (:file "config")
    (:file "field")
-   (:file "render"))
+   (:file "render")
+   (:file "cli"))
   :in-order-to ((test-op (test-op "mediaserver/tests"))))
 
 (defsystem "mediaserver/tests"
   :description "Tests for mediaserver."
   :depends-on ("mediaserver" "fiveam")
-  :pathname "test/"
+  :pathname "lisp/test/"
   :serial t
   :components
   ((:file "package")

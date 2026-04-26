@@ -150,10 +150,12 @@
                                    (deep-merge globals-yml local-no-ovr)))
          ;; Render + parse each service.yml.
          (services
-          (loop for path in (service-files root)
-                for rendered = (render-service-yaml path elp-globals)
-                for parsed = (cl-yaml:parse rendered)
-                when parsed collect (yaml->plist parsed)))
+          (remove nil
+                  (mapcar (lambda (path)
+                            (let ((parsed (cl-yaml:parse
+                                           (render-service-yaml path elp-globals))))
+                              (and parsed (yaml->plist parsed))))
+                          (service-files root))))
          ;; Stable sort by :order; missing -> end.
          (services
           (stable-sort services
@@ -162,12 +164,13 @@
                             (or (getf b :order) most-positive-fixnum)))))
          ;; Apply per-service overrides.
          (services
-          (loop for s in services
-                for ovr = (and overrides
-                               (getf overrides
-                                     (intern (string-upcase (getf s :name))
-                                             :keyword)))
-                collect (if ovr (deep-merge s ovr) s))))
+          (mapcar (lambda (s)
+                    (let ((ovr (and overrides
+                                    (getf overrides
+                                          (intern (string-upcase (getf s :name))
+                                                  :keyword)))))
+                      (if ovr (deep-merge s ovr) s)))
+                  services)))
     (validate-services services)
     (let ((globals elp-globals))
       (setf *globals* globals)

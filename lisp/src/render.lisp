@@ -1,27 +1,12 @@
 (in-package :mediaserver)
 
-;;; Render driver
+;;; Render primitives.
 ;;;
-;;; Walks ELP templates and writes rendered output, mirroring the Ruby
-;;; renderer's path conventions:
-;;;
-;;;   <services-root>/<svc>/**/*.elp  -> <output>/<svc>/<rel-without-.elp>
-;;;     rendered once with that service in scope.
-;;;
-;;;   <systemd-root>/<per-svc-tmpl>.elp  -> <output>/<see-table>
-;;;     rendered once per dockerized service, with that service in scope.
-;;;     The destination filename is per-template (e.g. service.service.elp
-;;;     emits "<svc>.service" under systemd/).
-;;;
-;;;   <systemd-root>/sighup-reload.service.elp  -> <output>/systemd/<svc>-reload.service
-;;;     rendered only for services with :sighup-reload set.
-;;;
-;;;   <systemd-root>/mediaserver.target.elp  -> <output>/systemd/mediaserver.target
-;;;     rendered once, no service in scope.
-;;;
-;;; Output is written write-if-changed so unchanged templates don't bump
-;;; mtimes (matters once these outputs feed systemd path units, not
-;;; relevant in the fixture-test path).
+;;; The Lisp side renders ONE template at a time, given a service
+;;; context. Make is the dispatcher: it knows the path conventions
+;;; (output target -> file layout), per-template dependencies, and
+;;; which services to iterate. The CLI (cli.lisp) wraps these
+;;; primitives for command-line use; tests call them directly.
 
 (defun render-template-to-string (path context)
   "ELP-render PATH with CONTEXT (alist), return the rendered string."
@@ -29,117 +14,53 @@
     (let ((*package* (find-package :mediaserver)))
       (elp:render (probe-file path) context s))))
 
+(defun %field-binding-symbol (key)
+  "Convert :install-base -> install_base (a symbol in :mediaserver)."
+  (intern (substitute #\_ #\- (symbol-name key)) :mediaserver))
+
+(defun service-field-bindings (service globals)
+  "Return an alist binding every key in *known-fields* (direct or
+   derived) to its value on SERVICE, using Ruby-style underscored
+   symbol names. Direct fields the service doesn't carry resolve
+   to NIL via FIELD's default. Returns NIL when SERVICE is NIL.
+
+   Templates can write <%= name %> / <%= compose_file %> /
+   <%- (when use_vpn -%> instead of (field service :name) etc.
+
+   A service field shadows a like-named global when both bind the
+   same symbol; in practice this hasn't happened on real fixtures."
+  (when service
+    (mapcar (lambda (k)
+              (cons (%field-binding-symbol k)
+                    (field service k globals)))
+            *known-fields*)))
+
+(defun %dedup-alist (alist)
+  "Return ALIST with duplicate keys removed; first occurrence wins.
+   Needed because ELP wraps the context alist in a LET, and CL signals
+   on duplicate variable bindings."
+  (let ((seen (make-hash-table)) (result nil))
+    (dolist (entry alist (nreverse result))
+      (unless (gethash (car entry) seen)
+        (setf (gethash (car entry) seen) t)
+        (push entry result)))))
+
 (defun service-render-context (service config)
-  "Build the ELP context-alist for a render. Includes the underscored
-   globals (install_base etc.) plus SERVICE / SERVICES / GLOBALS."
+  "Build the ELP context-alist for a render.
+
+   Includes, in priority order (first wins on duplicates):
+   - Per-service field bindings (only when SERVICE is non-nil) —
+     every key in *known-fields*, named with underscores
+     (e.g. install_base, compose_file, sighup_reload).
+   - Underscored globals (install_base, media_path, hostname, plus
+     any custom keys from config files).
+   - SERVICE / SERVICES / GLOBALS, for templates that need raw plists
+     (most commonly inside iteration loops over SERVICES)."
   (let ((globals  (getf config :globals))
         (services (getf config :services)))
-    (append (globals->elp-context globals)
-            (list (cons (intern "SERVICE"  :mediaserver) service)
-                  (cons (intern "SERVICES" :mediaserver) services)
-                  (cons (intern "GLOBALS"  :mediaserver) globals)))))
-
-(defun write-if-changed (path content)
-  "Write CONTENT to PATH only if the existing file differs.
-   Returns T if written, NIL if skipped."
-  (ensure-directories-exist (uiop:pathname-directory-pathname path))
-  (let ((existing (and (probe-file path)
-                       (uiop:read-file-string path))))
-    (cond ((equal existing content) nil)
-          (t (with-open-file (s path :direction :output
-                                     :if-exists :supersede
-                                     :if-does-not-exist :create)
-               (write-string content s))
-             t))))
-
-;;; Per-service systemd template -> destination relpath. Mirrors
-;;; PER_SERVICE_SYSTEMD in test/golden_test.rb.
-
-(defparameter *per-service-systemd-templates*
-  (list
-   (list "service.compose.yml.elp"
-         (lambda (s) (format nil "~A/docker-compose.yml" (getf s :name))))
-   (list "service.service.elp"
-         (lambda (s) (format nil "systemd/~A.service" (getf s :name))))
-   (list "service.path.elp"
-         (lambda (s) (format nil "systemd/~A.path" (getf s :name))))
-   (list "service-compose.path.elp"
-         (lambda (s) (format nil "systemd/~A-compose.path" (getf s :name))))
-   (list "service-compose-reload.service.elp"
-         (lambda (s) (format nil "systemd/~A-compose-reload.service" (getf s :name))))))
-
-(defparameter *singleton-systemd-templates*
-  '(("mediaserver.target.elp" . "systemd/mediaserver.target")))
-
-(defun dockerized-services (services config)
-  (remove-if-not (lambda (s) (field s :dockerized (getf config :globals)))
-                 services))
-
-(defun render-systemd-templates (config tdir output-dir)
-  "Render every applicable template under TDIR. Returns count written."
-  (let ((count 0)
-        (services (getf config :services)))
-    ;; Per-service expansion.
-    (dolist (svc (dockerized-services services config))
-      (dolist (entry *per-service-systemd-templates*)
-        (let ((tmpl (merge-pathnames (first entry) tdir)))
-          (when (probe-file tmpl)
-            (let* ((relpath (funcall (second entry) svc))
-                   (out (merge-pathnames relpath output-dir))
-                   (content (render-template-to-string
-                             tmpl (service-render-context svc config))))
-              (when (write-if-changed out content) (incf count)))))))
-    ;; sighup-reload (only services with :sighup-reload).
-    (let ((tmpl (merge-pathnames "sighup-reload.service.elp" tdir)))
-      (when (probe-file tmpl)
-        (dolist (svc services)
-          (when (field svc :sighup-reload (getf config :globals))
-            (let* ((relpath (format nil "systemd/~A-reload.service" (getf svc :name)))
-                   (out (merge-pathnames relpath output-dir))
-                   (content (render-template-to-string
-                             tmpl (service-render-context svc config))))
-              (when (write-if-changed out content) (incf count)))))))
-    ;; Singletons.
-    (dolist (entry *singleton-systemd-templates*)
-      (let ((tmpl (merge-pathnames (car entry) tdir)))
-        (when (probe-file tmpl)
-          (let* ((out (merge-pathnames (cdr entry) output-dir))
-                 (content (render-template-to-string
-                           tmpl (service-render-context nil config))))
-            (when (write-if-changed out content) (incf count))))))
-    count))
-
-(defun render-per-service-templates (config sdir output-dir)
-  "Render every <svc>/**/*.elp under SDIR. Returns count written."
-  (let ((count 0))
-    (dolist (svc (getf config :services))
-      (let* ((svc-name (getf svc :name))
-             (svc-dir  (merge-pathnames (format nil "~A/" svc-name) sdir)))
-        (dolist (tmpl (directory (merge-pathnames "**/*.elp" svc-dir)))
-          (let* ((rel-with-elp (uiop:enough-pathname tmpl svc-dir))
-                 (rel-str (namestring rel-with-elp))
-                 (rel-no-elp (subseq rel-str 0 (- (length rel-str) 4)))
-                 (out (merge-pathnames
-                       (format nil "~A/~A" svc-name rel-no-elp)
-                       output-dir))
-                 (content (render-template-to-string
-                           tmpl (service-render-context svc config))))
-            (when (write-if-changed out content) (incf count))))))
-    count))
-
-(defun render-tree (config &key systemd-template-dir services-template-dir output-dir)
-  "Render every applicable .elp template, write results to OUTPUT-DIR.
-   Returns the number of files written."
-  (let ((output-dir (uiop:ensure-directory-pathname output-dir))
-        (count 0))
-    (when systemd-template-dir
-      (incf count (render-systemd-templates
-                   config
-                   (uiop:ensure-directory-pathname systemd-template-dir)
-                   output-dir)))
-    (when services-template-dir
-      (incf count (render-per-service-templates
-                   config
-                   (uiop:ensure-directory-pathname services-template-dir)
-                   output-dir)))
-    count))
+    (%dedup-alist
+     (append (service-field-bindings service globals)
+             (globals->elp-context globals)
+             (list (cons (intern "SERVICE"  :mediaserver) service)
+                   (cons (intern "SERVICES" :mediaserver) services)
+                   (cons (intern "GLOBALS"  :mediaserver) globals))))))

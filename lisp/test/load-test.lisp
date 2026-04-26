@@ -4,7 +4,7 @@
 (in-suite load-suite)
 
 (defun fixture-root ()
-  (asdf:system-relative-pathname :mediaserver "../test/fixtures/"))
+  (asdf:system-relative-pathname :mediaserver "test/fixtures/"))
 
 (test load-config-services-found
   "Five fixture services load."
