@@ -148,29 +148,21 @@ install: check
 	  fi; \
 	done'
 
+PATH_UNITS := $(notdir $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS))
+
 install-systemd: install $(SYSTEMD_UNITS)
-	sudo mkdir -p $(SYSTEMD_DIR)
-	sudo rsync -av config/systemd/ $(SYSTEMD_DIR)/
-	sudo systemctl daemon-reload
-	@echo "Enabling and starting mediaserver-network.service..."
-	@sudo systemctl enable --now mediaserver-network.service
-	@echo "Enabling mediaserver.target..."
-	@sudo systemctl enable mediaserver.target
-	@echo "Starting path units to monitor config changes..."
-	@sudo systemctl start $(notdir $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS))
+	$(REMOTE) sudo mkdir -p $(SYSTEMD_DIR)
+	rsync -av --rsync-path="sudo rsync" config/systemd/ $(RSYNC_DEST)$(SYSTEMD_DIR)/
+	$(REMOTE) sudo systemctl daemon-reload
 
 systemd-start systemd-stop systemd-restart systemd-status:
-	@sudo systemctl $(patsubst systemd-%,%,$@) mediaserver.target
+	@$(REMOTE) sudo systemctl $(patsubst systemd-%,%,$@) mediaserver.target
 
 systemd-enable:
-	sudo systemctl enable --force mediaserver.target
-	@echo "Enabling path units for auto-reload on config changes..."
-	@for unit in $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS); do \
-	  sudo systemctl enable --force $$unit; \
-	done
+	$(REMOTE) sudo systemctl enable --now mediaserver-network.service
+	$(REMOTE) sudo systemctl enable --force mediaserver.target
+	$(REMOTE) sudo systemctl enable --now --force $(PATH_UNITS)
 
 systemd-disable:
-	sudo systemctl disable mediaserver.target
-	@for unit in $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS); do \
-	  sudo systemctl disable $$(basename $$unit); \
-	done
+	$(REMOTE) sudo systemctl disable mediaserver.target
+	$(REMOTE) sudo systemctl disable $(PATH_UNITS)
