@@ -8,7 +8,8 @@
   :serial t
   :components
   ((:file "package")
-   (:file "config"))
+   (:file "config")
+   (:file "field"))
   :in-order-to ((test-op (test-op "mediaserver/tests"))))
 
 (defsystem "mediaserver/tests"
@@ -17,4 +18,5 @@
   :pathname "test/"
   :serial t
   :components
-  ((:file "package")))
+  ((:file "package")
+   (:file "field-test")))

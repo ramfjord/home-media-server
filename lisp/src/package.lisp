@@ -1,3 +1,7 @@
 (defpackage :mediaserver
   (:use :cl)
-  (:export))
+  (:export
+   ;; Field accessor
+   :field
+   :*derived-fields*
+   :*globals*))
