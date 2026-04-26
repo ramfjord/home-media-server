@@ -146,7 +146,7 @@ install: check
 	@$(REMOTE) sudo sh -c 'chmod g+s /opt/mediaserver/config; for svc in $(ALL_SERVICES); do \
 	  if [ -d /opt/mediaserver/config/$$svc ]; then \
 	    chown -R $$svc:mediaserver /opt/mediaserver/config/$$svc; \
-	    find /opt/mediaserver/config/$$svc -type d -exec chmod g+s {} +; \
+	    chmod g+s /opt/mediaserver/config/$$svc; \
 	  fi; \
 	done'
 
