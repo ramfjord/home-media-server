@@ -54,6 +54,15 @@ working Lisp implementation to extend.
   codegen, source locations). All shipped or in-progress in `elp/`;
   this plan consumes the public API (`elp:render`,
   `elp:template-code`) and does not modify ELP internals.
+- **`elp/plans/trim-mode.md`** (to be drafted under `elp/`) —
+  **prerequisite for commit 5 below.** ELP currently has no
+  whitespace-trimming for block tags; a port of templates with
+  `<% (when ...) %>...<% ) %>` produces extra blank lines vs.
+  Ruby's `<>` trim mode. Rather than format around the absence
+  (cramming `<%` directly adjacent to content, which makes
+  templates ugly), wait for ELP to grow the trim behavior
+  Ruby's ERB has, then write templates in their natural shape.
+  Commit 5 cannot land until that ELP work ships.
 - **Future plan** (not yet drafted): main-project cutover. Will
   port every real `.erb`, build a `bin/render` saved image, swap
   the Makefile to per-service / aggregator targets, delete
@@ -78,13 +87,23 @@ fixture tree before drafting this plan. Decisions baked in:
   `*derived-fields*` alist for computed values (`:compose-file`,
   `:source-dir`, `:dockerized`, `:has-unit`). Adding a new derived
   field is one alist entry.
-- **`expand-vars` is internal**. `${install_base}` substitution
-  happens once during `load-config`, never exposed. Templates only
-  ever see fully-substituted strings. Confirmed in REPL: the Ruby
-  renderer's `expand_vars` does *not* operate on template text —
-  only on values inside `service.yml`. Embedded `${...}` in `.erb`
-  files passes through verbatim today, and we'll preserve that
-  behavior.
+- **No `expand-vars` on the Lisp side.** `service.yml` files use
+  `<%= install_base %>` (ELP-preprocessed at load time, same
+  binding as the templates themselves). `${var}` syntax is gone
+  from fixture YAML; it remains in real `service.yml`s only
+  because the Ruby renderer still handles them via its own
+  `expand_vars`, which is left in place for the duration of this
+  branch (real services aren't migrated here). Coexists cleanly
+  with docker-compose's runtime `${VAR}` for secret env vars,
+  which never collides with `<%= ... %>`.
+- **ELP gets a trim mode** (Ruby-ERB `<>` equivalent) before
+  templates are ported. Block tags like `<% (when ...) %>` need to
+  consume their trailing newline when they occupy a whole line,
+  the way Ruby's `<>` trim mode does, otherwise port output gets
+  extra blank lines. Without trim mode, the alternative is
+  cramming `<%` directly adjacent to content, which makes
+  templates ugly. Tracked separately under
+  `elp/plans/trim-mode.md`; commit 5 below blocks on it.
 - **Validation: 15 lines, three checks**.
   1. Every service has `:name`.
   2. No two services share a `:port`.
@@ -120,7 +139,7 @@ lisp/
   mediaserver.asd            ; depends on cl-yaml, elp
   src/
     package.lisp             ; (defpackage :mediaserver ...)
-    config.lisp              ; yaml->plist, expand-vars, load-config, validate
+    config.lisp              ; yaml->plist, load-config, deep-merge, validate
     field.lisp               ; field accessor, *derived-fields*, *known-fields*
     render.lisp              ; render-tree driver
   test/
@@ -172,31 +191,39 @@ against goldens, so write-if-changed isn't load-bearing here.
    succeeds, pulls cl-yaml as a transitive dep, exits clean. The
    package `:mediaserver` exists. No symbols exported yet.
 
-2. **`yaml->plist`, `expand-vars`, `field`, `*derived-fields*`** —
-   Port the four pieces prototyped in the REPL into
-   `lisp/src/config.lisp` and `lisp/src/field.lisp`. Export
-   `field`, `*globals*`, `*derived-fields*`. Add unit tests
-   under `lisp/test/` that load each fixture `service.yml`,
-   check `(field s :name)`, `(field s :use-vpn)`,
-   `(field s :compose-file)` against expected values.
-   *Verify:* tests green. Manual REPL check: load each of the
-   five fixture services and confirm round-trip plist matches
-   what the REPL produced during exploration.
+2a. **Ruby-side: ERB-preprocess `service.yml`; migrate fixtures
+    to `<%= var %>`** — Modify `lib/mediaserver/config.rb` to
+    ERB-render each `service.yml` (with merged globals bound as
+    locals) before YAML parsing. Migrate fixture `service.yml`s
+    from `${var}` to `<%= var %>`. Drop the `${install_base}`
+    reference in the fixture `config.local.yml` override.
+    Update the two goldens where `${media_path}` was previously
+    leaking through unsubstituted. `expand_vars` stays in Ruby
+    for real `service.yml`s.
+    *Verify:* `make test` green (Ruby unit tests + golden test).
+    Real services render unchanged via `make all`.
+
+2b. **Lisp-side: `yaml->plist`, `field`, `*derived-fields*`** —
+    Port the YAML-to-plist walker and field accessor (no
+    `expand-vars`; substitution happens in load-config via ELP
+    preprocessing). Export `field`, `*globals*`, `*derived-fields*`.
+    Add unit tests covering plist conversion, direct lookup,
+    missing-key handling, and derived fields.
+    *Verify:* fiveam tests green.
 
 3. **`load-config` + validator** — `(mediaserver:load-config
-   :root path)` reads `globals.yml`, globs
-   `services/*/service.yml`, applies `config.local.yml` overrides
-   (top-level + `service_overrides`), runs `expand-vars`, sorts
-   by `:order`, validates (required `:name`, unique ports, sets
-   `*known-fields*`). Returns `(:services ... :globals ... :raw ...)`.
-   Tests under `lisp/test/` cover: load fixture tree, services
-   sorted correctly, override applied, port-conflict detection
-   triggers, missing-name detection triggers, `(field s :typo)`
-   errors after load.
-   *Verify:* tests green; the loaded fixture config is
-   shape-equivalent to what `Mediaserver::Config.load(root:
-   "test/fixtures/")` returns (compare key by key in the REPL,
-   commit a regression test that does the same).
+   :root path)` reads `globals.yml`, globs `services/*/service.yml`,
+   ELP-preprocesses each (with merged globals as ELP context),
+   parses YAML, applies `config.local.yml` `service_overrides` via
+   plist deep-merge, sorts by `:order`, validates (required
+   `:name`, unique ports, sets `*known-fields*`). Returns
+   `(:services ... :globals ... :raw ...)` and sets `*globals*`.
+   Tests cover: load fixture tree, services sorted correctly,
+   ELP substitution worked (including `*default-globals*`
+   fall-through for `media_path`), override applied (scalar +
+   array union), port-conflict and missing-name detection,
+   `(field s :typo)` errors after load.
+   *Verify:* fiveam tests green.
 
 4. **`render-tree` driver** — `(mediaserver:render-tree config
    :template-root R :output-dir O)` walks ELP templates under R
@@ -212,14 +239,35 @@ against goldens, so write-if-changed isn't load-bearing here.
 5. **Port fixture `.erb`s to ELP, side-by-side** — For each
    fixture template (5 services' worth, plus aggregators), add a
    `.elp` sibling next to the existing `.erb`. Ruby goldens are
-   the spec; the Lisp render must produce identical bytes. The
-   `service.compose.yml.elp` translation is the riskiest single
-   file (Ruby builds a hash and calls `to_yaml`); approach it by
+   the spec; the Lisp render must produce identical bytes.
+
+   **Prerequisite: ELP trim mode** (see `elp/plans/trim-mode.md`).
+   Templates are written in their natural shape with `<% (when ...) %>`
+   on its own line, like the Ruby `<% if ... %>` lines they replace.
+   That requires ELP to consume the trailing newline after a tag
+   that occupies a whole line, the way Ruby's ERB `<>` trim mode
+   does. Don't start commit 5 until the ELP feature ships and
+   has been pulled into this repo's vendored `elp/`.
+
+   **`.erb` and `.elp` coexistence in service source dirs.** Once
+   `services/<svc>/Caddyfile.erb` and `Caddyfile.elp` both exist,
+   the path-watcher template (`systemd/service.path.erb` /
+   `service.path.elp`) needs to skip the *other* engine's
+   extension when enumerating files, otherwise Ruby will emit a
+   `PathChanged=...Caddyfile.elp` line and Lisp will emit a
+   duplicate `Caddyfile` after stripping `.elp`. Add the filter
+   to both templates as a same-commit change; the Ruby filter is
+   a no-op until the first `.elp` lands, so it doesn't disturb
+   existing goldens.
+
+   **`service.compose.yml.elp`** is the riskiest single file
+   (Ruby builds a hash and calls `to_yaml`); approach it by
    constructing an alist and emitting via `cl-yaml:emit`, with a
    REPL spike *first* to confirm cl-yaml's emit output matches
    Ruby's `Psych#to_yaml` byte-for-byte on a representative hash.
    If it doesn't, fall back to a hand-rolled YAML emitter for
    that template (the subset we need is small).
+
    *Verify:* one ELP template at a time, render via
    `render-tree`, `diff` against the corresponding golden file.
    Commit when the whole fixture set's diff is empty. Keep
@@ -259,8 +307,9 @@ against goldens, so write-if-changed isn't load-bearing here.
 - **No `bin/render` binary.** REPL + `(asdf:load-system :mediaserver)`
   is sufficient for fixture tests. Binary is a main-project plan
   concern.
-- **No new template features** (whitespace trimming, custom
-  delimiters, partials). Behavior parity with the Ruby renderer.
+- **No new template features beyond trim mode.** Trim mode is
+  scoped into `elp/plans/trim-mode.md` and is a prerequisite, not
+  scope for this plan. Custom delimiters, partials, etc. — out.
 - **No CI changes.** `make test` already runs in the existing
   workflow; if the runner needs SBCL + Quicklisp added, that's a
   one-liner to flag if/when CI exists.
