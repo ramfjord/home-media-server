@@ -1,0 +1,7 @@
+[Unit]
+Description=Restart docker compose service <%= (field service :name) %>
+After=<%= (field service :name) %>.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl restart <%= (field service :name) %>.service

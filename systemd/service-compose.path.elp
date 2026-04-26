@@ -1,0 +1,10 @@
+[Unit]
+Description=Docker compose change watcher for <%= (field service :name) %>
+
+[Path]
+PathChanged=<%= (field service :compose-file) %>
+Unit=<%= (field service :name) %>-compose-reload.service
+
+[Install]
+WantedBy=<%= (field service :name) %>.service
+RequiredBy=<%= (field service :name) %>.service

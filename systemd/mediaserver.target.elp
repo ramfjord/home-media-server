@@ -1,0 +1,9 @@
+<%- (let ((dockerized (remove-if-not (lambda (s) (field s :dockerized)) services))) -%>
+[Unit]
+Description=Mediaserver stack
+After=docker.service mediaserver-network.service
+Wants=mediaserver-network.service <%= (format nil "~{~A.service~^ ~}" (mapcar (lambda (s) (field s :name)) dockerized)) %>
+
+[Install]
+WantedBy=multi-user.target
+<%- ) -%>
