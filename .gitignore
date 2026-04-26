@@ -2,6 +2,7 @@ tmp
 config.local.yml
 config/
 certs/
+elp
 
 docker-compose.yml
 
@@ -13,3 +14,5 @@ docker-compose.yml
 .make.services
 Makefile.local
 audio-normalizer/examples
+.swank-port
+.mcp.json
