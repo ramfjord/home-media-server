@@ -2,7 +2,14 @@ tmp
 config.local.yml
 config/
 certs/
+
 docker-compose.yml
+
+# Fixture tree (test goldens) overrides the above ignores.
+!test/fixtures/config.local.yml
+!test/fixtures/certs/
+!test/fixtures/certs/**
+!test/golden/*/docker-compose.yml
 .make.services
 Makefile.local
 audio-normalizer/examples

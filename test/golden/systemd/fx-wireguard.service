@@ -1,0 +1,16 @@
+[Unit]
+Description=Fixture VPN container (fx-wireguard)
+After=docker.service mediaserver-network.service
+Requires=docker.service mediaserver-network.service
+PartOf=mediaserver-network.service mediaserver.target
+
+[Service]
+Type=simple
+TimeoutStartSec=0
+Restart=on-failure
+RestartSec=10
+ExecStart=/usr/bin/docker compose -f /opt/fx-mediaserver/config/fx-wireguard/docker-compose.yml up fx-wireguard
+ExecStop=/usr/bin/docker compose -f /opt/fx-mediaserver/config/fx-wireguard/docker-compose.yml stop fx-wireguard
+
+[Install]
+WantedBy=mediaserver.target

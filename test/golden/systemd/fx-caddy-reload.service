@@ -1,0 +1,8 @@
+[Unit]
+Description=Config reload (SIGHUP) for fx-caddy
+After=fx-caddy.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker compose -f /opt/fx-mediaserver/config/fx-caddy/docker-compose.yml kill --signal SIGHUP fx-caddy
+RemainAfterExit=no

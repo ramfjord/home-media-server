@@ -1,0 +1,10 @@
+[Unit]
+Description=Docker compose change watcher for fx-qbittorrent
+
+[Path]
+PathChanged=/opt/fx-mediaserver/config/fx-qbittorrent/docker-compose.yml
+Unit=fx-qbittorrent-compose-reload.service
+
+[Install]
+WantedBy=fx-qbittorrent.service
+RequiredBy=fx-qbittorrent.service

@@ -1,0 +1,13 @@
+---
+name: fx-sonarr
+partof: downloading
+desc: Fixture TV indexer
+port: 18989
+use_vpn: true
+docker_config:
+  image: example.invalid/fx-sonarr:latest
+  volumes:
+  - "${install_base}/config/fx-sonarr:/config"
+  - "${media_path}:/data"
+  restart: unless-stopped
+order: 30

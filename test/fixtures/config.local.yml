@@ -1,0 +1,21 @@
+---
+# Override install_base in config.local (globals.yml leaves it unset).
+# Exercises the DEFAULT_GLOBALS → globals.yml → config.local.yml merge:
+#   - install_base: set only here (covers "local overrides default")
+#   - hostname:     set in globals.yml, untouched here (covers "globals wins over default")
+#   - media_path:   nowhere (covers "fall through to DEFAULT_GLOBALS")
+install_base: /opt/fx-mediaserver
+
+# Custom keys consumed by fx-prometheus/prometheus.yml.erb via config_yaml[].
+fx_label: fixture-deployment
+
+# Per-service deep_merge: scalar replace + array union + hash recursion.
+service_overrides:
+  fx-caddy:
+    desc: Fixture reverse proxy (overridden)
+    docker_config:
+      image: example.invalid/fx-caddy:overridden
+      volumes:
+      - "${install_base}/extra:/etc/caddy/extra:ro"
+  fx-sonarr:
+    desc: Fixture TV indexer (overridden)

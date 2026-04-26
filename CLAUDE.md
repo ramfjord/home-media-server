@@ -29,6 +29,7 @@ Services defined in `services.yml`: downloading (Radarr, Sonarr, Prowlarr, qBitt
 make all               # Render all .erb files → config/
 make clean             # Remove config/
 make check             # Validate prometheus, alertmanager, docker-compose syntax
+make test              # Run unit tests + golden renderer tests (test/golden_test.rb)
 make install           # check + render + rsync config/ and certs/ to $install_base; path units pick up changes
 make install-systemd   # rsync unit files + daemon-reload (does NOT enable/start)
 make systemd-enable    # enable mediaserver-network, mediaserver.target, and all path units

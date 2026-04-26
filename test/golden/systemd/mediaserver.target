@@ -1,0 +1,7 @@
+[Unit]
+Description=Mediaserver stack
+After=docker.service mediaserver-network.service
+Wants=mediaserver-network.service fx-wireguard.service fx-caddy.service fx-sonarr.service fx-qbittorrent.service fx-prometheus.service
+
+[Install]
+WantedBy=multi-user.target

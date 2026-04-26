@@ -1,0 +1,7 @@
+[Unit]
+Description=Restart docker compose service fx-qbittorrent
+After=fx-qbittorrent.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl restart fx-qbittorrent.service

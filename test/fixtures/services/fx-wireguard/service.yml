@@ -1,0 +1,12 @@
+---
+name: fx-wireguard
+partof: vpn
+desc: Fixture VPN container
+docker_config:
+  image: example.invalid/fx-wireguard:latest
+  cap_add:
+  - NET_ADMIN
+  volumes:
+  - "${install_base}/config/fx-wireguard:/config"
+  restart: unless-stopped
+order: 0

@@ -1,0 +1,7 @@
+[Unit]
+Description=Restart docker compose service fx-sonarr
+After=fx-sonarr.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl restart fx-sonarr.service

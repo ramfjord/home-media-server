@@ -1,0 +1,7 @@
+[Unit]
+Description=Restart docker compose service fx-caddy
+After=fx-caddy.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl restart fx-caddy.service

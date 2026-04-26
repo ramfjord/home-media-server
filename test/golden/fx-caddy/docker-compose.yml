@@ -1,0 +1,24 @@
+
+---
+services:
+  fx-caddy:
+    container_name: fx-caddy
+    environment:
+    - TZ=Etc/UTC
+    user: ''
+    networks:
+    - mediaserver
+    image: example.invalid/fx-caddy:overridden
+    volumes:
+    - "/opt/fx-mediaserver/config/fx-caddy/Caddyfile:/etc/caddy/Caddyfile:ro"
+    - "/opt/fx-mediaserver/certs:/etc/caddy/certs:ro"
+    - "/opt/fx-mediaserver/extra:/etc/caddy/extra:ro"
+    ports:
+    - 18080:18080
+    - 18989:18989
+    - 19090:19090
+    restart: unless-stopped
+networks:
+  mediaserver:
+    external: true
+    name: mediaserver

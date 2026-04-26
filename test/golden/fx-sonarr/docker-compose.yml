@@ -1,0 +1,14 @@
+
+---
+services:
+  fx-sonarr:
+    container_name: fx-sonarr
+    environment:
+    - TZ=Etc/UTC
+    user: ''
+    network_mode: container:wireguard
+    image: example.invalid/fx-sonarr:latest
+    volumes:
+    - "/opt/fx-mediaserver/config/fx-sonarr:/config"
+    - "${media_path}:/data"
+    restart: unless-stopped

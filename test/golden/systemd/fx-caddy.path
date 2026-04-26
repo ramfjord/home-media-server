@@ -1,0 +1,10 @@
+[Unit]
+Description=Config watcher for fx-caddy
+
+[Path]
+PathChanged=/opt/fx-mediaserver/config/fx-caddy/Caddyfile
+Unit=fx-caddy-reload.service
+
+[Install]
+WantedBy=fx-caddy.service
+RequiredBy=fx-caddy.service

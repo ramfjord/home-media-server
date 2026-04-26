@@ -1,0 +1,20 @@
+
+---
+services:
+  fx-wireguard:
+    container_name: fx-wireguard
+    environment:
+    - TZ=Etc/UTC
+    user: ''
+    networks:
+    - mediaserver
+    image: example.invalid/fx-wireguard:latest
+    cap_add:
+    - NET_ADMIN
+    volumes:
+    - "/opt/fx-mediaserver/config/fx-wireguard:/config"
+    restart: unless-stopped
+networks:
+  mediaserver:
+    external: true
+    name: mediaserver

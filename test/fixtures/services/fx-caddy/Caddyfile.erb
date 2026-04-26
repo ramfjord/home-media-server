@@ -1,0 +1,7 @@
+<% vpn_services = services.select { |s| s.use_vpn? && s.port } %><% vpn_services.each do |svc| %>:<%= svc.port %> {
+  reverse_proxy fx-wireguard:<%= svc.port %>
+  tls /etc/caddy/certs/fullchain.pem /etc/caddy/certs/privkey.pem
+}
+<% end %>
+# host: <%= hostname %>
+# install_base: <%= install_base %>

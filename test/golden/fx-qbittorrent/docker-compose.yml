@@ -1,0 +1,14 @@
+
+---
+services:
+  fx-qbittorrent:
+    container_name: fx-qbittorrent
+    environment:
+    - TZ=Etc/UTC
+    user: ''
+    network_mode: container:wireguard
+    image: example.invalid/fx-qbittorrent:latest
+    volumes:
+    - "/opt/fx-mediaserver/config/fx-qbittorrent:/config"
+    - "${media_path}:/data"
+    restart: unless-stopped

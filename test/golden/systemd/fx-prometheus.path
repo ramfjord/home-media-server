@@ -1,0 +1,10 @@
+[Unit]
+Description=Config watcher for fx-prometheus
+
+[Path]
+PathChanged=/opt/fx-mediaserver/config/fx-prometheus/prometheus.yml
+Unit=fx-prometheus-reload.service
+
+[Install]
+WantedBy=fx-prometheus.service
+RequiredBy=fx-prometheus.service

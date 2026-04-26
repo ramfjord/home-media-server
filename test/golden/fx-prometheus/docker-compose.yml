@@ -1,0 +1,23 @@
+
+---
+services:
+  fx-prometheus:
+    container_name: fx-prometheus
+    environment:
+    - TZ=Etc/UTC
+    user: ''
+    networks:
+    - mediaserver
+    ports:
+    - 19090:19090
+    image: example.invalid/fx-prometheus:latest
+    command:
+    - "--config.file=/etc/prometheus/prometheus.yml"
+    - "--web.external-url=http://fx-host:19090/"
+    volumes:
+    - "/opt/fx-mediaserver/config/fx-prometheus:/etc/prometheus:ro"
+    restart: unless-stopped
+networks:
+  mediaserver:
+    external: true
+    name: mediaserver

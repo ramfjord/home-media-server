@@ -46,7 +46,8 @@ SYSTEMD_UNITS := $(STATIC_SYSTEMD_UNITS) $(AGGREGATOR_SYSTEMD_UNITS) $(SYSTEMD_S
 .PHONY: clean check test users install install-systemd $(addprefix systemd-,start stop restart enable disable status)
 
 test:
-	ruby -Ilib -Itest -e 'Dir["test/*_test.rb"].each { |f| require "./#{f}" }'
+	ruby -Ilib -Itest -e 'Dir["test/*_test.rb"].reject { |f| f == "test/golden_test.rb" }.each { |f| require "./#{f}" }'
+	ruby test/golden_test.rb
 
 all: $(ERBS) $(NON_ERB_CONFIG_TARGETS) $(COMPOSE_TARGETS) $(SYSTEMD_UNITS)
 

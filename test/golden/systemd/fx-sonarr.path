@@ -1,0 +1,9 @@
+[Unit]
+Description=Config watcher for fx-sonarr
+
+[Path]
+Unit=fx-sonarr.service
+
+[Install]
+WantedBy=fx-sonarr.service
+RequiredBy=fx-sonarr.service

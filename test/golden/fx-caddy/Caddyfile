@@ -1,0 +1,10 @@
+:18989 {
+  reverse_proxy fx-wireguard:18989
+  tls /etc/caddy/certs/fullchain.pem /etc/caddy/certs/privkey.pem
+}
+:18080 {
+  reverse_proxy fx-wireguard:18080
+  tls /etc/caddy/certs/fullchain.pem /etc/caddy/certs/privkey.pem
+}
+# host: fx-host
+# install_base: /opt/fx-mediaserver

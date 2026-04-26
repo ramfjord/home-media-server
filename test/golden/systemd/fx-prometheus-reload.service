@@ -1,0 +1,8 @@
+[Unit]
+Description=Config reload (SIGHUP) for fx-prometheus
+After=fx-prometheus.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker compose -f /opt/fx-mediaserver/config/fx-prometheus/docker-compose.yml kill --signal SIGHUP fx-prometheus
+RemainAfterExit=no

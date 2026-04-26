@@ -1,0 +1,10 @@
+[Unit]
+Description=Docker compose change watcher for fx-sonarr
+
+[Path]
+PathChanged=/opt/fx-mediaserver/config/fx-sonarr/docker-compose.yml
+Unit=fx-sonarr-compose-reload.service
+
+[Install]
+WantedBy=fx-sonarr.service
+RequiredBy=fx-sonarr.service

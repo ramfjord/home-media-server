@@ -1,0 +1,17 @@
+[Unit]
+Description=Fixture metrics (fx-prometheus)
+After=docker.service mediaserver-network.service
+Requires=docker.service mediaserver-network.service
+PartOf=mediaserver-network.service mediaserver.target
+
+[Service]
+Type=simple
+TimeoutStartSec=0
+Restart=on-failure
+RestartSec=10
+ExecStart=/usr/bin/docker compose -f /opt/fx-mediaserver/config/fx-prometheus/docker-compose.yml up fx-prometheus
+ExecStop=/usr/bin/docker compose -f /opt/fx-mediaserver/config/fx-prometheus/docker-compose.yml stop fx-prometheus
+ExecReload=/usr/bin/docker compose -f /opt/fx-mediaserver/config/fx-prometheus/docker-compose.yml kill --signal SIGHUP fx-prometheus
+
+[Install]
+WantedBy=mediaserver.target

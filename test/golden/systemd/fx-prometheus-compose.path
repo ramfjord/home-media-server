@@ -1,0 +1,10 @@
+[Unit]
+Description=Docker compose change watcher for fx-prometheus
+
+[Path]
+PathChanged=/opt/fx-mediaserver/config/fx-prometheus/docker-compose.yml
+Unit=fx-prometheus-compose-reload.service
+
+[Install]
+WantedBy=fx-prometheus.service
+RequiredBy=fx-prometheus.service
