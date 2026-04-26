@@ -64,12 +64,12 @@ Caddy bridges the two and terminates HTTPS for the few services that require it 
 ### Commands
 
 ```bash
-make install          # check + render + rsync to $install_base
-make deploy-<service> # stop, reinstall, restart one service
-make clean            # remove generated config/
+make install           # check + render + rsync to $install_base, path units pick up changes
+make restart-<service> # force-restart one service (no install)
+make clean             # remove generated config/
 ```
 
-Once installed, drive the stack via systemd:
+Drive the stack via systemd (locally or via `make systemd-{start,stop,status,enable,disable}`):
 
 ```bash
 systemctl start mediaserver.target
@@ -79,11 +79,27 @@ systemctl status <service>
 
 Editing files under `$install_base/config/<service>/` triggers a reload via that service's `.path` watcher — no manual restart needed.
 
+### Deploy target
+
+By default `make install` and the systemd targets act on the local host. To deploy to a remote host (over ssh, e.g. across Tailscale):
+
+```bash
+TARGET=fatlaptop make install
+```
+
+Or persist it in a git-ignored `Makefile.local`:
+
+```make
+TARGET := fatlaptop
+```
+
+The remote host needs passwordless sudo for `rsync` and `systemctl`, and `script/make_users.sh` must have been run there.
+
 ### Day-to-day workflow
 
 1. Edit `services/<name>/service.yml`, its templates, or `config.local.yml`
 2. `make install`
-3. Affected services hot-reload; use `make deploy-<service>` to force a full restart.
+3. Affected services hot-reload via path units; use `make restart-<service>` to force a bounce.
 
 ## vs. docker-compose-nas
 

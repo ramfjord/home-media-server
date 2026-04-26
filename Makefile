@@ -4,8 +4,9 @@
 # side-effecting commands run on this host. Set TARGET=<ssh-host> to
 # rsync over ssh and run side-effects on the remote host.
 TARGET ?= local
-RSYNC_DEST := $(if $(filter local,$(TARGET)),,$(TARGET):)
-REMOTE     := $(if $(filter local,$(TARGET)),,ssh $(TARGET))
+-include Makefile.local
+RSYNC_DEST = $(if $(filter local,$(TARGET)),,$(TARGET):)
+REMOTE     = $(if $(filter local,$(TARGET)),,ssh $(TARGET))
 
 LIB_FILES := lib/mediaserver/config.rb lib/mediaserver/renderer.rb lib/mediaserver/validator.rb
 SERVICE_YAMLS := $(wildcard services/*/service.yml)

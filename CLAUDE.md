@@ -26,17 +26,28 @@ Services defined in `services.yml`: downloading (Radarr, Sonarr, Prowlarr, qBitt
 ## Commands
 
 ```bash
-make all              # Render all .erb files → config/
-make clean            # Remove config/
-make check            # Validate prometheus, alertmanager, docker-compose syntax
-make install          # Runs make check && make all, then rsync config/ and certs/ to /opt/mediaserver/
+make all               # Render all .erb files → config/
+make clean             # Remove config/
+make check             # Validate prometheus, alertmanager, docker-compose syntax
+make install           # check + render + rsync config/ and certs/ to $install_base; path units pick up changes
+make install-systemd   # rsync unit files + daemon-reload (does NOT enable/start)
+make systemd-enable    # enable mediaserver-network, mediaserver.target, and all path units
+make systemd-{start,stop,restart,status,disable}
+make restart-<service> # force-restart one service (no install)
 ```
 
-**Note:** `make install` automatically runs `make check` and `make all`, so you typically only need `make install` rather than running them separately.
+**Note:** `make install` automatically runs `make check` and `make all`. With path units enabled, `make install` is the deploy verb — file changes trigger reload automatically.
+
+### Remote target
+
+`TARGET=local` (default) deploys to this host. `TARGET=<ssh-host>` deploys over ssh — rsync goes to the host, side-effecting commands (`systemctl`, `chown`) run remotely. Persist with a git-ignored `Makefile.local`:
+
+```make
+TARGET := fatlaptop
+```
 
 ## Workflow
 
-1. Edit `services.yml` and/or `config.local.yml`
-2. `make all && make check` - Generate and validate configs
-3. `make install` - Deploy to system
-4. `make deploy-<service>` - Restart a specific service
+1. Edit `services/<name>/service.yml`, templates, and/or `config.local.yml`
+2. `make install` - Validate, render, deploy; affected services hot-reload via path units
+3. `make restart-<service>` - Force-restart if needed (e.g. wedged service)
