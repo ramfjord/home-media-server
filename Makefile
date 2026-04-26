@@ -167,6 +167,8 @@ systemd-disable:
 	$(REMOTE) sudo systemctl disable mediaserver.target
 	$(REMOTE) sudo systemctl disable $(PATH_UNITS)
 
-# Push configs and restart a single service. Use as: make deploy-radarr
-deploy-%: install
+# Force-restart a single service. Path units already redeploy on
+# `make install`; use this when you want to bounce a service without
+# changing config. Combine: `make install restart-radarr`.
+restart-%:
 	@$(REMOTE) sudo systemctl restart $*.service
