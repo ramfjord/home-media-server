@@ -1,404 +1,285 @@
-# Lisp render binary
+# Lisp render: fixtures-first
 
-Replace `render.rb` + `lib/mediaserver/*.rb` (Ruby + ERB, one process
-per template) with a single SBCL binary that loads the service tree
-once and renders every template in one pass. Templates switch from
-embedded Ruby to embedded Lisp via `elp/`.
+A Lisp renderer that produces byte-identical output to the existing
+fixture goldens (`test/golden/`). Real services and templates are
+left untouched. End state: `make test` runs Ruby's golden test and a
+new Lisp golden test side-by-side; both pass against the same
+goldens.
+
+This is the *first* of (at least) two branches. The full main-project
+cutover — porting every real `.erb` and deleting `render.rb` — is a
+separate plan, drafted only after this one ships.
 
 ## Goal
 
-A `bin/render` binary that, given the repo root, walks every template
-under `services/`, top-level `*.erb`, and `systemd/*.erb`, and writes
-the same `config/` tree the current Ruby renderer produces — bit-for-bit
-identical against the live `services/` and the golden fixtures.
+`make test` runs:
+1. The existing `test/golden_test.rb` (Ruby renders the fixture tree,
+   diffs against `test/golden/`).
+2. A new Lisp golden runner under `lisp/test/` that loads
+   `lisp/mediaserver.asd`, renders ELP versions of the fixture
+   templates, diffs against the same `test/golden/` files.
 
-`make all` invokes `bin/render` exactly once per build; per-template
-shelling-out goes away.
+Both green ⇒ the Lisp implementation is at parity with the Ruby
+implementation on the controlled fixture tree. That's the milestone.
 
 ## Context
 
-Two motivations stack:
+The pre-rewrite plan (`plans/pre-rewrite.md`, shipped at
+`92c3483 Add golden tests for renderer`) gave us exactly the safety
+net this rewrite needs: a five-service fixture tree with rendered
+goldens covering every networking mode, override branch, and
+config-yaml lookup. The fixture goldens are language-agnostic — they
+specify renderer output, not the language it's written in. So the
+Lisp port can be built and verified entirely against fixtures, with
+no risk to deployed services.
 
-1. **Process-per-template is the dominant cost.** Each ERB target
-   spawns Ruby, parses every `service.yml` from scratch, builds the
-   `Config`, then renders one template. For ~85 templates that's ~85
-   YAML parses per `make all`. A single-pass binary reads the tree
-   once.
-2. **The Ruby code is the thing in the way of every other plan.**
-   `nixos-target.md` wants a second emitter; `deploy-preview.md` wants
-   a render-and-diff cutover gate; `static-uids.md` wants the renderer
-   to stop shelling out to `id -u`. All of those are easier on top of
-   a Lisp implementation that's already reasoning about the service
-   tree as data, not strings being formatted by ERB.
-
-ELP exists, has golden tests, error reporting with file:line:column,
-and a CLI mode that already saves to a self-contained binary
-(`elp/bin/elp`). The codegen path returns a sexp; we can keep it that
-way and call `eval` from inside the render driver, no separate binary
-per template.
-
-The pre-rewrite goldens (just merged) are the safety net: the new
-renderer must produce byte-identical output on the fixture tree and
-on the real `services/` tree. The old renderer stays in place until
-the cutover commit so a side-by-side diff is always available.
+Scoping to fixtures keeps this branch small and reviewable.
+Main-project work is its own beast (port ~80 templates, swap the
+Makefile, retire the Ruby code) and benefits from already having a
+working Lisp implementation to extend.
 
 ## Related plans
 
-- `plans/pre-rewrite.md` — **shipped** (`92c3483 Add golden tests for
-  renderer`). Provides `test/golden/`. This plan is the rewrite the
-  pre-rewrite plan was scoped to enable. The fixture `.erb` files get
-  ported to ELP in this plan; the rendered goldens stay byte-stable.
-- `plans/deploy-preview.md` — sibling, in flight (not yet started per
-  `plans/MERGE_ORDER.md` if present). **Strong synergy:** preview's
-  rsync-and-diff is the cutover gate the deploy-preview plan
-  explicitly calls out ("render with both implementations, diff the
-  trees, ship when the diff is empty"). If preview lands first, the
-  cutover commit here uses it directly. If not, this plan falls back
-  to a one-off `diff -r config-ruby/ config-lisp/`. Either order
-  works; sequencing is opportunistic, not blocking.
-- `plans/nixos-target.md` — downstream. Adding a second emitter
-  (`--target nixos`) is much cheaper after this rewrite than before:
-  the templates already build sexps, so a second emitter is a second
-  set of templates plus a target switch, not a parallel ERB pipeline.
-  No coordination needed; nixos-target should reference this plan
-  once it's in flight.
-- `plans/static-uids.md` — orthogonal but adjacent. Removing
-  `id -u <name>` shelling lives equally well in Ruby or Lisp. If
-  static-uids lands first, the Lisp `service-user-id` becomes a
-  literal lookup; if this plan lands first, static-uids has fewer
-  call sites to change.
-- `elp/plans/*.md` — internal ELP plans (mmap, reader-driven codegen,
-  swank source locations). All shipped or in-progress in `elp/`; this
-  plan consumes the public API (`elp:render`, `elp:template-code`)
-  and does not touch ELP internals. If a missing ELP feature shows up
-  during the port, file it as a sibling plan under `elp/plans/`, not
-  here.
+- `plans/pre-rewrite.md` — **shipped**. Provides `test/fixtures/`
+  and `test/golden/`. This plan's success criterion is "Lisp
+  renderer produces the same `test/golden/` output."
+- `plans/deploy-preview.md` — sibling. **Not** the cutover gate for
+  *this* plan (fixtures + their goldens are). Becomes the cutover
+  gate for the future main-project plan.
+- `plans/nixos-target.md` — downstream. Adding a `--target nixos`
+  emitter is much cheaper after a Lisp implementation exists. No
+  coordination with this plan.
+- `plans/static-uids.md` — orthogonal.
+- `elp/plans/*.md` — internal ELP plans (mmap, reader-driven
+  codegen, source locations). All shipped or in-progress in `elp/`;
+  this plan consumes the public API (`elp:render`,
+  `elp:template-code`) and does not modify ELP internals.
+- **Future plan** (not yet drafted): main-project cutover. Will
+  port every real `.erb`, build a `bin/render` saved image, swap
+  the Makefile to per-service / aggregator targets, delete
+  `render.rb` and `lib/mediaserver/`. Drafted *after* this one
+  ships, when the design is grounded in working code rather than
+  speculation.
 
 ## Design notes
 
-### Template language: full Lisp, not a DSL
+### Settled in REPL exploration
 
-ELP gives templates full Common Lisp inside `<% %>`. Templates already
-contain non-trivial logic (see `systemd/service.compose.yml.erb`
-building a YAML hash with conditionals); a restricted DSL would mean
-porting that logic into the renderer. Keep the "full host language at
-template time" property — translate Ruby idioms to Lisp idioms,
-don't try to hide them.
+The shape of the implementation was prototyped against the live
+fixture tree before drafting this plan. Decisions baked in:
 
-### Service / config representation
+- **Plist with keyword keys**, `_` → `-` at the load boundary.
+  cl-yaml hands back hash-tables with EQUALP string keys; a 5-line
+  walker (`yaml->plist`) flattens to a keyword-keyed plist that
+  prints readably and pattern-matches with `destructuring-bind`.
+- **Single `field` accessor** as the public API. Templates write
+  `(field s :name)`, `(field s :use-vpn)`, `(field s :port)` —
+  there is no `service` class. `field` falls through to a
+  `*derived-fields*` alist for computed values (`:compose-file`,
+  `:source-dir`, `:dockerized`, `:has-unit`). Adding a new derived
+  field is one alist entry.
+- **`expand-vars` is internal**. `${install_base}` substitution
+  happens once during `load-config`, never exposed. Templates only
+  ever see fully-substituted strings. Confirmed in REPL: the Ruby
+  renderer's `expand_vars` does *not* operate on template text —
+  only on values inside `service.yml`. Embedded `${...}` in `.erb`
+  files passes through verbatim today, and we'll preserve that
+  behavior.
+- **Validation: 15 lines, three checks**.
+  1. Every service has `:name`.
+  2. No two services share a `:port`.
+  3. Typo detection at field access: `field` errors when called
+     with a key not in `*known-fields*` (the union of every key
+     appearing in any loaded service plist) ∪ `*derived-fields*`
+     ∪ a small built-in allowlist. So `(field s :prot)` errors
+     with "Unknown field :PROT. Known: :NAME :PORT ...", but
+     `(field s :groups)` on a service that doesn't have `:groups`
+     correctly returns nil because some other service does.
+  Per-field type checking and cross-service ref validation are
+  out — `make check` (promtool / amtool / docker-compose-config)
+  catches anything that produces malformed output, and ELP gives
+  `file:line:column` on render-time errors. The validator's job
+  is "catch the bug class that nothing downstream catches"
+  (port conflicts, typos), not "type-check every field."
+- **Service files stay YAML**. The leverage of a Lisp rewrite is
+  in templating and data manipulation, not on-disk format. cl-yaml
+  is a stable dep already in Quicklisp; libyaml is in the system
+  package set. yaml-to-plist is 5 lines. Any "remove a dependency"
+  win from switching to s-exprs is dwarfed by the cost of
+  rewriting every existing service.yml and the ergonomic loss for
+  hand-editing.
+- **No `Config` class.** `load-config` returns a plist:
+  `(:services LIST :globals PLIST :raw HASH-TABLE-OR-PLIST)`.
+- **One package**: `mediaserver`. Surface is small enough that
+  splitting hurts.
 
-Mirror the Ruby `ProjectService` and `Config` shape, exposed as a
-package `mediaserver`. Each service is a struct (or class with reader
-generics — pick whichever falls out of REPL exploration). Templates
-receive `service` (the current service), `services` (the list),
-`globals` (alist), and `raw` (the full merged hash) as context, just
-like ERB's `binding`. Method calls translate one-to-one:
+### Layout
 
-  Ruby                          Lisp
-  ----                          ----
-  service.name                  (service-name service)
-  service.use_vpn?              (service-use-vpn? service)
-  services.select { |s| ... }   (remove-if-not (lambda (s) ...) services)
-  hash.to_yaml                  (yaml:emit hash)   ; via cl-yaml
+```
+lisp/
+  mediaserver.asd            ; depends on cl-yaml, elp
+  src/
+    package.lisp             ; (defpackage :mediaserver ...)
+    config.lisp              ; yaml->plist, expand-vars, load-config, validate
+    field.lisp               ; field accessor, *derived-fields*, *known-fields*
+    render.lisp              ; render-tree driver
+  test/
+    package.lisp
+    fixture-test.lisp        ; FiveAM; renders fixtures, diffs goldens
+    run.lisp                 ; entry point invoked by `make test`
+test/fixtures/                ; existing, plus *.elp versions of *.erb
+test/golden/                  ; existing, unchanged
+```
 
-YAML I/O uses `cl-yaml` (Quicklisp). Group lookup (`getent group`) and
-user-id lookup (`id -u`) shell out the same way they do today; the
-behavior change is "one shell-out per service, not per render." Both
-are slated for removal in `static-uids.md` — don't pre-empt.
+ELP fixture templates use `.elp` extension; Ruby fixture templates
+keep `.erb`. Both render to the same goldens. A given fixture has
+both versions side-by-side until the future cutover plan deletes
+the Ruby ones.
 
-### Render driver: one walk, one eval each
+### Dependencies
 
-The driver walks `services/**/*.erb`, top-level `*.erb`, and
-`systemd/*.erb`. For each template:
+`mediaserver.asd` depends on `cl-yaml` (Quicklisp) and `elp`
+(vendored in `./elp/`). cl-yaml requires `libyaml` at the system
+level — already installed (Arch package `libyaml`). Quicklisp is
+already wired into `~/.sbclrc`; `ql:quickload` works in fresh
+SBCL on this box.
 
-1. Compute the destination path (mirror current Makefile pattern
-   rules: `services/<svc>/<rel>.erb → config/<svc>/<rel>`,
-   `systemd/<x>.erb → config/systemd/<x>`,
-   `<x>.erb → config/<x>`).
-2. For per-service templates under `systemd/` (`service.service.erb`,
-   `service.path.erb`, etc.), expand to one output per applicable
-   service, same as the current `SERVICE_NAME=<svc> ./render.rb`
-   convention.
-3. Bind context, `(elp:render path context stream)` to a buffer,
-   write-if-changed to disk.
+For CI / fresh machines: `make test`'s Lisp branch should
+`(ql:quickload :mediaserver)` rather than relying on
+`asdf:load-system` directly, so the YAML dep gets pulled
+transparently. Document the bootstrap in `lisp/README.md`.
 
-Write-if-changed semantics: only `rename(2)` the new file into place
-if the bytes differ. Rsync already only ships changed files, but
-preserving mtime keeps `make`'s incremental story honest if anything
-ever depends on output mtimes (e.g. systemd path units watching the
-installed tree — already covered by rsync, so this is belt-and-braces).
+### Render driver shape
 
-### Make granularity vs. reload granularity
+`render-tree` takes a config plist and an output-dir, walks ELP
+templates in the fixture tree, renders each through `elp:render`,
+writes results into the output dir. For per-service templates
+(systemd `.elp`s parameterized by service name), expand to one
+output per service, mirroring the Ruby renderer's
+`SERVICE_NAME=<svc>` convention.
 
-The user-facing concern: "if I edit one service's `service.yml`, only
-that service should reload." Today that's enforced through Make's
-per-target dependency graph. After this rewrite, Make gets coarser
-but the *reload* granularity is preserved, because reloads aren't
-driven by Make:
-
-- **Make** sees one sentinel target (`config/.rendered`). Any input
-  change → re-run the binary → whole tree re-rendered. Coarser than
-  today, but a single-process re-render is faster than ~85
-  per-template Ruby invocations even when it does more nominal work.
-- **Disk writes** are content-gated: the binary `rename(2)`s a new
-  file into place only when bytes differ. Aggregators like
-  `homer/config.yml` legitimately re-render when any service.yml
-  changes — but if nothing in homer's output text actually changed,
-  no write happens, no mtime bump, nothing downstream notices.
-- **Reload granularity** lives at the install layer. `rsync` only
-  ships changed files; `.path` units only fire on file write at
-  `/opt/mediaserver/config/`. So the chain "edit svc.yaml → only
-  that service reloads" still holds, end-to-end, content-based at
-  every step.
-
-Editing one `service.yml` re-renders the world locally, ships
-nothing if the only file whose output changed is that service's, and
-fires no path units except that service's. Same outward behavior as
-today, by a different mechanism.
-
-### Makefile shape
-
-Today: ~10 explicit aggregator rules + a pattern rule per template
-class, each calling `./render.rb`. After: per-service + aggregator
-sentinels, composed into `all`. Per-service granularity is preserved
-so `make render-jellyfin` is snappy when iterating on one service.
-
-  bin/render: $(LISP_SOURCES) elp/elp.asd
-  	cd lisp && sbcl --script build.lisp   # save-lisp-and-die
-
-  # Per-service: depends only on this service's inputs.
-  render-%: bin/render globals.yml services/%/service.yml \
-            $$(shell find services/% -name '*.erb' 2>/dev/null) \
-            $(wildcard config.local.yml)
-  	./bin/render --service $*
-
-  # Aggregators: depend on every service.yml because they iterate.
-  render-aggregators: bin/render globals.yml $(SERVICE_YAMLS) \
-                     $(AGGREGATOR_ERBS) $(wildcard config.local.yml)
-  	./bin/render --aggregators
-
-  all: $(addprefix render-,$(ALL_SERVICES)) render-aggregators \
-       $(NON_ERB_CONFIG_TARGETS)
-
-The split is the load-bearing trick: editing
-`services/jellyfin/service.yml` reruns `render-jellyfin` (small) and
-`render-aggregators` (small), but leaves the other 19 `render-<svc>`
-targets cached. Editing one template under `services/jellyfin/`
-reruns only `render-jellyfin`. That's the dev-loop snappiness today's
-per-file targets provide, kept.
-
-`bin/render` always parses every service.yml on startup, even in
-`--service` mode — cheap (one YAML pass, ~10ms), and it gives
-cross-service validation for free on every per-service render.
-
-`.make.services` goes away — the binary derives all service lists
-internally. `ALL_SERVICES` for the `addprefix` above comes from a
-small `bin/render --list-services` subcommand cached the same way
-`.make.services` is today (one ssize-cheap invocation per `make`
-run), or via a static glob in the Makefile if startup ever bothers
-us.
-
-The user's framing was "the binary depends on service ymls." The
-**per-service target** depends on that service's yml; the
-**aggregator target** depends on all of them; the **binary itself**
-only depends on Lisp sources. Three dependency edges, each narrow
-to its own concern.
-
-### Per-service lifecycle targets
-
-While we're shaping per-service Make targets, group the existing and
-new lifecycle verbs into a consistent set:
-
-  render-<svc>     → bin/render --service <svc>
-  install-<svc>    → render-<svc> render-aggregators + rsync just
-                     config/<svc>/ (and aggregator outputs that
-                     reference <svc>; in practice, just rsync the
-                     whole config/ since aggregator deltas are
-                     content-gated by write-if-changed)
-  restart-<svc>    → already exists
-  start-<svc>      → systemctl start <svc>.service via $(REMOTE)
-  stop-<svc>       → systemctl stop  <svc>.service via $(REMOTE)
-  status-<svc>     → systemctl status <svc>.service via $(REMOTE)
-
-Land these alongside the rendering split so the per-service story is
-end-to-end coherent in one branch.
-
-**Workflow note for CLAUDE.md.** `make render-<svc>` is the iterate
-verb; `make all` is the full-rebuild verb. Reflexively typing
-`make all` while iterating costs ~1s per loop instead of ~50ms.
-Worth one line in the docs so the muscle memory shifts.
-
-### Cutover safety
-
-Before deleting `render.rb`, run both engines on the real tree and
-diff. The pre-rewrite goldens cover the fixture tree but not the
-real one — the real tree is what `make preview` (sibling plan) is for.
-If preview hasn't shipped, the cutover commit's verify step is a
-one-off `diff -r`.
-
-### What `bin/render` does NOT do
-
-- No `--target nixos` (that's `nixos-target.md`'s job — but the design
-  here is friendly to it).
-- No watch mode. Path units handle reloads on the deploy side; on the
-  dev side, `make all` is fast enough after this rewrite that watch
-  is overkill.
-- No partial render (`bin/render --only caddy`). The whole-tree render
-  is the unit; if it's ever too slow, profile then.
+Write-if-changed semantics deferred to the future main-project
+plan — fixture tests render to a tmpdir on every run and diff
+against goldens, so write-if-changed isn't load-bearing here.
 
 ## Commits
 
-1. **Inventory the renderer's template surface** — Grep every `.erb`
-   for method calls on `service`, iterations over `services`, lookups
-   in `globals` / `config_yaml`, and any other binding name. Drop
-   the result into `plans/lisp-render-surface.md` (or a comment
-   block in this plan) as a checklist: every Ruby method that needs
-   a Lisp equivalent. This is the source of truth for the
-   `mediaserver` Lisp package's API. Cross-check against
-   `lib/mediaserver/config.rb` to make sure no ProjectService method
-   is missed.
-   *Verify:* checklist exists; spot-check three templates of
-   different shapes (a per-service systemd unit, an aggregator like
-   Caddyfile, a YAML-emitting one like service.compose.yml) and
-   confirm every binding they reference appears in the checklist.
+1. **Skeleton ASDF system + dependency check** — Add
+   `lisp/mediaserver.asd`, `lisp/src/package.lisp`,
+   placeholder `lisp/src/config.lisp`. `lisp/README.md` documents
+   `(ql:quickload :mediaserver)`.
+   *Verify:* `(ql:quickload :mediaserver)` in a fresh SBCL
+   succeeds, pulls cl-yaml as a transitive dep, exits clean. The
+   package `:mediaserver` exists. No symbols exported yet.
 
-2. **Add `lisp/mediaserver` system: config loader + service struct** —
-   New ASDF system at `lisp/mediaserver.asd` depending on `cl-yaml`,
-   `elp`, and `uiop`. `mediaserver:load-config` reads `globals.yml`,
-   merges `services/*/service.yml` (sorted, with `order` field),
-   applies `config.local.yml` overrides + `service_overrides`,
-   expands `${var}` references. Returns a `config` struct with
-   `services`, `globals`, `raw`. Service struct has readers for
-   every checklist item from commit 1. No template rendering yet.
-   *Verify:* FiveAM tests under `lisp/test/` cover load + override
-   + var expansion against a small fixture tree. `(mediaserver:load-config
-   "test/fixtures/")` returns the same shape as
-   `Mediaserver::Config.load(root: "test/fixtures/")` (compare
-   serialized structures by hand once; commit a regression test).
+2. **`yaml->plist`, `expand-vars`, `field`, `*derived-fields*`** —
+   Port the four pieces prototyped in the REPL into
+   `lisp/src/config.lisp` and `lisp/src/field.lisp`. Export
+   `field`, `*globals*`, `*derived-fields*`. Add unit tests
+   under `lisp/test/` that load each fixture `service.yml`,
+   check `(field s :name)`, `(field s :use-vpn)`,
+   `(field s :compose-file)` against expected values.
+   *Verify:* tests green. Manual REPL check: load each of the
+   five fixture services and confirm round-trip plist matches
+   what the REPL produced during exploration.
 
-3. **Add render driver: walk templates, render, write-if-changed** —
-   `mediaserver:render-tree` takes a config and an output dir, walks
-   `services/**/*.erb`, top-level `*.erb`, and per-service
-   `systemd/*.erb` (one output per service), binds context, calls
-   `elp:render`, writes only when content changed. No CLI yet.
-   *Verify:* unit test renders the fixture tree from commit 2 to a
-   tmpdir; the set of output paths matches what the current
-   `Makefile` produces for the same input (compare against
-   `make all` output paths under `test/fixtures/`).
+3. **`load-config` + validator** — `(mediaserver:load-config
+   :root path)` reads `globals.yml`, globs
+   `services/*/service.yml`, applies `config.local.yml` overrides
+   (top-level + `service_overrides`), runs `expand-vars`, sorts
+   by `:order`, validates (required `:name`, unique ports, sets
+   `*known-fields*`). Returns `(:services ... :globals ... :raw ...)`.
+   Tests under `lisp/test/` cover: load fixture tree, services
+   sorted correctly, override applied, port-conflict detection
+   triggers, missing-name detection triggers, `(field s :typo)`
+   errors after load.
+   *Verify:* tests green; the loaded fixture config is
+   shape-equivalent to what `Mediaserver::Config.load(root:
+   "test/fixtures/")` returns (compare key by key in the REPL,
+   commit a regression test that does the same).
 
-4. **Port fixture and per-service `.erb` templates to ELP** — Mechanical
-   translation of every `services/*/*.erb` (excluding aggregators)
-   plus the fixture templates under `test/fixtures/`. Ruby method
-   calls become Lisp function calls per the commit-1 surface map.
-   Templates keep the `.erb` extension to minimize Makefile churn;
-   the engine is selected by content (or by file-tree position),
-   not by extension. This is where `service.compose.yml.erb`'s
-   YAML-hash-construction translates to building an alist and
-   passing it to `cl-yaml:emit`.
-   *Verify:* `lisp/bin/render-once <svc>` (a tiny driver added in
-   this commit, deleted in commit 7) renders one service's tree;
-   `diff -r config-ruby/<svc>/ config-lisp/<svc>/` is empty for
-   each ported service. Commit per service-cluster (e.g. all
-   prometheus templates in one commit, all jellyfin in another) so
-   each commit's diff is reviewable.
+4. **`render-tree` driver** — `(mediaserver:render-tree config
+   :template-root R :output-dir O)` walks ELP templates under R
+   (`*.elp` files), renders each through `elp:render` with
+   appropriate context bindings, writes outputs into O mirroring
+   the Ruby Makefile's path conventions. For per-service systemd
+   templates, expand once per applicable service.
+   *Verify:* unit test renders an empty template tree to a
+   tmpdir and confirms zero outputs. Renders a single hand-written
+   ELP template ("hello <%= (field s :name) %>") and asserts the
+   output content.
 
-5. **Port aggregator templates** — `Caddyfile.erb`, `homer/config.yml.erb`,
-   `otelcol-config.yaml.erb`, `prometheus/rules/mediaserver.yaml.erb`,
-   `systemd/mediaserver.target.erb`. These iterate `services` and
-   build cross-service output. Goldens for the fixture aggregators
-   re-seed identically; goldens for `--list-make` either port to
-   the new binary's subcommand or get deleted with `--list-make`.
-   *Verify:* `bin/render-once` for each aggregator produces a
-   tree-identical diff against the Ruby render. Goldens still pass.
+5. **Port fixture `.erb`s to ELP, side-by-side** — For each
+   fixture template (5 services' worth, plus aggregators), add a
+   `.elp` sibling next to the existing `.erb`. Ruby goldens are
+   the spec; the Lisp render must produce identical bytes. The
+   `service.compose.yml.elp` translation is the riskiest single
+   file (Ruby builds a hash and calls `to_yaml`); approach it by
+   constructing an alist and emitting via `cl-yaml:emit`, with a
+   REPL spike *first* to confirm cl-yaml's emit output matches
+   Ruby's `Psych#to_yaml` byte-for-byte on a representative hash.
+   If it doesn't, fall back to a hand-rolled YAML emitter for
+   that template (the subset we need is small).
+   *Verify:* one ELP template at a time, render via
+   `render-tree`, `diff` against the corresponding golden file.
+   Commit when the whole fixture set's diff is empty. Keep
+   commits small (one fixture cluster per commit) so each diff
+   is reviewable.
 
-6. **Build `bin/render` as a saved SBCL image** — Real CLI:
-   `--service NAME`, `--aggregators`, `--list-services`, plus
-   default (whole tree). Argparse for repo root and output dir
-   (defaults: `.` and `config/`). Add `Makefile` rule `bin/render:
-   $(LISP_SOURCES) elp/elp.asd lisp/mediaserver.asd` that runs `sbcl
-   --script build.lisp`, producing a self-contained binary the same
-   way `elp/bin/elp` is built today. Add `lisp/build.lisp`.
-   *Verify:* `./bin/render` against the real repo writes a
-   `config/` tree byte-identical to `make all` (Ruby). `diff -r`
-   confirms. `./bin/render --service jellyfin` writes only
-   `config/jellyfin/`. Binary is reproducible (two builds in a row
-   produce identical bytes; if SBCL save-lisp embeds a timestamp,
-   document the caveat — don't fight it).
-
-7. **Cutover Makefile + delete Ruby renderer** — Replace
-   per-template `./render.rb` recipes with `render-%` (per service)
-   and `render-aggregators` targets per the Makefile-shape section.
-   Add `install-<svc>`, `start-<svc>`, `stop-<svc>`, `status-<svc>`
-   pattern rules for symmetry with the existing `restart-<svc>`.
-   Drop `.make.services` (replace with a `bin/render --list-services`
-   cache file if needed for `addprefix` expansion). Drop
-   `--list-make` from the binary unless still referenced. Delete
-   `render.rb`, `lib/mediaserver/`, `test/config_test.rb`,
-   `test/renderer_test.rb`, `test/validator_test.rb`. Keep
-   `test/golden_test.rb` repointed at the Lisp renderer (or rewrite
-   in Lisp under `lisp/test/` — pick whichever stays cheaper to
-   run in CI). Update `CLAUDE.md` and `README.md`: replace "configs
-   generated from `.erb` templates via `render.rb`" with the Lisp
-   story, document `bin/render` build dependency, and add a
-   workflow line that `make render-<svc>` is the dev-loop verb
-   (not `make all`).
-   *Verify:* `make clean && make all` produces a `config/` tree
-   byte-identical to a tag taken at the start of this branch
-   (`git tag pre-lisp-render`). `make render-jellyfin` after a
-   `make clean` produces only `config/jellyfin/` plus the
-   aggregator outputs (and is noticeably faster than `make all`).
-   Editing one service.yml and running `make all` reruns only that
-   service's `render-<svc>` plus `render-aggregators`, leaving
-   other targets cached (verified via `make -d` or by mtime
-   inspection). `make test` green. `make check` green. Either
-   `make preview` shows no changes against a freshly
-   `make install`'d host, or a manual `diff -r` against an
-   archived `config/` from main shows no changes.
+6. **Lisp golden test runner + Makefile wiring** — Add
+   `lisp/test/run.lisp` that invokes `render-tree` on the
+   fixture tree to a tmpdir and diffs against `test/golden/`.
+   Wire into the existing `make test` target so Ruby and Lisp
+   golden tests run in sequence. Update `CLAUDE.md` with a brief
+   "Lisp implementation lives under `lisp/`, run via `make test`"
+   line.
+   *Verify:* `make test` runs both runners; both green. Tweak one
+   `.elp` template — Lisp test fails with a readable diff. Revert
+   — both green again.
 
 ## Future plans
 
-- **`bin/render --target nixos`** — see `plans/nixos-target.md`.
-  Designed in but explicitly deferred from this branch.
-- **Drop `id -u` / `getent` shell-outs** — see `plans/static-uids.md`.
-- **Watch mode for dev** — only if `make all` ever feels slow after
-  the cutover. Don't pre-build it.
-- **Move `elp/` and `lisp/` under one top-level Lisp tree** — only
-  worth doing if/when a third Lisp library shows up in this repo.
+- **Main-project cutover** — port every real `.erb`, build
+  `bin/render` as a saved SBCL image, swap the Makefile to per-
+  service + aggregator targets (`render-<svc>`,
+  `render-aggregators`, `install-<svc>` family), delete
+  `render.rb` and `lib/mediaserver/`. Drafted as its own plan
+  after this one ships. The cutover gate is `make preview`
+  (`plans/deploy-preview.md`) plus a manual `diff -r` against a
+  pre-cutover-tagged config tree.
+- **NixOS target** — `bin/render --target nixos`. See
+  `plans/nixos-target.md`.
+- **Static UIDs** — drop the `id -u` shell-out from the
+  `:user-id` derived field. See `plans/static-uids.md`.
 
 ## Non-goals
 
-- **No new template features.** Whitespace-trimming, custom
-  delimiters, partials — out of scope. The port mirrors current
-  behavior.
-- **No splitting Lisp packages by concern.** One `mediaserver`
-  package + `elp` is fine until it isn't. Resist over-modularizing
-  before the surface is settled.
-- **No CI changes in this branch.** CI runs `make test` and `make
-  check`; both keep working as long as the Lisp toolchain is on the
-  runner. If it isn't, that's a separate (small) plan.
-- **No removing the `.erb` extension.** Renaming 85 files is pure
-  churn; the engine doesn't care what the files are called.
+- **Real services and templates are not touched.** Only fixtures.
+- **`render.rb` and `lib/mediaserver/` are not deleted.**
+- **No `bin/render` binary.** REPL + `(asdf:load-system :mediaserver)`
+  is sufficient for fixture tests. Binary is a main-project plan
+  concern.
+- **No new template features** (whitespace trimming, custom
+  delimiters, partials). Behavior parity with the Ruby renderer.
+- **No CI changes.** `make test` already runs in the existing
+  workflow; if the runner needs SBCL + Quicklisp added, that's a
+  one-liner to flag if/when CI exists.
 
 ## Open questions
 
-- **`cl-yaml` output stability vs. Ruby's `Psych`.** The
-  service.compose.yml render currently uses Ruby `Hash#to_yaml`. If
-  cl-yaml emits keys in a different order or escapes strings
-  differently, byte-identical diffs are impossible — and
-  byte-identical is the cutover gate. Spike this in commit 2 or
-  early commit 4: take one hash, emit with both, diff. If they
-  diverge in ways that aren't tunable, options are (a) sort/format
-  the Lisp side to match Ruby, (b) accept the diff and update
-  goldens at cutover (use `make preview` once on the real tree to
-  confirm semantically equivalent), or (c) emit YAML by hand for
-  this one template. Resolve before commit 4 reaches
-  service.compose.yml.
-- **Building the binary in CI / on fresh machines.** SBCL +
-  Quicklisp + cl-yaml needs to be available wherever `make all`
-  runs. Currently that's Thomas's laptop and fatlaptop only;
-  documenting the bootstrap in `CLAUDE.md` is enough. Revisit if a
-  new dev machine shows up.
-- **Saved-image size and startup.** `elp/bin/elp` is already a saved
-  SBCL image; expect ~50MB and ~50ms startup. Acceptable for a
-  one-shot per `make all` build. If startup ever matters, look at
-  `sb-ext:save-lisp-and-die :compression t`.
+- **`cl-yaml:emit` byte-equivalence with Ruby's `Psych#to_yaml`.**
+  Spike in commit 5, before touching `service.compose.yml.elp`.
+  Most likely failure modes: key ordering, string escaping, line
+  wrapping. Resolution paths in priority order: (a) tunable via
+  cl-yaml options → use them; (b) post-process the emitted string
+  → ugly but bounded; (c) hand-roll YAML emission for this
+  template → small and explicit, the YAML subset we need is tiny.
+- **ELP performance on the fixture set.** Probably a non-issue
+  (fixture tree is ~10 templates), but worth noting on the first
+  full render pass: if anything is surprisingly slow, file a plan
+  under `elp/plans/` rather than working around it here.
+- **`.elp` extension vs. another scheme.** Side-by-side with `.erb`
+  in the same directory is the cheapest layout. If it gets
+  confusing during the port, alternative is a parallel tree
+  (`test/fixtures-lisp/`). Defer the call until the port is
+  underway.
