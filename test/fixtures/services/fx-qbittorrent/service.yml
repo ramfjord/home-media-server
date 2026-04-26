@@ -7,7 +7,7 @@ use_vpn: true
 docker_config:
   image: example.invalid/fx-qbittorrent:latest
   volumes:
-  - "${install_base}/config/fx-qbittorrent:/config"
-  - "${media_path}:/data"
+  - "<%= install_base %>/config/fx-qbittorrent:/config"
+  - "<%= media_path %>:/data"
   restart: unless-stopped
 order: 50

@@ -6,8 +6,8 @@ sighup_reload: true
 docker_config:
   image: example.invalid/fx-caddy:latest
   volumes:
-  - "${install_base}/config/fx-caddy/Caddyfile:/etc/caddy/Caddyfile:ro"
-  - "${install_base}/certs:/etc/caddy/certs:ro"
+  - "<%= install_base %>/config/fx-caddy/Caddyfile:/etc/caddy/Caddyfile:ro"
+  - "<%= install_base %>/certs:/etc/caddy/certs:ro"
   ports:
   - 18080:18080
   - 18989:18989

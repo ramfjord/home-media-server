@@ -9,8 +9,8 @@ docker_config:
   image: example.invalid/fx-prometheus:latest
   command:
   - "--config.file=/etc/prometheus/prometheus.yml"
-  - "--web.external-url=http://${hostname}:19090/"
+  - "--web.external-url=http://<%= hostname %>:19090/"
   volumes:
-  - "${install_base}/config/fx-prometheus:/etc/prometheus:ro"
+  - "<%= install_base %>/config/fx-prometheus:/etc/prometheus:ro"
   restart: unless-stopped
 order: 100

@@ -1,6 +1,7 @@
 ---
 # Override install_base in config.local (globals.yml leaves it unset).
-# Exercises the DEFAULT_GLOBALS → globals.yml → config.local.yml merge:
+# Exercises the DEFAULT_GLOBALS → globals.yml → config.local.yml merge,
+# verified via the ERB binding seen by service.yml preprocessing:
 #   - install_base: set only here (covers "local overrides default")
 #   - hostname:     set in globals.yml, untouched here (covers "globals wins over default")
 #   - media_path:   nowhere (covers "fall through to DEFAULT_GLOBALS")
@@ -16,6 +17,6 @@ service_overrides:
     docker_config:
       image: example.invalid/fx-caddy:overridden
       volumes:
-      - "${install_base}/extra:/etc/caddy/extra:ro"
+      - "/etc/caddy-extra:/etc/caddy/extra:ro"
   fx-sonarr:
     desc: Fixture TV indexer (overridden)

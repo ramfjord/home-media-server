@@ -10,5 +10,5 @@ services:
     image: example.invalid/fx-sonarr:latest
     volumes:
     - "/opt/fx-mediaserver/config/fx-sonarr:/config"
-    - "${media_path}:/data"
+    - "/data:/data"
     restart: unless-stopped

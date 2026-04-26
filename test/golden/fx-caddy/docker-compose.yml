@@ -12,7 +12,7 @@ services:
     volumes:
     - "/opt/fx-mediaserver/config/fx-caddy/Caddyfile:/etc/caddy/Caddyfile:ro"
     - "/opt/fx-mediaserver/certs:/etc/caddy/certs:ro"
-    - "/opt/fx-mediaserver/extra:/etc/caddy/extra:ro"
+    - "/etc/caddy-extra:/etc/caddy/extra:ro"
     ports:
     - 18080:18080
     - 18989:18989

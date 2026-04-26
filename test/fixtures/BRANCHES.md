@@ -91,14 +91,14 @@ exercise each.
       covered by overriding `volumes` or `cap_add`. Scalar
       replacement: covered by overriding `port` or `desc`. Plan to
       hit all three via `service_overrides` on `fx-caddy`.
-- [x] `expand_vars` — confirmed widely used: every dockerized
-      `service.yml` interpolates `${install_base}` and/or
-      `${media_path}`; `prometheus/service.yml` uses `${hostname}`.
-      Custom keys (`${qbittorrent_username}`, `${qbittorrent_password}`)
-      appear in `services/qbittorrent-exporter/service.yml`. Cover
-      with fixtures: globals interpolation in volume mounts (all
-      dockerized fixtures), plus one fixture with a custom var
-      defined in fixture `config.local.yml`.
+- [x] Globals interpolation in `service.yml` — fixtures use the
+      preferred `<%= install_base %>` / `<%= media_path %>` /
+      `<%= hostname %>` form (ERB-preprocessed before YAML parse).
+      `expand_vars` is still wired in for real `service.yml`s that
+      use the legacy `${var}` form (those carry into rendered
+      docker-compose output where they double as docker-compose's
+      own runtime substitution syntax for secrets like
+      `${qbittorrent_username}`).
 - [x] `service_overrides` — apply per-service deep-merge from
       `config.local.yml`. Fixture `config.local.yml` overrides one
       field on `fx-caddy` and `fx-sonarr`.

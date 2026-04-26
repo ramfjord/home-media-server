@@ -1,4 +1,5 @@
 require 'yaml'
+require 'erb'
 require_relative 'validator'
 
 module Mediaserver
@@ -23,6 +24,23 @@ module Mediaserver
       end
     end
     base
+  end
+
+  # ERB-preprocess a service.yml file with bindings for every global.
+  # Templates can write `<%= install_base %>` instead of `${install_base}`;
+  # ERB substitutes from the binding (which includes DEFAULT_GLOBALS), so
+  # values like `media_path` fall through cleanly even when no config file
+  # sets them. Files with no `<% %>` directives pass through unchanged.
+  def self.render_service_yaml(path, globals)
+    content = File.read(path)
+    b = binding
+    globals.each do |k, v|
+      next unless k.is_a?(String) && k.match?(/\A[a-z_][a-z0-9_]*\z/i)
+      b.local_variable_set(k.to_sym, v)
+    end
+    ERB.new(content, trim_mode: '%<>').result(b)
+  rescue StandardError => e
+    raise "ERB error in #{path}: #{e.message}"
   end
 
   def self.expand_vars(obj, vars)
@@ -129,25 +147,31 @@ module Mediaserver
       services_glob = File.join(root, 'services', '*', 'service.yml')
 
       globals_raw = File.exist?(globals_path) ? (YAML.load(File.read(globals_path)) || {}) : {}
+
+      # Read config.local.yml early so service.yml ERB has access to its
+      # values (most notably install_base, which is typically set here).
+      local = File.exist?(local_path) ? YAML.load(File.read(local_path)) : nil
+      service_overrides = (local && local.delete('service_overrides')) || {}
+      local_globals = (local && local.reject { |k, _| k == 'services' }) || {}
+
+      # Build the globals binding for service.yml ERB preprocessing.
+      # Layered: DEFAULT_GLOBALS < globals.yml < config.local.yml top-level.
+      erb_globals = DEFAULT_GLOBALS.merge(globals_raw).merge(local_globals)
+
       service_defs = Dir[services_glob].sort.map do |path|
-        YAML.load(File.read(path)) or raise "empty service file: #{path}"
+        rendered = Mediaserver.render_service_yaml(path, erb_globals)
+        YAML.load(rendered) or raise "empty service file: #{path}"
       end
       # Stable sort by optional `order` field; missing order goes to the end.
       service_defs = service_defs.sort_by.with_index { |s, i| [s['order'] || Float::INFINITY, i] }
 
       raw = globals_raw.merge('services' => service_defs)
+      raw.merge!(local_globals)
 
-      if File.exist?(local_path)
-        local = YAML.load(File.read(local_path))
-        if local
-          service_overrides = local.delete('service_overrides') || {}
-          raw.merge!(local)
-          service_overrides.each do |svc_name, overrides|
-            svc_def = raw['services'].find { |s| s['name'] == svc_name }
-            next unless svc_def
-            Mediaserver.deep_merge!(svc_def, overrides)
-          end
-        end
+      service_overrides.each do |svc_name, overrides|
+        svc_def = raw['services'].find { |s| s['name'] == svc_name }
+        next unless svc_def
+        Mediaserver.deep_merge!(svc_def, overrides)
       end
 
       globals = DEFAULT_GLOBALS.merge(raw.reject { |k, _| k == 'services' })

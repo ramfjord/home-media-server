@@ -10,5 +10,5 @@ services:
     image: example.invalid/fx-qbittorrent:latest
     volumes:
     - "/opt/fx-mediaserver/config/fx-qbittorrent:/config"
-    - "${media_path}:/data"
+    - "/data:/data"
     restart: unless-stopped
