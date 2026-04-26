@@ -166,3 +166,7 @@ systemd-enable:
 systemd-disable:
 	$(REMOTE) sudo systemctl disable mediaserver.target
 	$(REMOTE) sudo systemctl disable $(PATH_UNITS)
+
+# Push configs and restart a single service. Use as: make deploy-radarr
+deploy-%: install
+	@$(REMOTE) sudo systemctl restart $*.service
