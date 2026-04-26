@@ -141,11 +141,12 @@ check: all
 SYSTEMD_DIR := /etc/systemd/system
 
 install: check
-	rsync -av --rsync-path="sudo rsync" --exclude='systemd/' config/ $(RSYNC_DEST)/opt/mediaserver/config/
-	rsync -av --rsync-path="sudo rsync" certs/ $(RSYNC_DEST)/opt/mediaserver/certs/
-	@$(REMOTE) sh -c 'for svc in $(ALL_SERVICES); do \
+	rsync -av --rsync-path="sudo rsync" --no-owner --no-group --exclude='systemd/' config/ $(RSYNC_DEST)/opt/mediaserver/config/
+	rsync -av --rsync-path="sudo rsync" --no-owner --no-group certs/ $(RSYNC_DEST)/opt/mediaserver/certs/
+	@$(REMOTE) sudo sh -c 'chmod g+s /opt/mediaserver/config; for svc in $(ALL_SERVICES); do \
 	  if [ -d /opt/mediaserver/config/$$svc ]; then \
 	    chown -R $$svc:mediaserver /opt/mediaserver/config/$$svc; \
+	    find /opt/mediaserver/config/$$svc -type d -exec chmod g+s {} +; \
 	  fi; \
 	done'
 
