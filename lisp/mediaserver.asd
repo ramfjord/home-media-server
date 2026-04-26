@@ -19,4 +19,5 @@
   :serial t
   :components
   ((:file "package")
-   (:file "field-test")))
+   (:file "field-test")
+   (:file "load-test")))
