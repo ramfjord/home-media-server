@@ -6,4 +6,8 @@
    ;; Field accessor + state
    :field
    :*derived-fields*
-   :*globals*))
+   :*globals*
+   ;; Render driver
+   :render-tree
+   :render-template-to-string
+   :write-if-changed))

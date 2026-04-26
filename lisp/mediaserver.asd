@@ -9,7 +9,8 @@
   :components
   ((:file "package")
    (:file "config")
-   (:file "field"))
+   (:file "field")
+   (:file "render"))
   :in-order-to ((test-op (test-op "mediaserver/tests"))))
 
 (defsystem "mediaserver/tests"
@@ -20,4 +21,5 @@
   :components
   ((:file "package")
    (:file "field-test")
-   (:file "load-test")))
+   (:file "load-test")
+   (:file "render-test")))
