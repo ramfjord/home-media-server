@@ -55,48 +55,10 @@
           (and derived (funcall derived service globals)))
         direct)))
 
-;;; File-walking helpers used by the service.path template.
-;;; Walk SERVICE's source-dir relative to *default-pathname-defaults*
-;;; (render-tree binds this to the source root before invoking
-;;; templates). .erb files are skipped — during the Ruby/Lisp
-;;; transition they live alongside .elp siblings; only one of the two
-;;; deploys, and the .elp is canonical for the Lisp engine.
-
-(defun %has-suffix-p (string suffix)
-  (and (>= (length string) (length suffix))
-       (string= suffix string :start2 (- (length string) (length suffix)))))
-
-(defun %walk-files (dir)
-  "Recursively collect every regular file under DIR (a directory pathname)."
-  (append (uiop:directory-files dir)
-          (mapcan #'%walk-files (uiop:subdirectories dir))))
-
-(defun service-source-files (service)
-  "Return a list of pathnames (relative to SERVICE's source-dir) for
-   every regular file there, excluding service.yml and *.erb. The
-   walk is rooted at SERVICE's :source-dir, resolved relative to
-   *default-pathname-defaults* (typically the repo root, since Make
-   invokes the renderer from there).
-
-   Used by the systemd `service.path` template to enumerate which
-   deployed config files the .path unit should watch."
-  (let* ((dir (uiop:ensure-directory-pathname (field service :source-dir)))
-         (abs-dir (probe-file dir)))
-    (unless abs-dir (return-from service-source-files nil))
-    (let* ((root  (uiop:ensure-directory-pathname abs-dir))
-           (kept  (remove-if (lambda (f)
-                               (let ((b (file-namestring f)))
-                                 (or (string= "service.yml" b)
-                                     (%has-suffix-p b ".erb"))))
-                             (%walk-files root))))
-      (mapcar (lambda (f) (uiop:enough-pathname f root)) kept))))
-
-(defun installed-path (relative-file service install-base)
-  "Compute the deployed config path for RELATIVE-FILE under SERVICE.
-   Strips any .elp suffix on the way (the deployed name is the
-   pre-rendered name)."
-  (let* ((s (uiop:native-namestring relative-file))
-         (clean (if (%has-suffix-p s ".elp")
-                    (subseq s 0 (- (length s) 4))
-                    s)))
-    (format nil "~A/config/~A/~A" install-base (field service :name) clean)))
+;;; Note: target-specific helpers (file enumeration, deploy-path
+;;; computation, etc.) belong with the templates that need them, not
+;;; in this engine library. Make is the dispatcher and knows which
+;;; files exist for each service; the systemd `service.path`
+;;; template receives that list via context (e.g. SERVICE_FILES)
+;;; rather than walking the filesystem itself. Other targets
+;;; (NixOS, k8s, ...) won't share these conventions.

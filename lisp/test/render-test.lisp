@@ -74,45 +74,29 @@
                (mediaserver:render-template-to-string
                 path (mediaserver::service-render-context nil cfg))))))
 
-(test service-source-files-walks-and-filters
-  "service-source-files returns relative paths, skips service.yml and .erb."
-  (let* ((root (fresh-tmpdir))
-         (svc-dir (merge-pathnames "services/foo/" root))
-         (cfg (list :globals '(:install-base "/opt/test")))
-         (svc '(:name "foo" :docker-config (:image "x"))))
-    (declare (ignore cfg))
-    (ensure-directories-exist svc-dir)
-    (ensure-directories-exist (merge-pathnames "sub/" svc-dir))
-    (with-open-file (s (merge-pathnames "service.yml" svc-dir)
-                       :direction :output :if-exists :supersede)
-      (write-string "name: foo" s))
-    (with-open-file (s (merge-pathnames "config.elp" svc-dir)
-                       :direction :output :if-exists :supersede)
-      (write-string "x" s))
-    (with-open-file (s (merge-pathnames "config.erb" svc-dir)
-                       :direction :output :if-exists :supersede)
-      (write-string "x" s))
-    (with-open-file (s (merge-pathnames "sub/nested.elp" svc-dir)
-                       :direction :output :if-exists :supersede)
-      (write-string "x" s))
-    (let ((mediaserver:*globals* (list :install-base "/opt/test"))
-          (mediaserver::*known-fields*
-            '(:name :docker-config :source-dir :dockerized :has-unit
-              :compose-file))
-          (*default-pathname-defaults* (uiop:ensure-directory-pathname root)))
-      (let ((files (mediaserver:service-source-files svc)))
-        (is (= 2 (length files)))
-        (is (find #p"config.elp" files :test #'equal))
-        (is (find #p"sub/nested.elp" files :test #'equal))))))
-
-(test installed-path-strips-elp
-  "installed-path strips .elp suffix and joins under install-base/config/svc."
-  (let ((mediaserver:*globals* '(:install-base "/opt/test"))
-        (mediaserver::*known-fields*
-          '(:name :docker-config :source-dir :dockerized :has-unit
-            :compose-file))
-        (svc '(:name "foo" :docker-config (:image "x"))))
-    (is (equal "/opt/test/config/foo/Caddyfile"
-               (mediaserver:installed-path "Caddyfile.elp" svc "/opt/test")))
-    (is (equal "/opt/test/config/foo/sub/nested.yml"
-               (mediaserver:installed-path "sub/nested.yml.elp" svc "/opt/test")))))
+(test render-template-service-files-binding
+  "When the CLI passes --files, templates can iterate `service_files`
+   to enumerate per-service config files (used by systemd's
+   service.path watcher)."
+  (let* ((tmp  (fresh-tmpdir))
+         (path (merge-pathnames "watcher.elp" tmp))
+         (cfg  (synth-config))
+         (svc  (first (getf cfg :services)))
+         (mediaserver::*known-fields*
+           '(:name :port :docker-config :compose-file :source-dir
+             :dockerized :has-unit))
+         (mediaserver:*globals* (getf cfg :globals)))
+    (with-open-file (s path :direction :output :if-exists :supersede)
+      (write-string "<%- (dolist (f service_files) -%>
+P=<%= f %>
+<%- ) -%>" s))
+    ;; Augment the context with a SERVICE_FILES binding (mirrors what
+    ;; the CLI does when --files is given).
+    (let* ((base (mediaserver::service-render-context svc cfg))
+           (ctx  (cons (cons (intern "SERVICE_FILES" :mediaserver)
+                             '("Caddyfile" "extra/policy.json"))
+                       base)))
+      (is (equal "P=Caddyfile
+P=extra/policy.json
+"
+                 (mediaserver:render-template-to-string path ctx))))))
