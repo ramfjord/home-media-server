@@ -1,5 +1,7 @@
 # Remote deploy to fatlaptop
 
+**Status: shipped 2026-04-25 on `remote-deploy` branch.**
+
 Make `make install` target a remote host (fatlaptop over Tailscale) from
 this laptop, instead of always deploying to the local machine. Precursor
 to the NixOS target plan (`plans/nixos-target.md`): both efforts need a
@@ -26,220 +28,171 @@ this first means the NixOS work can reuse the same target abstraction.
 - Not replacing local install. `TARGET=local` (default) keeps current
   behavior so nothing breaks for direct-on-server use.
 
-## Shape
+## Shape (as shipped)
 
 A `TARGET` variable selects where install actions land:
 
-- `TARGET=local` (default): current behavior — local `rsync`, local
-  `sudo systemctl`, local `chown`.
-- `TARGET=fatlaptop` (or any ssh host alias): `rsync` over ssh, remote
-  `ssh fatlaptop sudo systemctl …`, remote chown.
+- `TARGET=local` (default): rsync and side-effecting commands run on
+  this host.
+- `TARGET=fatlaptop` (or any ssh host alias): `rsync` over ssh,
+  `ssh fatlaptop sudo systemctl …`, etc.
 
-Two primitives wrap every side-effecting command:
+Three primitives in the Makefile:
 
 ```make
+TARGET ?= local
+-include Makefile.local
 RSYNC_DEST = $(if $(filter local,$(TARGET)),,$(TARGET):)
 REMOTE     = $(if $(filter local,$(TARGET)),,ssh $(TARGET))
 ```
 
-Then install rules become:
+`Makefile.local` is git-ignored — drop `TARGET := fatlaptop` in there
+to default the deploy target without typing it on every invocation.
+Command-line `TARGET=…` still overrides.
 
-```make
-install: check
-	rsync -av --exclude='systemd/' config/ $(RSYNC_DEST)/opt/mediaserver/config/
-	rsync -av certs/ $(RSYNC_DEST)/opt/mediaserver/certs/
-	$(REMOTE) sh -c '...chown loop...'
-```
+Every side-effecting `rsync`/`systemctl`/`chown` is routed through
+those primitives. `rsync` uses `--rsync-path="sudo rsync"` so it runs
+as root on the target (needed to write into per-service dirs owned by
+service users). systemctl on the remote uses `ssh host sudo systemctl`.
 
-Same pattern for `install-systemd`, `systemd-{start,stop,restart,status}`,
-`systemd-{enable,disable}`. No new install code paths — just every
-`sudo` and every `rsync` destination routed through these two vars.
+## Commits (as shipped)
 
-## Phases
+1. **Add TARGET variable for remote deploy via rsync+ssh** — Introduce
+   `TARGET`, `RSYNC_DEST`, `REMOTE`. Route the `install` target's
+   rsync destinations and chown loop through them.
+2. **Route systemd targets through `$(REMOTE)`; simplify install-systemd**
+   — `install-systemd` reduced to files + `daemon-reload` only (no
+   more enable/start at install time). Moved enable of
+   `mediaserver-network`, `mediaserver.target`, and path units into
+   `systemd-enable`. Path-unit enable/disable now batch into one
+   `systemctl` call (one ssh round-trip instead of ~25). Routed
+   `systemd-{start,stop,restart,status,enable,disable}` through
+   `$(REMOTE)`. Unit-file rsync uses `--rsync-path="sudo rsync"`.
+3. **Add `deploy-<svc>` target** — Pattern rule that ran `install` then
+   restarted the service. Superseded by next commit.
+4. **Rename `deploy-<svc>` → `restart-<svc>`; drop install dep** —
+   Realized that with path units active, `make install` *is* the
+   deploy verb — rsync writes the file, path unit fires, service
+   reloads. So `deploy-<svc>` was misnamed. Renamed to
+   `restart-<svc>` (force-restart only). Use `make install
+   restart-foo` when both are wanted.
+5. **`Makefile.local` for default TARGET; update docs** — Picked the
+   git-ignored Makefile shim over a `render.rb --get target` extension.
+   Updated CLAUDE.md and README.
 
-### Phase 1 — Prerequisites on fatlaptop (manual, one-time)
+Then a series of commits that emerged during real-world testing on
+fatlaptop:
+
+6. **`--rsync-path="sudo rsync"` for the install rsync** — First
+   real run hit `Permission denied` writing into per-service dirs
+   owned by service users from prior chowns. Mirrors what we already
+   did for unit-file rsync.
+7. **Tighten install ownership/perms to survive path-unit reload race**
+   — Added `--no-owner --no-group` (existing files keep their
+   chown-set ownership) and `chmod g+s` on service dirs (new files
+   inherit `mediaserver` group). Wrapped the post-rsync loop in
+   `sudo sh -c` so install no longer requires the outer make
+   invocation to already be root.
+8. **Stop recursing setgid into runtime data dirs** — `find … -exec
+   chmod g+s` was walking thousands of dirs in `jellyfin/metadata/`
+   etc. and erroring out on container-namespaced UIDs. setgid
+   propagates: setting it once on the top-level service dir is enough.
+9. **Per-service rsync with `--chown`; drop post-rsync chown loop** —
+   The pre-existing recursive `chown -R` was also walking runtime
+   data and producing the same kind of `Operation not permitted`
+   spam. Restructured `install` to loop per service, each rsync
+   with `--chown=<svc>:mediaserver` and `--chmod=Dg+s`. Eliminates
+   the post-rsync chown step entirely. Bonus: no chown race window
+   for new files. Cost: ~20 ssh round-trips per install, mitigated
+   with ssh ControlMaster.
+
+## Lessons learned
+
+- **Path units already redeploy on file change.** This is the deploy
+  verb. The original plan's "Phase 4: deploy-<svc>" framing was
+  wrong — install + path units handles it. `restart-<svc>` is just
+  the force-restart override for the wedged-service case.
+- **Recursive chown into runtime data dirs is a pre-existing bad
+  idea**, not a new problem introduced by remote deploy. Local install
+  was either failing silently or being run as a user who didn't notice.
+  Remote install made the noise visible. The fix (per-service rsync
+  with `--chown`) is structurally cleaner regardless of remote vs local.
+- **Setgid propagates.** Don't recursively chmod g+s into existing
+  trees; just set it on the top-level dir and new subdirs inherit it.
+- **`install-systemd` was doing too much.** Conflating "put files in
+  place" with "enable units" made the target awkward over ssh and
+  fragile when path units were already half-enabled. Splitting the
+  responsibilities — `install-systemd` for files, `systemd-enable`
+  for wiring — also fixed a nagging local pain point.
+
+## Prerequisites on fatlaptop (manual, one-time)
 
 Out of repo, but documented here so the plan is self-contained:
 
 - ssh from laptop → `fatlaptop` works without password (key auth).
-- User on fatlaptop has passwordless `sudo` for `systemctl`,
-  `rsync`, `chown`, `mkdir` under `/opt/mediaserver` and
-  `/etc/systemd/system`. Or: deploy user owns `/opt/mediaserver`
-  outright and only systemd commands need sudo.
-- Docker, ruby (for any host-side scripts? — currently none), and the
-  `mediaserver` group + per-service users exist (see
-  `plans/static-uids.md`; remote deploy makes the static UID plan more
-  urgent because `chown svc:mediaserver` must resolve to the same
-  numeric IDs on both hosts if any tooling ever runs on the laptop
-  side as those users — for now, chown only runs on the target, so
-  local-vs-remote UID drift doesn't bite).
+- User on fatlaptop has passwordless `sudo` for `rsync` and
+  `systemctl` at minimum. (Currently has it generally.)
+- Docker, the `mediaserver` group + per-service users exist (see
+  `plans/static-uids.md`).
 - `script/make_users.sh` has been run on fatlaptop.
-
-**Validation**: `ssh fatlaptop sudo systemctl status mediaserver.target`
-returns without prompting. `ssh fatlaptop ls /opt/mediaserver` works.
-
-### Phase 2 — `TARGET` variable + rsync redirection
-
-Smallest change that proves the model. No systemd yet.
-
-- Add `TARGET ?= local` near the top of the Makefile.
-- Define `RSYNC_DEST` and `REMOTE` as above.
-- Rewrite the two `rsync` lines in `install:` to use `$(RSYNC_DEST)`.
-- Wrap the `chown` loop in `$(REMOTE) sh -c '…'` (always — when
-  `REMOTE` is empty it's just `sh -c '…'` locally, equivalent to today).
-
-**Validation**:
-- `make install` (no TARGET) — diff `/opt/mediaserver/config/` before/after,
-  byte-identical to pre-change behavior.
-- `TARGET=fatlaptop make install` — `config/` and `certs/` land on
-  fatlaptop; `ssh fatlaptop ls /opt/mediaserver/config/` shows expected
-  tree; chown applied.
-- Nothing systemd-related touched yet, so services on fatlaptop keep
-  running their old config until they reload (or until Phase 3 lands).
-
-**Rollback**: revert the commit. `make install` falls back to the
-hard-coded local rsync.
-
-### Phase 3 — Remote systemd
-
-- `install-systemd`: route `mkdir`, `rsync` of unit files, `daemon-reload`,
-  `enable --now mediaserver-network.service`, `enable mediaserver.target`,
-  `start` of path units through `$(REMOTE)`.
-- `systemd-{start,stop,restart,status,enable,disable}`: prefix with
-  `$(REMOTE)`.
-- One subtlety: the path-unit start loop uses `$(notdir …)` of make
-  variables resolved on the laptop — that's fine, the *names* are the
-  same on both hosts; only the `systemctl` invocation moves.
-- Another subtlety: `systemd-analyze verify` in `make check` runs
-  locally against `config/systemd/*.service`. That's a static check on
-  the rendered file, no host dependency, leave it alone.
-
-**Validation**:
-- `TARGET=fatlaptop make install-systemd` from laptop.
-- `ssh fatlaptop systemctl status mediaserver.target` shows active.
-- Edit a service's config locally, `TARGET=fatlaptop make install`,
-  observe the path unit on fatlaptop trigger the reload (journalctl on
-  fatlaptop).
-
-### Phase 4 — Per-service `deploy-<svc>` targets (if not already remote-clean)
-
-`CLAUDE.md` documents `make deploy-<service>` but I didn't find it in
-the current Makefile — either stale doc or the target is generated
-elsewhere. Audit; if it exists, route its `systemctl restart` through
-`$(REMOTE)`. If it doesn't, add it as part of this work since
-restarting a single service remotely is the most common dev-loop
-action.
-
-**Validation**: `TARGET=fatlaptop make deploy-radarr` restarts only
-Radarr on fatlaptop, no other services bounce.
-
-### Phase 5 — Default target + docs
-
-- Decide whether `TARGET` defaults to `local` (safer, current
-  behavior) or `fatlaptop` (matches actual usage). Probably keep
-  `local` as default and set `TARGET=fatlaptop` in `config.local.yml`
-  equivalent — but `config.local.yml` is read by Ruby, not make.
-  Options:
-  1. Leave default `local`, type `TARGET=fatlaptop` every time (or
-     shell alias).
-  2. Read `target` from `config.local.yml` via a tiny make shim
-     (`TARGET ?= $(shell ./render.rb --get target 2>/dev/null || echo local)`).
-  3. Add a `.envrc` / Makefile.local that's git-ignored and sets
-     `TARGET`.
-  Pick (2) if the render.rb extension is small; otherwise (3).
-- Update `CLAUDE.md` "Commands" section to mention `TARGET=`.
-- Update `README.md` if it documents install.
-
-**Validation**: fresh clone, follow README, deploy to fatlaptop end to
-end without reading the Makefile.
+- ssh ControlMaster recommended in `~/.ssh/config` to amortize the
+  per-service ssh round-trips:
+  ```
+  Host fatlaptop
+      ControlMaster auto
+      ControlPath ~/.ssh/cm-%r@%h:%p
+      ControlPersist 60s
+  ```
 
 ## Risks / open questions
 
-- **UID/GID drift.** `chown svc:mediaserver` runs on the target, so as
-  long as fatlaptop has the right users it's fine. But this plan
-  amplifies the case for `plans/static-uids.md` — pin those numerics
-  before this gets heavy use, otherwise a future restore-from-backup
-  on a different host will surprise.
-- **Secrets.** `certs/` is rsynced. Confirm it's not currently picking
-  up anything that shouldn't leave the laptop, and that ssh transport
-  is acceptable (it is — Tailscale-encrypted plus ssh).
+- **UID/GID drift.** `chown` runs on the target via `--chown=`, so as
+  long as fatlaptop has the right users it's fine. Still amplifies the
+  case for `plans/static-uids.md` — pin those numerics before this
+  gets heavy use, otherwise a future restore-from-backup on a
+  different host will surprise.
+- **Secrets.** `certs/` is rsynced. Acceptable for now (Tailscale +
+  ssh transport).
 - **Concurrent edits.** If someone is also running `make install`
-  directly on fatlaptop (e.g., from a checkout there), two sources of
-  truth. Mitigation: stop checking out the repo on fatlaptop once
-  remote deploy works; the box becomes a deploy target only.
+  directly on fatlaptop, two sources of truth. Mitigation: stop
+  checking out the repo on fatlaptop now that remote deploy works.
 - **`make check` on laptop vs target.** `docker compose config` and
   `systemd-analyze verify` run on the laptop against rendered files.
   If laptop and fatlaptop have meaningfully different docker / systemd
-  versions, validation could pass locally and fail remotely. Accept
-  for now; if it bites, add a `check-remote` target that runs the
-  same validators over ssh against the staged files.
+  versions, validation could pass locally and fail remotely. Not yet
+  bitten; if it does, add a `check-remote` target.
+- **`certs/` rsync still runs as a single batch with implicit
+  ownership** — not migrated to the per-service `--chown` pattern.
+  Worked fine in testing because caddy was the only consumer and
+  permissions held. Worth revisiting if other services start needing
+  certs or if cert-key permissions get strict.
 
 ## Related plans
 
-- `plans/nixos-target.md` — sequencing detail below. tl;dr: this plan's
-  Phases 1–2 are reusable harness; Phase 3 is largely throwaway once
-  NixOS lands.
+- `plans/nixos-target.md` — sequencing analysis preserved below.
 - `plans/static-uids.md` — remote `chown` on the target makes the
-  static-UID manifest more valuable. That plan already defers the
-  *renumbering* to the NixOS cutover but lands the manifest + validator
-  on Debian first; that landing is independent of this plan and useful
-  either way. No hard ordering between the two.
+  static-UID manifest more valuable; that plan already defers
+  *renumbering* to the NixOS cutover but lands the manifest +
+  validator on Debian first. Independent of this plan.
 
 ## Sequencing vs the NixOS plan
 
 The NixOS plan's install verb is `nixos-rebuild switch --target-host
 fatlaptop`, which subsumes ssh transport + remote activation + per-unit
-restart in one command. That changes which phases of *this* plan have
-lasting value:
+restart in one command. Now that this plan has shipped:
 
-- **Phase 1 (ssh / sudo prereqs on fatlaptop)** — needed by both. Pure
-  prerequisite, do regardless.
-- **Phase 2 (`TARGET=` var + `RSYNC_DEST`/`REMOTE` in Makefile)** —
-  reusable. Under NixOS the same `TARGET` knob just routes to
-  `nixos-rebuild --target-host $(TARGET)` instead of `rsync + ssh
-  systemctl`. The ergonomics — "I edit here, it runs there" — are
-  the same; only the verb under the hood changes.
-- **Phase 3 (route every `systemctl` and unit-file `rsync` through
-  `$(REMOTE)`)** — **largely throwaway once NixOS lands.** NixOS
-  handles daemon-reload, unit installation, and per-changed-unit
-  restart automatically. If the NixOS cutover is imminent, this phase
-  is yak-shaving; if NixOS slips by months, it pays for itself in
-  daily workflow.
-- **Phase 4 (`deploy-<svc>`)** — semantics shift under NixOS to "one
-  `nixos-rebuild switch` restarts whichever units' inputs changed."
-  Still useful as a Makefile entry point either way.
-- **Phase 5 (default + docs)** — applies to both targets.
+- **`TARGET=` knob**: reusable. Under NixOS the same variable just
+  routes to `nixos-rebuild --target-host $(TARGET)` instead of
+  `rsync + ssh systemctl`.
+- **Per-service rsync + ssh systemctl plumbing**: largely throwaway
+  once NixOS lands, since `nixos-rebuild` handles unit installation
+  and per-changed-unit restart automatically. Earned its keep in the
+  months between.
+- **`restart-<svc>`**: still useful as a Makefile entry point under
+  NixOS.
+- **`Makefile.local` + docs**: applies to both targets.
 
-### Decision: do all five phases
-
-As of 2026-04-25 the user is deferring apt upgrades on fatlaptop for at
-least 6 months following the last kernel-upgrade incident, and is
-prioritizing a separate Lisp rewrite project ahead of the NixOS
-transition. That removes the "before next apt upgrade" deadline that
-would otherwise make NixOS urgent and pull Phase 3 of this plan into
-the throwaway column.
-
-With NixOS effectively slipping months out, all five phases of this
-plan earn their keep:
-
-- Phase 3 (`systemctl`-over-ssh plumbing) pays for itself across every
-  edit-here-deploy-there cycle for the duration of the deferral.
-- When the NixOS cutover eventually happens, some of Phase 3 gets
-  deleted. That's fine — it earned its keep in the months between.
-- Phases 1, 2, 4, 5 carry over to the NixOS target unchanged.
-
-If the situation changes (apt freeze ends early, hardware incident
-forces NixOS forward, Lisp project wraps), revisit: the alternative
-path is to stop after Phase 2, jump to `plans/nixos-target.md` Phase A,
-and let `nixos-rebuild --target-host` subsume Phase 3.
-
-### What NixOS Phase A actually gates
-
-Worth naming explicitly: `plans/nixos-target.md` Phase A is "hand-write
-`configuration.nix` on a NixOS VM with two services + wireguard, prove
-the pattern holds, exit if it doesn't." That's the real lead time on
-NixOS — multi-day at minimum, longer if podman netns edge cases bite
-(see that plan's risks). Remote deploy is *not* on NixOS's critical
-path; the VM prototype is. If "before the next apt upgrade" is the
-deadline, the highest-leverage move is starting Phase A in parallel
-with (or before) remote-deploy Phase 2, not after.
+The NixOS critical path is `plans/nixos-target.md` Phase A
+(hand-write `configuration.nix` on a NixOS VM with two services +
+wireguard, prove the pattern holds). Remote deploy is *not* on
+NixOS's critical path; the VM prototype is.
