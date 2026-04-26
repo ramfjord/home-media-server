@@ -1,0 +1,12 @@
+[Unit]
+Description=Config watcher for <%= name %>
+
+[Path]
+<%- (dolist (rel (service-source-files service)) -%>
+PathChanged=<%= (installed-path rel service install_base) %>
+<%- ) -%>
+Unit=<%= (if sighup_reload (format nil "~A-reload.service" name) (format nil "~A.service" name)) %>
+
+[Install]
+WantedBy=<%= name %>.service
+RequiredBy=<%= name %>.service

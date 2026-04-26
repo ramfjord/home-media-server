@@ -1,0 +1,8 @@
+<%- (dolist (svc (remove-if-not (lambda (s) (and (field s :use-vpn) (field s :port))) services)) -%>
+:<%= (field svc :port) %> {
+  reverse_proxy fx-wireguard:<%= (field svc :port) %>
+  tls /etc/caddy/certs/fullchain.pem /etc/caddy/certs/privkey.pem
+}
+<%- ) -%>
+# host: <%= hostname %>
+# install_base: <%= install_base %>

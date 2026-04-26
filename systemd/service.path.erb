@@ -2,7 +2,7 @@
 Description=Config watcher for <%= service.name %>
 
 [Path]
-<% Dir.glob("#{service.source_dir}/**/*").select { |f| File.file?(f) && File.basename(f) != 'service.yml' }.each do |src| %>
+<% Dir.glob("#{service.source_dir}/**/*").select { |f| File.file?(f) && File.basename(f) != 'service.yml' && !f.end_with?('.elp') }.each do |src| %>
 <%   relative = src.sub(/^#{Regexp.escape(service.source_dir)}\//, '') %>
 <%   installed = "#{install_base}/config/#{service.name}/#{relative.sub(/\.erb$/, '')}" %>
 PathChanged=<%= installed %>

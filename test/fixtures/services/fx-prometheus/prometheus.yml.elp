@@ -1,0 +1,15 @@
+global:
+  scrape_interval: <%= (or (getf globals :fx-scrape-interval) "30s") %>
+  external_labels:
+    deployment: <%= (or fx_label "fallback") %>
+    host: <%= hostname %>
+
+scrape_configs:
+<%- (dolist (svc (remove-if-not (lambda (s) (and (field s :port) (field s :healthz))) services)) -%>
+  - job_name: "<%= (field svc :name) %>"
+    metrics_path: <%= (field svc :healthz) %>
+    static_configs:
+      - targets: ["<%= (field svc :name) %>:<%= (field svc :port) %>"]
+        labels:
+          partof: <%= (field svc :partof) %>
+<%- ) -%>
