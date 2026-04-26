@@ -1,5 +1,12 @@
 .SECONDEXPANSION:
 
+# Deploy target. `local` (default) keeps current behavior — rsync and
+# side-effecting commands run on this host. Set TARGET=<ssh-host> to
+# rsync over ssh and run side-effects on the remote host.
+TARGET ?= local
+RSYNC_DEST := $(if $(filter local,$(TARGET)),,$(TARGET):)
+REMOTE     := $(if $(filter local,$(TARGET)),,ssh $(TARGET))
+
 LIB_FILES := lib/mediaserver/config.rb lib/mediaserver/renderer.rb lib/mediaserver/validator.rb
 SERVICE_YAMLS := $(wildcard services/*/service.yml)
 RENDER_DEPS := render.rb $(LIB_FILES) globals.yml $(wildcard config.local.yml)
@@ -133,13 +140,13 @@ check: all
 SYSTEMD_DIR := /etc/systemd/system
 
 install: check
-	rsync -av --exclude='systemd/' config/ /opt/mediaserver/config/
-	rsync -av certs/ /opt/mediaserver/certs/
-	@for svc in $(ALL_SERVICES); do \
+	rsync -av --exclude='systemd/' config/ $(RSYNC_DEST)/opt/mediaserver/config/
+	rsync -av certs/ $(RSYNC_DEST)/opt/mediaserver/certs/
+	@$(REMOTE) sh -c 'for svc in $(ALL_SERVICES); do \
 	  if [ -d /opt/mediaserver/config/$$svc ]; then \
 	    chown -R $$svc:mediaserver /opt/mediaserver/config/$$svc; \
 	  fi; \
-	done
+	done'
 
 install-systemd: install $(SYSTEMD_UNITS)
 	sudo mkdir -p $(SYSTEMD_DIR)
