@@ -125,13 +125,13 @@ tooling needed.
 
 ## Related plans
 
-### `plans/remote-deploy.md` — direct synergy
+### `plans/remote-deploy.md` — direct synergy, blocks this plan
 
-Remote-deploy Phase 2 introduces `RSYNC_DEST` and `REMOTE` Makefile
-primitives that route rsync destinations and ssh-prefixed commands
-through a `TARGET=` variable. **`make preview` should be written
-against these same primitives from day one**, so it works for both
-local and remote targets without retrofit:
+**Decision (2026-04-25): remote-deploy lands first.** The deployed
+config lives on fatlaptop, not the laptop — a local-only preview
+would diff against an empty/stale `/opt/mediaserver/config/` here
+and miss the actual workflow entirely. Once remote-deploy Phase 2
+introduces `RSYNC_DEST`/`REMOTE`, preview composes cleanly:
 
 ```make
 preview: check all
@@ -150,15 +150,22 @@ a local `tar | tar` round-trip — slightly silly but uniform. Or
 short-circuit: if `REMOTE` is empty, do the simple local `diff`
 directly.
 
-**Sequencing:**
+**Sequencing:** goldens (Part 1) are independent and can land anytime.
+`make preview` (Part 2) is blocked on remote-deploy Phase 2. Goldens
+will likely ship as a standalone PR while remote-deploy is in flight.
 
-- If remote-deploy Phase 2 lands first: this plan picks up
-  `RSYNC_DEST`/`REMOTE` for free. Cleanest.
-- If this plan lands first: write `preview` with a local-only `diff`
-  and a TODO to wrap in `$(REMOTE)` once remote-deploy Phase 2 lands.
-  Cheap retrofit (one line).
-- Either order is fine. The two plans don't block each other; goldens
-  are entirely independent.
+Additional design notes from the sequencing discussion:
+
+- **Preview is additive, matching `make install`.** Today's install
+  rsync uses `-av --exclude='systemd/'` with no `--delete`. Preview
+  must match: deployed-only files (sqlite DBs, runtime state apps
+  write into their config dirs) are left alone, not flagged as "to
+  delete." Use `rsync -ain` (no `--delete`) for the manifest, and
+  drive the content diff from rsync's changed-file list rather than
+  a bidirectional `diff -ruN`.
+- **Snapshot the remote tree to `tmp/`.** `diff` can't reach across
+  ssh, so preview's first step is `$(REMOTE) tar -C /opt/mediaserver/config
+  -cf - . | tar -C tmp/deployed -xf -`. `tmp/` is gitignored.
 
 ### `plans/nixos-target.md` — preview semantics shift
 
