@@ -10,7 +10,7 @@ docker_config:
   command:
   - "--config=/etc/otelcol/otelcol-config.yaml"
   volumes:
-  - "${install_base}/config/otelcol:/etc/otelcol:ro"
+  - "<%= install_base %>/config/otelcol:/etc/otelcol:ro"
   - "/var/run/docker.sock:/var/run/docker.sock:ro"
   extra_hosts:
   - host.docker.internal:host-gateway

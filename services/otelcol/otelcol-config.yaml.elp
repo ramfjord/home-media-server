@@ -1,0 +1,124 @@
+receivers:
+  prometheus:
+    config:
+      scrape_configs:
+        # Discover all docker containers labeled prometheus.io/scrape=true
+        - job_name: docker_services
+          docker_sd_configs:
+            - host: unix:///var/run/docker.sock
+          relabel_configs:
+            - source_labels: [__meta_docker_container_label_prometheus_io_scrape]
+              regex: "true"
+              action: keep
+            # Strip leading slash from container name to use as hostname
+            - source_labels: [__meta_docker_container_name]
+              regex: '/(.*)'
+              target_label: __tmp_container_name
+            # Build address from container name + prometheus.io/port label
+            - source_labels: [__tmp_container_name, __meta_docker_container_label_prometheus_io_port]
+              separator: ':'
+              target_label: __address__
+            # Override metrics path if prometheus.io/path label is set
+            - source_labels: [__meta_docker_container_label_prometheus_io_path]
+              regex: '(.+)'
+              target_label: __metrics_path__
+            # Use container name as job label
+            - source_labels: [__meta_docker_container_name]
+              regex: '/(.*)'
+              target_label: job
+          # Map cadvisor container name labels to service/partof
+          metric_relabel_configs:
+<%- (dolist (svc (remove-if-not (lambda (s) (field s :dockerized)) services)) -%>
+            - source_labels: [name]
+              target_label: service
+              replacement: <%= (field svc :name) %>
+              regex: "<%= (field svc :name) %>"
+            - source_labels: [name]
+              target_label: partof
+              replacement: <%= (field svc :partof) %>
+              regex: "<%= (field svc :name) %>"
+<%- ) -%>
+
+        # Host-level exporters running outside docker
+        - job_name: host_exporters
+          static_configs:
+            - targets: ["host.docker.internal:9100"]
+              labels:
+                job: node_exporter
+                partof: monitoring
+          # Map systemd unit names to service/partof labels
+          metric_relabel_configs:
+<%- (dolist (svc (remove-if-not (lambda (s) (getf s :unit)) services)) -%>
+            - source_labels: [name]
+              target_label: service
+              replacement: <%= (field svc :name) %>
+              regex: "<%= (getf svc :unit) %>.service"
+            - source_labels: [name]
+              target_label: partof
+              replacement: <%= (field svc :partof) %>
+              regex: "<%= (getf svc :unit) %>.service"
+<%- ) -%>
+
+        # SNMP scrape of Synology NAS via snmp_exporter (disabled until NAS is set up).
+        # Uncomment together with the snmp-exporter service in services.yml and set
+        # snmp_host in config.local.yml.
+        # - job_name: 'snmp_synology'
+        #   metrics_path: /snmp
+        #   params:
+        #     module: [synology]
+        #     auth: [synology_v3]
+        #   static_configs:
+        #     - targets:
+        #       - <%= (or (getf globals :snmp-host) "synology.local") %>
+        #       labels:
+        #         service: synology-nas
+        #         partof: storage
+        #   relabel_configs:
+        #     - source_labels: [__address__]
+        #       target_label: __param_target
+        #     - source_labels: [__param_target]
+        #       target_label: instance
+        #     - target_label: __address__
+        #       replacement: "snmp-exporter:9116"
+
+        # HTTP probes via blackbox exporter for dockerized services
+<%- (dolist (svc (remove-if-not (lambda (s)
+                                  (and (field s :port)
+                                       (field s :dockerized)
+                                       (not (member (field s :name)
+                                                    '("grafana" "homer" "cadvisor")
+                                                    :test #'equal))))
+                                services)) -%>
+        - job_name: 'http_probe_<%= (field svc :name) %>'
+          metrics_path: /probe
+          params:
+            module: [http_basic]
+          static_configs:
+            - targets:
+              - http://<%= (field svc :name) %>:<%= (field svc :port) %><%= (or (field svc :healthz) "") %>
+              labels:
+                service: <%= (field svc :name) %>
+                partof: <%= (field svc :partof) %>
+                description: "<%= (field svc :desc) %>"
+          relabel_configs:
+            - source_labels: [__address__]
+              target_label: __param_target
+            - source_labels: [__param_target]
+              target_label: instance
+            - target_label: __address__
+              replacement: "blackbox-exporter:9115"
+<%- ) -%>
+
+processors:
+  batch: {}
+
+exporters:
+  prometheusremotewrite:
+    endpoint: "http://prometheus:9090/api/v1/write"
+
+service:
+  pipelines:
+    metrics:
+      receivers: [prometheus]
+      processors: [batch]
+      exporters: [prometheusremotewrite]
