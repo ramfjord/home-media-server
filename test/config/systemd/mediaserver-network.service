@@ -1,0 +1,13 @@
+[Unit]
+Description=Docker bridge network for mediaserver
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c '/usr/bin/docker network inspect mediaserver >/dev/null 2>&1 || /usr/bin/docker network create --driver bridge mediaserver'
+ExecStop=/usr/bin/docker network rm mediaserver
+
+[Install]
+WantedBy=multi-user.target

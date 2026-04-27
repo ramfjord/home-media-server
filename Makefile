@@ -8,27 +8,38 @@ TARGET ?= local
 RSYNC_DEST = $(if $(filter local,$(TARGET)),,$(TARGET):)
 REMOTE     = $(if $(filter local,$(TARGET)),,ssh $(TARGET))
 
-LIB_FILES := lib/mediaserver/config.rb lib/mediaserver/renderer.rb lib/mediaserver/validator.rb
-SERVICE_YAMLS := $(wildcard services/*/service.yml)
-RENDER_DEPS := render.rb $(LIB_FILES) globals.yml $(wildcard config.local.yml)
+# Anchor: directory containing this Makefile, after symlink resolution.
+# When invoked via test/Makefile -> ../Makefile, this still points at
+# the repo root — so bin/render and the systemd/*.elp templates resolve
+# the same way regardless of cwd. cwd-relative things (services/,
+# globals.yml, config.local.yml, config/) resolve to the invocation dir,
+# which is what makes the same Makefile drive both production and goldens.
+REPO_ROOT  := $(patsubst %/,%,$(dir $(realpath $(firstword $(MAKEFILE_LIST)))))
+RENDER_BIN := $(REPO_ROOT)/bin/render
+SYSTEMD    := $(REPO_ROOT)/systemd
+LISP_SRCS  := $(wildcard $(REPO_ROOT)/lisp/src/*.lisp) $(REPO_ROOT)/mediaserver.asd
 
-# ERB source → target mapping:
-#   services/<svc>/<path>.erb  →  config/<svc>/<path>
-#   <aggregator>.erb           →  config/<aggregator>
-SERVICE_ERBS := $(shell find services -name '*.erb' 2>/dev/null)
-TOP_ERBS     := $(wildcard *.erb)
-ERBS := $(patsubst services/%.erb,config/%,$(SERVICE_ERBS)) \
-        $(patsubst %.erb,config/%,$(TOP_ERBS))
+SERVICE_YAMLS := $(wildcard services/*/service.yml)
+RENDER_DEPS := $(RENDER_BIN) globals.yml $(wildcard config.local.yml)
+
+# ELP source → target mapping:
+#   services/<svc>/<path>.elp  →  config/<svc>/<path>
+#   <aggregator>.elp           →  config/<aggregator>
+SERVICE_ELPS := $(shell find services -name '*.elp' 2>/dev/null)
+TOP_ELPS     := $(wildcard *.elp)
+ELPS := $(patsubst services/%.elp,config/%,$(SERVICE_ELPS)) \
+        $(patsubst %.elp,config/%,$(TOP_ELPS))
 
 # Cached service lists. Regenerated when any service.yml or globals.yml changes.
-.make.services: $(SERVICE_YAMLS) globals.yml $(wildcard config.local.yml) $(LIB_FILES) render.rb
-	@./render.rb --list-make > $@
+.make.services: $(SERVICE_YAMLS) globals.yml $(wildcard config.local.yml) $(RENDER_BIN)
+	@$(RENDER_BIN) --list-make --root . > $@
 
 -include .make.services
 
-# Non-ERB files under services/ to copy to config/ (strip services/ prefix).
-NON_ERB_CONFIGS := $(patsubst services/%,%,$(shell find services -type f ! -name '*.erb' ! -name 'service.yml' 2>/dev/null))
-NON_ERB_CONFIG_TARGETS := $(addprefix config/,$(NON_ERB_CONFIGS))
+# Files under services/ to copy verbatim (not templates, not service.yml,
+# not legacy .erb shadows kept around for reference).
+NON_TPL_CONFIGS := $(patsubst services/%,%,$(shell find services -type f ! -name '*.elp' ! -name '*.erb' ! -name 'service.yml' 2>/dev/null))
+NON_TPL_TARGETS := $(addprefix config/,$(NON_TPL_CONFIGS))
 
 # Per-service docker-compose.yml targets
 COMPOSE_TARGETS := $(foreach s,$(DOCKERIZED_SERVICES),config/$(s)/docker-compose.yml)
@@ -43,31 +54,21 @@ STATIC_SYSTEMD_UNITS := config/systemd/mediaserver-network.service
 AGGREGATOR_SYSTEMD_UNITS := config/systemd/mediaserver.target
 SYSTEMD_UNITS := $(STATIC_SYSTEMD_UNITS) $(AGGREGATOR_SYSTEMD_UNITS) $(SYSTEMD_SERVICE_UNITS) $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS) $(SYSTEMD_COMPOSE_RELOAD_UNITS) $(SIGHUP_RELOAD_UNITS)
 
-.PHONY: clean check test test-lisp users install install-systemd render-bin $(addprefix systemd-,start stop restart enable disable status)
+.PHONY: clean check test users install install-systemd render-bin $(addprefix systemd-,start stop restart enable disable status)
 
 test:
 	ruby -Ilib -Itest -e 'Dir["test/*_test.rb"].reject { |f| f == "test/golden_test.rb" }.each { |f| require "./#{f}" }'
 	ruby test/golden_test.rb
 
-# Render every fixture template via the Lisp binary and diff against
-# the checked-in test/config/ goldens (produced by the Ruby renderer).
-# Empty diff means byte-for-byte parity.
-test-lisp: render-bin
-	script/render-fixtures.sh
-	@diff -r test/config/ test/config-lisp/ > /dev/null && echo "lisp render: byte-identical to goldens"
-
-# Build bin/render (saved SBCL core wrapping mediaserver/cli:main).
-# Slow first-time build (~5s); downstream invocations are ~100ms.
-RENDER_BIN := bin/render
-LISP_SRCS := $(wildcard lisp/src/*.lisp) mediaserver.asd
+# Lisp render binary. Slow first build (~5s); ~100ms per invocation after.
 render-bin: $(RENDER_BIN)
-$(RENDER_BIN): $(LISP_SRCS) script/build-render.sh
-	script/build-render.sh
+$(RENDER_BIN): $(LISP_SRCS) $(REPO_ROOT)/script/build-render.sh
+	$(REPO_ROOT)/script/build-render.sh
 
-all: $(ERBS) $(NON_ERB_CONFIG_TARGETS) $(COMPOSE_TARGETS) $(SYSTEMD_UNITS)
+all: $(ELPS) $(NON_TPL_TARGETS) $(COMPOSE_TARGETS) $(SYSTEMD_UNITS)
 
 clean:
-	rm -rf config/ .make.services test/config-lisp/
+	rm -rf config/ .make.services
 
 users:
 	script/make_users.sh
@@ -76,68 +77,76 @@ config:
 	mkdir config
 	chown $(USER):mediaserver config
 
-# --- Aggregator ERBs: depend on every service.yml (full iteration at render time). ---
+# --- Aggregator ELPs: depend on every service.yml (full iteration at render time). ---
 # Explicit rules take precedence over the implicit pattern rule below.
-AGGREGATOR_RULE = mkdir -p $(dir $@); ./render.rb < $< > $@
+AGGREGATOR_RULE = mkdir -p $(dir $@); $(RENDER_BIN) --root . $< > $@
 
-config/caddy/Caddyfile: services/caddy/Caddyfile.erb $(RENDER_DEPS) $(SERVICE_YAMLS)
+config/caddy/Caddyfile: services/caddy/Caddyfile.elp $(RENDER_DEPS) $(SERVICE_YAMLS)
 	$(AGGREGATOR_RULE)
 
-config/homer/config.yml: services/homer/config.yml.erb $(RENDER_DEPS) $(SERVICE_YAMLS)
+config/homer/config.yml: services/homer/config.yml.elp $(RENDER_DEPS) $(SERVICE_YAMLS)
 	$(AGGREGATOR_RULE)
 
-config/otelcol/otelcol-config.yaml: services/otelcol/otelcol-config.yaml.erb $(RENDER_DEPS) $(SERVICE_YAMLS)
+config/otelcol/otelcol-config.yaml: services/otelcol/otelcol-config.yaml.elp $(RENDER_DEPS) $(SERVICE_YAMLS)
 	$(AGGREGATOR_RULE)
 
-config/prometheus/rules/mediaserver.yaml: services/prometheus/rules/mediaserver.yaml.erb $(RENDER_DEPS) $(SERVICE_YAMLS)
+config/prometheus/rules/mediaserver.yaml: services/prometheus/rules/mediaserver.yaml.elp $(RENDER_DEPS) $(SERVICE_YAMLS)
 	$(AGGREGATOR_RULE)
 
-config/systemd/mediaserver.target: systemd/mediaserver.target.erb $(RENDER_DEPS) $(SERVICE_YAMLS)
+config/systemd/mediaserver.target: $(SYSTEMD)/mediaserver.target.elp $(RENDER_DEPS) $(SERVICE_YAMLS)
 	$(AGGREGATOR_RULE)
 
-# --- Per-service ERB rendering (narrow dep). Secondary expansion picks out the owning service. ---
+# Top-level *.elp (e.g. deploy.sh.elp). Renders to config/<basename>.
+config/%: %.elp $(RENDER_DEPS) $(SERVICE_YAMLS)
+	$(AGGREGATOR_RULE)
+
+# --- Per-service ELP rendering (narrow dep). Secondary expansion picks out the owning service. ---
 svc_of = $(firstword $(subst /, ,$(1)))
 
-config/%: services/%.erb $(RENDER_DEPS) services/$$(call svc_of,$$*)/service.yml
+config/%: services/%.elp $(RENDER_DEPS) services/$$(call svc_of,$$*)/service.yml
 	mkdir -p $(dir $@)
-	./render.rb < $< > $@
+	SERVICE_NAME=$(call svc_of,$*) $(RENDER_BIN) --root . $< > $@
 
-# Copy non-ERB files from services/<svc>/... to config/<svc>/...
+# Copy non-template files from services/<svc>/... to config/<svc>/...
 config/%: services/%
 	mkdir -p $(dir $@)
 	cp $< $@
 
 # Per-service docker-compose.yml (same template, different SERVICE_NAME per file).
-config/%/docker-compose.yml: systemd/service.compose.yml.erb $(RENDER_DEPS) services/$$*/service.yml
+config/%/docker-compose.yml: $(SYSTEMD)/service.compose.yml.elp $(RENDER_DEPS) services/$$*/service.yml
 	mkdir -p $(dir $@)
-	SERVICE_NAME=$* ./render.rb < $< > $@
+	SERVICE_NAME=$* $(RENDER_BIN) --root . $< > $@
 
 # Static systemd units (no rendering, just copy).
-config/systemd/%.service: systemd/%.service
+config/systemd/%.service: $(SYSTEMD)/%.service
 	mkdir -p $(dir $@)
 	cp $< $@
 
 # --- Systemd unit pattern rules ---
-config/systemd/%-compose-reload.service: systemd/service-compose-reload.service.erb $(RENDER_DEPS) services/$$*/service.yml
+config/systemd/%-compose-reload.service: $(SYSTEMD)/service-compose-reload.service.elp $(RENDER_DEPS) services/$$*/service.yml
 	mkdir -p $(dir $@)
-	SERVICE_NAME=$* ./render.rb < $< > $@
+	SERVICE_NAME=$* $(RENDER_BIN) --root . $< > $@
 
-config/systemd/%-compose.path: systemd/service-compose.path.erb $(RENDER_DEPS) services/$$*/service.yml
+config/systemd/%-compose.path: $(SYSTEMD)/service-compose.path.elp $(RENDER_DEPS) services/$$*/service.yml
 	mkdir -p $(dir $@)
-	SERVICE_NAME=$* ./render.rb < $< > $@
+	SERVICE_NAME=$* $(RENDER_BIN) --root . $< > $@
 
-config/systemd/%-reload.service: systemd/sighup-reload.service.erb $(RENDER_DEPS) services/$$*/service.yml
+config/systemd/%-reload.service: $(SYSTEMD)/sighup-reload.service.elp $(RENDER_DEPS) services/$$*/service.yml
 	mkdir -p $(dir $@)
-	SERVICE_NAME=$* ./render.rb < $< > $@
+	SERVICE_NAME=$* $(RENDER_BIN) --root . $< > $@
 
-config/systemd/%.service: systemd/service.service.erb $(RENDER_DEPS) services/$$*/service.yml
+config/systemd/%.service: $(SYSTEMD)/service.service.elp $(RENDER_DEPS) services/$$*/service.yml
 	mkdir -p $(dir $@)
-	SERVICE_NAME=$* ./render.rb < $< > $@
+	SERVICE_NAME=$* $(RENDER_BIN) --root . $< > $@
 
-# .path units enumerate the service's source files; dep includes every file in the service dir.
-config/systemd/%.path: systemd/service.path.erb $(RENDER_DEPS) services/$$*/service.yml $$(shell find services/$$* -type f 2>/dev/null)
+# .path units enumerate the service's deployed files. Compute the list
+# here (Make is the dispatcher); pass via SERVICE_FILES env var, which
+# the .elp template walks. Excludes service.yml, .erb shadows, .elp
+# extension stripped to match the deployed filename.
+service_files = $(shell cd services/$(1) 2>/dev/null && find . -type f ! -name 'service.yml' ! -name '*.erb' -printf '%P\n' | sed 's/\.elp$$//' | tr '\n' ' ')
+config/systemd/%.path: $(SYSTEMD)/service.path.elp $(RENDER_DEPS) services/$$*/service.yml $$(shell find services/$$* -type f 2>/dev/null)
 	mkdir -p $(dir $@)
-	SERVICE_NAME=$* ./render.rb < $< > $@
+	SERVICE_NAME=$* SERVICE_FILES="$(call service_files,$*)" $(RENDER_BIN) --root . $< > $@
 
 check: all
 	# TODO convert these to use the container versions of promtool/amtool
