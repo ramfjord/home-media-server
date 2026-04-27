@@ -1,9 +1,0 @@
-[Unit]
-Description=Config watcher for fx-wireguard
-
-[Path]
-Unit=fx-wireguard.service
-
-[Install]
-WantedBy=fx-wireguard.service
-RequiredBy=fx-wireguard.service

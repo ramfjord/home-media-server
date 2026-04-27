@@ -65,7 +65,14 @@ render-bin: $(RENDER_BIN)
 $(RENDER_BIN): $(LISP_SRCS) $(REPO_ROOT)/script/build-render.sh
 	$(REPO_ROOT)/script/build-render.sh
 
-all: $(ELPS) $(NON_TPL_TARGETS) $(COMPOSE_TARGETS) $(SYSTEMD_UNITS)
+all: $(ELPS) $(NON_TPL_TARGETS) $(COMPOSE_TARGETS) $(SYSTEMD_UNITS) config/list-make.txt
+
+# Snapshot of service-list make variables. Same data as .make.services
+# (the cached, gitignored copy used for Make dispatch) — checked-in
+# under test/config/ for goldens so format changes are reviewable.
+config/list-make.txt: $(SERVICE_YAMLS) globals.yml $(wildcard config.local.yml) $(RENDER_BIN)
+	@mkdir -p $(dir $@)
+	$(RENDER_BIN) --list-make --root . > $@
 
 clean:
 	rm -rf config/ .make.services

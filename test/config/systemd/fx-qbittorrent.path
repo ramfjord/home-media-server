@@ -1,9 +1,0 @@
-[Unit]
-Description=Config watcher for fx-qbittorrent
-
-[Path]
-Unit=fx-qbittorrent.service
-
-[Install]
-WantedBy=fx-qbittorrent.service
-RequiredBy=fx-qbittorrent.service
