@@ -58,12 +58,9 @@ SYSTEMD_UNITS := $(STATIC_SYSTEMD_UNITS) $(AGGREGATOR_SYSTEMD_UNITS) $(SYSTEMD_S
 
 test: render-bin
 	ruby -Ilib -Itest -e 'Dir["test/*_test.rb"].reject { |f| f == "test/golden_test.rb" }.each { |f| require "./#{f}" }'
-	@echo "--- Goldens: cd test && make all, diff against checked-in test/config/"
-	@rm -rf test/config-tmp && mv test/config test/config-tmp || true
-	@cd test && $(MAKE) all > /dev/null 2>&1
-	@diff -r test/config-tmp test/config > /dev/null && rm -rf test/config-tmp && echo "goldens clean" || \
-	  (echo "GOLDEN DIFF (run: rm -rf test/config && cd test && make all to regenerate, then git diff to review):"; \
-	   diff -r test/config-tmp test/config | head -20; rm -rf test/config-tmp; exit 1)
+	@cd test && $(MAKE) all > /dev/null
+	@git diff --exit-code test/config/ > /dev/null && echo "goldens clean" || \
+	  (echo "GOLDEN DIFF in test/config/. Inspect via 'git diff test/config/'."; exit 1)
 
 # Lisp render binary. Builds in ~2s; per-call render is ~25ms because
 # the production config (services + globals + local overrides) is baked
