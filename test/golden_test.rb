@@ -2,8 +2,8 @@
 # Golden tests for the renderer.
 #
 # Renders every ERB template (host-side systemd units + per-service
-# templates) against the fixture tree under test/fixtures/, then
-# diffs against checked-in goldens under test/golden/.
+# templates) against the fixture tree under test/, then diffs against
+# checked-in goldens under test/config/.
 #
 #   ruby test/golden_test.rb               # check
 #   UPDATE_GOLDEN=1 ruby test/golden_test.rb  # re-seed
@@ -13,8 +13,8 @@ require 'fileutils'
 require 'tempfile'
 require 'mediaserver/renderer'
 
-FIXTURE_ROOT = File.expand_path('fixtures', __dir__)
-GOLDEN_ROOT  = File.expand_path('golden', __dir__)
+FIXTURE_ROOT = File.expand_path('.', __dir__)
+GOLDEN_ROOT  = File.expand_path('config', __dir__)
 PROJECT_ROOT = File.expand_path('..', __dir__)
 UPDATE       = ENV['UPDATE_GOLDEN'] == '1'
 

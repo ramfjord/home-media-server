@@ -7,10 +7,11 @@ elp
 docker-compose.yml
 
 # Fixture tree (test goldens) overrides the above ignores.
-!test/fixtures/config.local.yml
-!test/fixtures/certs/
-!test/fixtures/certs/**
-!test/golden/*/docker-compose.yml
+!test/config.local.yml
+!test/certs/
+!test/certs/**
+!test/config/
+!test/config/**
 .make.services
 Makefile.local
 audio-normalizer/examples
