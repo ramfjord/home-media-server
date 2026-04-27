@@ -1,5 +1,16 @@
 (in-package :mediaserver)
 
+(defun ruby-capitalize (s)
+  "Mirror Ruby's String#capitalize: upcase the first character, downcase
+   the rest. CL's string-capitalize splits on word boundaries, which
+   would turn \"blackbox-exporter\" into \"Blackbox-Exporter\" instead
+   of \"Blackbox-exporter\"."
+  (if (zerop (length s))
+      s
+      (concatenate 'string
+                   (string (char-upcase (char s 0)))
+                   (string-downcase (subseq s 1)))))
+
 ;;; Block-style YAML emit, the subset templates need.
 ;;;
 ;;; Mirrors Ruby Psych's defaults closely enough for the docker-compose

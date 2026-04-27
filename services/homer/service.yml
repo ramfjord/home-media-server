@@ -8,6 +8,6 @@ docker_config:
   ports:
   - 80:8080
   volumes:
-  - "${install_base}/config/homer:/www/assets"
+  - "<%= install_base %>/config/homer:/www/assets"
   restart: unless-stopped
 order: 80

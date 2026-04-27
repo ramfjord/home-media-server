@@ -1,0 +1,50 @@
+---
+title: Media Server
+subtitle: Service Dashboard
+logo: logo.png
+icon: fas fa-server
+
+# Group services by category
+<%-
+;; Categories: every distinct :partof value except "dashboard" (homer
+;; itself). Map each to a font-awesome icon; unknown categories fall
+;; through to a folder default. Items within a category are services
+;; with a :port that aren't homer/dashboard.
+(let* ((displayable
+        (remove-if (lambda (s)
+                     (or (string= (field s :name) "homer")
+                         (string= (field s :partof) "dashboard")
+                         (not (field s :port))))
+                   services))
+       (categories
+        (sort (remove-duplicates (mapcar (lambda (s) (field s :partof))
+                                         displayable)
+                                 :test #'equal)
+              #'string<))
+       (icons '(("downloading" . "fas fa-cloud-download-alt")
+                ("streaming"   . "fas fa-play-circle")
+                ("vpn"         . "fas fa-shield-alt")
+                ("security"    . "fas fa-lock")
+                ("monitoring"  . "fas fa-chart-line"))))
+  ;; Asset-presence check mirrors the Ruby template's runtime guard.
+  (dolist (svc displayable)
+    (let ((icon-path (format nil "services/homer/assets/tools/~A.png"
+                             (field svc :name))))
+      (unless (probe-file icon-path)
+        (error "Missing icon for ~A: ~A" (field svc :name) icon-path))))
+-%>
+services:
+<%- (dolist (category categories) -%>
+  - name: "<%= (mediaserver::ruby-capitalize category) %>"
+    icon: "<%= (or (cdr (assoc category icons :test #'equal)) "fas fa-folder") %>"
+    items:
+<%-   (dolist (svc (remove-if-not (lambda (s) (equal (field s :partof) category))
+                                  displayable)) -%>
+      - name: "<%= (mediaserver::ruby-capitalize (field svc :name)) %>"
+        subtitle: "<%= (field svc :desc) %>"
+        logo: "assets/tools/<%= (field svc :name) %>.png"
+        url: "https://<%= hostname %>:<%= (field svc :port) %>"
+        target: "_blank"
+<%-   ) -%>
+<%- ) -%>
+<%- ) -%>
