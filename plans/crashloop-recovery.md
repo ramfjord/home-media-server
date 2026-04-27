@@ -428,20 +428,24 @@ handoff doc's premise (overlay-layer downloads) was wrong.
    - Used during commit 3's recovery already (manually inlined). This commit just promotes that one-liner into a Makefile target.
    - Kept the existing `mediaserver.target` joint recipe for `start/stop/restart`; `status` is the only verb that benefits from per-service granularity. Plex shows `inactive` (Debian package, no systemd unit) — accepted noise; out-of-scope to filter.
 
-5. **Add `host/` skeleton + `script/install-host-config.sh`** —
-   New `host/etc/` tree (empty for now), plus
+5. ✅ **Add `host/` skeleton + `script/install-host-config.sh`** —
+   New `host/` directory with a README.md explaining purpose, and
    `script/install-host-config.sh <target>` that takes an ssh alias
    (or `local`) and copies `host/etc/sysctl.d/*.conf` and
    `host/etc/docker/daemon.json` to the right paths, running the
    appropriate reload (`sysctl --system`, `systemctl restart docker`)
-   only if files actually changed. Use `install -C` semantics or
-   hash compare. Header comment in each host-side file: rationale,
-   link to this plan, "this is throwaway at NixOS cutover —
-   `plans/nixos-target.md` will template these." Shellcheck clean.
+   only if files actually changed. Idempotent via `rsync --checksum
+   --itemize-changes` — categorize the changed files and reload
+   only the affected daemons. Header comment in each host-side file
+   to be added in commits 6/7. Shellcheck clean.
    *Verify:* `script/install-host-config.sh local` is a no-op when
    `host/etc/` is empty; running twice in a row with one stub file
    reloads exactly once. `script/install-host-config.sh fatlaptop`
    on a clean tree reloads nothing (since no files exist yet).
+   **Decisions:**
+   - No `host/etc/` subdir created in this commit — git can't track empty dirs and commits 6/7 will create the parents when adding files.
+   - Idempotency uses `rsync -a --checksum --itemize-changes --chown=root:root`. The chown flag forces dest-side ownership to root regardless of source-side owner (which is `tramfjord` in the repo).
+   - "Reloads exactly once on second run" verify can't run on the laptop without interactive sudo. The no-op path was verified on both `local` and `fatlaptop`; commits 6/7 will exercise the live reload paths with real files and serve as the integration verify.
 
 6. **Add `kernel.core_pattern = |/bin/true` drop-in** — Write
    `host/etc/sysctl.d/60-no-coredumps.conf`:
