@@ -9,11 +9,11 @@ docker_config:
   image: prom/prometheus:latest
   command:
   - "--config.file=/etc/prometheus/prometheus.yml"
-  - "--web.external-url=http://${hostname}:9090/"
+  - "--web.external-url=http://<%= hostname %>:9090/"
   - "--web.enable-remote-write-receiver"
   volumes:
-  - "${install_base}/config/prometheus:/etc/prometheus:ro"
-  - "${install_base}/config/prometheus/data:/prometheus/data"
+  - "<%= install_base %>/config/prometheus:/etc/prometheus:ro"
+  - "<%= install_base %>/config/prometheus/data:/prometheus/data"
   labels:
     prometheus.io/scrape: 'true'
     prometheus.io/port: '9090'
