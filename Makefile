@@ -80,6 +80,11 @@ config/prometheus/rules/mediaserver.yaml: services/prometheus/rules/mediaserver.
 config/systemd/mediaserver.target: systemd/mediaserver.target.erb $(RENDER_DEPS) $(SERVICE_YAMLS)
 	$(AGGREGATOR_RULE)
 
+# Top-level *.erb (e.g. deploy.sh.erb). Renders to config/<basename>.
+# Treated as an aggregator (depends on every service.yml).
+config/%: %.erb $(RENDER_DEPS) $(SERVICE_YAMLS)
+	$(AGGREGATOR_RULE)
+
 # --- Per-service ERB rendering (narrow dep). Secondary expansion picks out the owning service. ---
 svc_of = $(firstword $(subst /, ,$(1)))
 
@@ -139,30 +144,18 @@ check: all
 	  systemd-analyze verify "$$f" > /dev/null || (echo "FAIL: $$f" && exit 1); \
 	done
 
-SYSTEMD_DIR := /etc/systemd/system
-
 install: check
-	@if [ "$(TARGET)" != "local" ]; then \
-	  echo "Remote install is currently broken: rendered compose 'user:' uses"; \
-	  echo "the laptop's uid for each service, but install rsync chowns config"; \
-	  echo "files to the target host's uid. Mismatch crashloops every container"; \
-	  echo "with 'user:' set. To be fixed by plans/static-uids.md; full"; \
-	  echo "diagnosis in plans/crashloop-recovery.md."; \
+	@if [ "$(TARGET)" = "local" ]; then \
+	  echo "TARGET=local is not supported. Set TARGET=<ssh-alias> (e.g. fatlaptop)."; \
 	  exit 1; \
 	fi
-	@for svc in $(ALL_SERVICES); do \
-	  if [ -d config/$$svc ]; then \
-	    rsync -av --rsync-path="sudo rsync" --mkpath --chown=$$svc:mediaserver --chmod=Dg+s config/$$svc/ $(RSYNC_DEST)/opt/mediaserver/config/$$svc/; \
-	  fi; \
-	done
-	rsync -av --rsync-path="sudo rsync" certs/ $(RSYNC_DEST)/opt/mediaserver/certs/
+	rsync -av --rsync-path="sudo rsync" --delete --mkpath \
+	  config/ $(TARGET):/opt/mediaserver/staging/
+	rsync -av --rsync-path="sudo rsync" --mkpath \
+	  certs/  $(TARGET):/opt/mediaserver/staging/certs/
+	ssh $(TARGET) sudo bash /opt/mediaserver/staging/deploy.sh
 
 PATH_UNITS := $(notdir $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS))
-
-install-systemd: install $(SYSTEMD_UNITS)
-	$(REMOTE) sudo mkdir -p $(SYSTEMD_DIR)
-	rsync -av --rsync-path="sudo rsync" config/systemd/ $(RSYNC_DEST)$(SYSTEMD_DIR)/
-	$(REMOTE) sudo systemctl daemon-reload
 
 systemd-start systemd-stop systemd-restart:
 	@$(REMOTE) sudo systemctl $(patsubst systemd-%,%,$@) mediaserver.target

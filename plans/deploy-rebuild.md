@@ -237,15 +237,23 @@ its own commit.
    *Verify:* `make all` and `grep certs config/caddy/docker-compose.yml`
    shows the mount. Caddy will come up clean once deployed.
 
-3. **Add `deploy.sh.erb` + `make install` rebuild** — New
-   top-level template (already drafted). Renders to
-   `config/deploy.sh`. Loops `services.select(&:dockerized?)`,
-   emits `chown <name>:mediaserver --chmod=Dg+s,Fg+w` rsync
-   per service, special-cases certs, finishes with systemd
-   units + daemon-reload. Makefile `install:` becomes:
-   `rsync config/ + certs/ to staging; ssh sudo bash
-   $STAGING/deploy.sh`. Drop `install-systemd:` (subsumed).
-   Drop `TARGET=local` support.
+3. ✅ **Add `deploy.sh.erb` + `make install` rebuild** — New
+   top-level template. Renders to `config/deploy.sh` via a new
+   generic `config/%: %.erb` Makefile pattern (closes a latent
+   gap: `TOP_ERBS` was registered as a target but no rule
+   existed to build it). Template loops
+   `services.select(&:dockerized?)`, emits
+   `chown <name>:mediaserver --chmod=Dg+s,Fg+w` rsync per
+   service (or `--no-owner --no-group` for `user_id: false`
+   services), special-cases certs, finishes with systemd units
+   + daemon-reload. Makefile `install:` rewritten to: rsync
+   `config/` + `certs/` to `/opt/mediaserver/staging/` on
+   `$(TARGET)`, then `ssh $(TARGET) sudo bash
+   /opt/mediaserver/staging/deploy.sh`. Subsumes and removes
+   `install-systemd:` (deploy.sh handles systemd units in the
+   same pass). Removes the freeze guard from
+   `plans/crashloop-recovery.md` commit 2 (folded in — install
+   is now safe). Refuses `TARGET=local` with a one-line error.
    *Verify:* `make install TARGET=fatlaptop` exits 0. Followed
    by `TARGET=fatlaptop make systemd-status` 30s later: 17 of
    18 services `active` (vaultwarden + the 17 user-having
@@ -253,14 +261,12 @@ its own commit.
    keys before this branch — see *Out of scope* below).
    Specifically caddy flips from `inactive` to `active` thanks
    to the certs mount.
-
-4. **Drop the deploy-freeze guard** — The 6-line `@if [
-   "$(TARGET)" != "local" ]` early-exit added in
-   `plans/crashloop-recovery.md` commit 2 is now obsolete.
-   Remove. The freeze served its purpose; the install is now
-   safe.
-   *Verify:* `make install TARGET=fatlaptop` runs through;
-   the freeze message no longer appears.
+   **Decisions:**
+   - First deploy attempt fixed caddy + exportarrs but broke jellyfin/prometheus/grafana with permission-denied on runtime state files (`data/queries.active`, `database file`). Cause: rsync's `--chown` only chowns transferred files; runtime state in `data/`, `logs/`, `db/` subdirs that the container created on prior boots was untouched and kept stale ownership (laptop's uid from `plans/crashloop-recovery.md` commit 3's recovery chowns).
+   - Fix: post-rsync `chown -R <svc>:mediaserver` per service. Catches every file in the live tree, including runtime state outside the rendered config. Verified on second deploy: all three regressions cleared. Final state matches the verify target (17 affected services active).
+   - For services with `user_id: false` (wireguard, vaultwarden), no `chown -R` either — preserves whatever ownership exists.
+   - Top-level `*.erb` Makefile rule (`config/%: %.erb`) closes a latent gap: `TOP_ERBS` was registered as a target via `$(patsubst %.erb,config/%,$(TOP_ERBS))` but no buildable rule existed. We're the first top-level erb in the repo so we're the first to hit it.
+   - Folded the freeze-guard removal into this commit (originally was its own follow-up commit 4). The rewrite replaces the install: recipe wholesale; the freeze code is gone implicitly.
 
 ## Status of working-tree changes (as of this writing)
 
