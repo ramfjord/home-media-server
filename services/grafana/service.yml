@@ -11,10 +11,10 @@ docker_config:
   - GF_SECURITY_ADMIN_USER=admin
   - GF_SECURITY_ADMIN_PASSWORD=admin
   volumes:
-  - "${install_base}/config/grafana:/var/lib/grafana"
-  - "${install_base}/config/grafana/grafana.ini:/etc/grafana/grafana.ini:ro"
-  - "${install_base}/config/grafana/provisioning/dashboards:/var/lib/grafana/provisioning/dashboards"
-  - "${install_base}/config/grafana/provisioning/datasources:/var/lib/grafana/provisioning/datasources"
+  - "<%= install_base %>/config/grafana:/var/lib/grafana"
+  - "<%= install_base %>/config/grafana/grafana.ini:/etc/grafana/grafana.ini:ro"
+  - "<%= install_base %>/config/grafana/provisioning/dashboards:/var/lib/grafana/provisioning/dashboards"
+  - "<%= install_base %>/config/grafana/provisioning/datasources:/var/lib/grafana/provisioning/datasources"
   labels:
     prometheus.io/scrape: 'true'
     prometheus.io/port: '3000'
