@@ -7,6 +7,7 @@ docker_config:
   image: caddy:latest
   volumes:
   - "${install_base}/config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro"
+  - "${install_base}/certs:/etc/caddy/certs:ro"
   ports:
   - 8080:8080
   - 7878:7878

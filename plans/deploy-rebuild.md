@@ -229,7 +229,7 @@ its own commit.
    - Fixture services updated: fx-wireguard gets `user_id: false`, the other four get sentinel uids 99001–99004 (above any real-uid range, so goldens cover both branches without colliding with deploy data).
    - The dropped wireguard hardcode in `ProjectService#user_id` is a small purity win — service-shape concerns now live in service.yml, not in code.
 
-2. **Caddy certs bind-mount fix** — Add
+2. ✅ **Caddy certs bind-mount fix** — Add
    `${install_base}/certs:/etc/caddy/certs:ro` to caddy's
    `service.yml` volumes. (Already drafted in working tree;
    ship it here.) Without this, the cert files exist on the
