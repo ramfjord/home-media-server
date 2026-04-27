@@ -19,9 +19,6 @@ RENDER_BIN := $(REPO_ROOT)/bin/render
 SYSTEMD    := $(REPO_ROOT)/systemd
 LISP_SRCS  := $(wildcard $(REPO_ROOT)/lisp/src/*.lisp) $(REPO_ROOT)/mediaserver.asd
 
-SERVICE_YAMLS := $(wildcard services/*/service.yml)
-RENDER_DEPS := $(RENDER_BIN) globals.yml $(wildcard config.local.yml)
-
 # ELP source → target mapping:
 #   services/<svc>/<path>.elp  →  config/<svc>/<path>
 #   <aggregator>.elp           →  config/<aggregator>
@@ -30,8 +27,10 @@ TOP_ELPS     := $(wildcard *.elp)
 ELPS := $(patsubst services/%.elp,config/%,$(SERVICE_ELPS)) \
         $(patsubst %.elp,config/%,$(TOP_ELPS))
 
-# Cached service lists. Regenerated when any service.yml or globals.yml changes.
-.make.services: $(SERVICE_YAMLS) globals.yml $(wildcard config.local.yml) $(RENDER_BIN)
+# Cached service lists. bin/render bakes in the merged config, so its
+# mtime is the right trigger — re-running --list-make against a fresh
+# binary picks up any service.yml change automatically.
+.make.services: $(RENDER_BIN)
 	@$(RENDER_BIN) --list-make --root . > $@
 
 -include .make.services
@@ -63,9 +62,9 @@ test: render-bin
 	  (echo "GOLDEN DIFF in test/config/. Inspect via 'git diff test/config/'."; exit 1)
 
 # Lisp render binary. Builds in ~2s; per-call render is ~25ms because
-# the production config (services + globals + local overrides) is baked
-# into the saved core. Rebuild triggers on Lisp source change *or* any
-# config file change, so deploys always run against current data.
+# the merged config (services + globals + local overrides) is baked
+# into the saved core, so cl-yaml load + ELP preprocessing happen once
+# at build time, not per call.
 #
 # Deps are anchored to $(REPO_ROOT) so the binary doesn't get rebuilt
 # spuriously when invoked from test/ (different cwd, different
@@ -82,8 +81,7 @@ all: $(ELPS) $(NON_TPL_TARGETS) $(COMPOSE_TARGETS) $(SYSTEMD_UNITS) config/list-
 # Snapshot of service-list make variables. Same data as .make.services
 # (the cached, gitignored copy used for Make dispatch) — checked-in
 # under test/config/ for goldens so format changes are reviewable.
-config/list-make.txt: $(SERVICE_YAMLS) globals.yml $(wildcard config.local.yml) $(RENDER_BIN)
-	@mkdir -p $(dir $@)
+config/list-make.txt: $(RENDER_BIN) | $(@D)/
 	$(RENDER_BIN) --list-make --root . > $@
 
 clean:
@@ -92,79 +90,72 @@ clean:
 users:
 	script/make_users.sh
 
-config:
-	mkdir config
-	chown $(USER):mediaserver config
+# Order-only directory creation. One mkdir per dir, never repeated;
+# render rules say `| $(@D)` so Make ensures the dir exists without
+# rebuilding the target on dir mtime ticks.
+DIRS := $(sort $(dir $(ELPS) $(NON_TPL_TARGETS) $(COMPOSE_TARGETS) $(SYSTEMD_UNITS) config/list-make.txt))
+$(DIRS):
+	mkdir -p $@
 
-# --- Aggregator ELPs: depend on every service.yml (full iteration at render time). ---
-# Explicit rules take precedence over the implicit pattern rule below.
-AGGREGATOR_RULE = mkdir -p $(dir $@); $(RENDER_BIN) --root . $< > $@
-
-config/caddy/Caddyfile: services/caddy/Caddyfile.elp $(RENDER_DEPS) $(SERVICE_YAMLS)
-	$(AGGREGATOR_RULE)
-
-config/homer/config.yml: services/homer/config.yml.elp $(RENDER_DEPS) $(SERVICE_YAMLS)
-	$(AGGREGATOR_RULE)
-
-config/otelcol/otelcol-config.yaml: services/otelcol/otelcol-config.yaml.elp $(RENDER_DEPS) $(SERVICE_YAMLS)
-	$(AGGREGATOR_RULE)
-
-config/prometheus/rules/mediaserver.yaml: services/prometheus/rules/mediaserver.yaml.elp $(RENDER_DEPS) $(SERVICE_YAMLS)
-	$(AGGREGATOR_RULE)
-
-config/systemd/mediaserver.target: $(SYSTEMD)/mediaserver.target.elp $(RENDER_DEPS) $(SERVICE_YAMLS)
-	$(AGGREGATOR_RULE)
-
-# Top-level *.elp (e.g. deploy.sh.elp). Renders to config/<basename>.
-config/%: %.elp $(RENDER_DEPS) $(SERVICE_YAMLS)
-	$(AGGREGATOR_RULE)
-
-# --- Per-service ELP rendering (narrow dep). Secondary expansion picks out the owning service. ---
+# --- Render rules ---
+#
+# bin/render bakes the merged config (services + globals + locals) into
+# its saved core, so every render output transitively depends on the
+# binary — no need for per-rule SERVICE_YAMLS / globals.yml / config.local.yml
+# deps. When any of those change, bin/render rebuilds (per the
+# $(RENDER_BIN) rule above) and Make re-runs every render that depends
+# on it.
 svc_of = $(firstword $(subst /, ,$(1)))
 
-config/%: services/%.elp $(RENDER_DEPS) services/$$(call svc_of,$$*)/service.yml
-	mkdir -p $(dir $@)
+# Per-service ELP rendering. Covers both per-service templates
+# (services/qbittorrent/qBittorrent/qBittorrent.conf.elp ->
+# config/qbittorrent/qBittorrent/qBittorrent.conf) and aggregators
+# (services/caddy/Caddyfile.elp -> config/caddy/Caddyfile) — the
+# template knows whether to iterate over `services` or use the bound
+# `service`; Make doesn't.
+config/%: services/%.elp $(RENDER_BIN) | $$(@D)/
 	SERVICE_NAME=$(call svc_of,$*) $(RENDER_BIN) --root . $< > $@
 
+# Top-level *.elp at repo root (e.g. deploy.sh.elp).
+config/%: %.elp $(RENDER_BIN) | $$(@D)/
+	$(RENDER_BIN) --root . $< > $@
+
 # Copy non-template files from services/<svc>/... to config/<svc>/...
-config/%: services/%
-	mkdir -p $(dir $@)
+config/%: services/% | $$(@D)/
 	cp $< $@
 
-# Per-service docker-compose.yml (same template, different SERVICE_NAME per file).
-config/%/docker-compose.yml: $(SYSTEMD)/service.compose.yml.elp $(RENDER_DEPS) services/$$*/service.yml
-	mkdir -p $(dir $@)
+# Per-service docker-compose.yml: shared template, SERVICE_NAME per file.
+config/%/docker-compose.yml: $(SYSTEMD)/service.compose.yml.elp $(RENDER_BIN) | $$(@D)/
 	SERVICE_NAME=$* $(RENDER_BIN) --root . $< > $@
+
+# mediaserver.target is the one aggregator template that lives under
+# systemd/ (not services/), so it doesn't fit the per-service pattern.
+# Explicit rule for it; everything else collapses.
+config/systemd/mediaserver.target: $(SYSTEMD)/mediaserver.target.elp $(RENDER_BIN) | $$(@D)/
+	$(RENDER_BIN) --root . $< > $@
 
 # Static systemd units (no rendering, just copy).
-config/systemd/%.service: $(SYSTEMD)/%.service
-	mkdir -p $(dir $@)
+config/systemd/%.service: $(SYSTEMD)/%.service | $$(@D)/
 	cp $< $@
 
-# --- Systemd unit pattern rules ---
-config/systemd/%-compose-reload.service: $(SYSTEMD)/service-compose-reload.service.elp $(RENDER_DEPS) services/$$*/service.yml
-	mkdir -p $(dir $@)
+config/systemd/%-compose-reload.service: $(SYSTEMD)/service-compose-reload.service.elp $(RENDER_BIN) | $$(@D)/
 	SERVICE_NAME=$* $(RENDER_BIN) --root . $< > $@
 
-config/systemd/%-compose.path: $(SYSTEMD)/service-compose.path.elp $(RENDER_DEPS) services/$$*/service.yml
-	mkdir -p $(dir $@)
+config/systemd/%-compose.path: $(SYSTEMD)/service-compose.path.elp $(RENDER_BIN) | $$(@D)/
 	SERVICE_NAME=$* $(RENDER_BIN) --root . $< > $@
 
-config/systemd/%-reload.service: $(SYSTEMD)/sighup-reload.service.elp $(RENDER_DEPS) services/$$*/service.yml
-	mkdir -p $(dir $@)
+config/systemd/%-reload.service: $(SYSTEMD)/sighup-reload.service.elp $(RENDER_BIN) | $$(@D)/
 	SERVICE_NAME=$* $(RENDER_BIN) --root . $< > $@
 
-config/systemd/%.service: $(SYSTEMD)/service.service.elp $(RENDER_DEPS) services/$$*/service.yml
-	mkdir -p $(dir $@)
+config/systemd/%.service: $(SYSTEMD)/service.service.elp $(RENDER_BIN) | $$(@D)/
 	SERVICE_NAME=$* $(RENDER_BIN) --root . $< > $@
 
-# .path units enumerate the service's deployed files. Compute the list
-# here (Make is the dispatcher); pass via SERVICE_FILES env var, which
-# the .elp template walks. Excludes service.yml, .erb shadows, .elp
-# extension stripped to match the deployed filename.
+# .path units enumerate the service's deployed files. Make computes
+# the list here (it's the dispatcher), passes via SERVICE_FILES env
+# var, which the .elp template walks. Excludes service.yml, .erb
+# shadows, .elp extension stripped to match the deployed filename.
 service_files = $(shell cd services/$(1) 2>/dev/null && find . -type f ! -name 'service.yml' ! -name '*.erb' -printf '%P\n' | sed 's/\.elp$$//' | tr '\n' ' ')
-config/systemd/%.path: $(SYSTEMD)/service.path.elp $(RENDER_DEPS) services/$$*/service.yml $$(shell find services/$$* -type f 2>/dev/null)
-	mkdir -p $(dir $@)
+config/systemd/%.path: $(SYSTEMD)/service.path.elp $(RENDER_BIN) $$(shell find services/$$* -type f 2>/dev/null) | $$(@D)/
 	SERVICE_NAME=$* SERVICE_FILES="$(call service_files,$*)" $(RENDER_BIN) --root . $< > $@
 
 check: all
