@@ -43,16 +43,31 @@ STATIC_SYSTEMD_UNITS := config/systemd/mediaserver-network.service
 AGGREGATOR_SYSTEMD_UNITS := config/systemd/mediaserver.target
 SYSTEMD_UNITS := $(STATIC_SYSTEMD_UNITS) $(AGGREGATOR_SYSTEMD_UNITS) $(SYSTEMD_SERVICE_UNITS) $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS) $(SYSTEMD_COMPOSE_RELOAD_UNITS) $(SIGHUP_RELOAD_UNITS)
 
-.PHONY: clean check test users install install-systemd $(addprefix systemd-,start stop restart enable disable status)
+.PHONY: clean check test test-lisp users install install-systemd render-bin $(addprefix systemd-,start stop restart enable disable status)
 
 test:
 	ruby -Ilib -Itest -e 'Dir["test/*_test.rb"].reject { |f| f == "test/golden_test.rb" }.each { |f| require "./#{f}" }'
 	ruby test/golden_test.rb
 
+# Render every fixture template via the Lisp binary and diff against
+# the checked-in test/config/ goldens (produced by the Ruby renderer).
+# Empty diff means byte-for-byte parity.
+test-lisp: render-bin
+	script/render-fixtures.sh
+	@diff -r test/config/ test/config-lisp/ > /dev/null && echo "lisp render: byte-identical to goldens"
+
+# Build bin/render (saved SBCL core wrapping mediaserver/cli:main).
+# Slow first-time build (~5s); downstream invocations are ~100ms.
+RENDER_BIN := bin/render
+LISP_SRCS := $(wildcard lisp/src/*.lisp) mediaserver.asd
+render-bin: $(RENDER_BIN)
+$(RENDER_BIN): $(LISP_SRCS) script/build-render.sh
+	script/build-render.sh
+
 all: $(ERBS) $(NON_ERB_CONFIG_TARGETS) $(COMPOSE_TARGETS) $(SYSTEMD_UNITS)
 
 clean:
-	rm -rf config/ .make.services
+	rm -rf config/ .make.services test/config-lisp/
 
 users:
 	script/make_users.sh

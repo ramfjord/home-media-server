@@ -20,3 +20,6 @@ audio-normalizer/examples
 
 # Lisp build artifacts
 *.fasl
+bin/
+test/config-lisp/
+.swank-session

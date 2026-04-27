@@ -1,5 +1,139 @@
 (in-package :mediaserver)
 
+;;; Block-style YAML emit, the subset templates need.
+;;;
+;;; Mirrors Ruby Psych's defaults closely enough for the docker-compose
+;;; templates to produce byte-identical output. Not a general YAML
+;;; serializer — leans on a few invariants:
+;;;   - Maps are plists with keyword keys; emitted "key: value".
+;;;   - Sequences are CL lists; emitted "- item".
+;;;   - Scalars: T/NIL -> true/false; integers bare; strings quoted
+;;;     iff empty (-> '') or starting with "/" (-> "..."), else bare.
+;;;     This matches the quoting Psych picks for our fixture data.
+;;;
+;;; Tested against test/config/*/docker-compose.yml goldens.
+
+(defun %yaml-key-name (k)
+  "Map :container-name -> \"container_name\" (keyword keys carry the
+   plist-key convention, where hyphens stand in for YAML's underscores).
+   String keys (e.g. service names like \"fx-caddy\") pass through
+   unchanged."
+  (etypecase k
+    (keyword (substitute #\_ #\- (string-downcase (symbol-name k))))
+    (string  k)))
+
+(defun %yaml-pairs (obj)
+  "Return OBJ as a list of (key value) pairs, in order. Accepts both
+   keyword-keyed plists (the load-side convention) and lists of conses
+   (alists) used when keys must be data-side strings."
+  (cond
+    ((null obj) nil)
+    ((consp (car obj))
+     (mapcar (lambda (p) (list (car p) (cdr p))) obj))
+    (t (loop for (k v) on obj by #'cddr collect (list k v)))))
+
+(defun %map-like-p (x)
+  "True when X is a structure emit-yaml-block should treat as a map:
+   either a keyword-keyed plist or an alist of (key . value) conses."
+  (or (mediaserver::plistp x)
+      (and (consp x) (consp (car x)))))
+
+(defun %yaml-scalar (v)
+  "Render a leaf value as the scalar text Psych would emit."
+  (cond
+    ((eq v t)     "true")
+    ((eq v nil)   "false")
+    ((integerp v) (princ-to-string v))
+    ((stringp v)
+     (cond
+       ((string= v "") "''")
+       ;; Match Ruby Psych's defensive quoting for our fixture data:
+       ;; leading "/" (volume-mount paths) and leading "-" (CLI flags
+       ;; passed as compose command args). Other special chars haven't
+       ;; come up — extend as goldens find them.
+       ((and (> (length v) 0)
+             (or (char= (char v 0) #\/)
+                 (char= (char v 0) #\-)))
+        (format nil "\"~A\"" v))
+       (t v)))
+    (t (princ-to-string v))))
+
+(defun emit-yaml-block (obj stream indent)
+  "Block-style YAML emit of OBJ to STREAM, leading INDENT spaces per
+   nesting level. Maps -> \"key: value\" lines; sequences -> \"- item\"
+   lines; atoms -> scalars via %YAML-SCALAR."
+  (cond
+    ((%map-like-p obj)
+     (dolist (pair (%yaml-pairs obj))
+       (let ((k (first pair)) (v (second pair)))
+         (format stream "~v@T~A:" indent (%yaml-key-name k))
+         (cond
+           ((%map-like-p v)
+            (terpri stream)
+            (emit-yaml-block v stream (+ indent 2)))
+           ((listp v)
+            (terpri stream)
+            (dolist (item v)
+              (format stream "~v@T- ~A~%" indent (%yaml-scalar item))))
+           (t
+            (format stream " ~A~%" (%yaml-scalar v)))))))
+    ((listp obj)
+     (dolist (item obj)
+       (format stream "~v@T- ~A~%" indent (%yaml-scalar item))))
+    (t (write-string (%yaml-scalar obj) stream))))
+
+(defun emit-compose (service)
+  "Build the docker-compose.yml structure for SERVICE and return it as
+   a string (no leading `---`). Mirrors systemd/service.compose.yml.erb
+   line-for-line: predefined keys first, then docker_config merged in,
+   then optional group_add. The networks block is appended at top level
+   for non-VPN services."
+  (let* ((name        (field service :name))
+         (use-vpn     (field service :use-vpn))
+         (port        (field service :port))
+         (user-id     (field service :user-id))
+         (docker-cfg  (or (field service :docker-config) '()))
+         (groups      (field service :groups))
+         (svc (list :container-name name
+                    :environment (list "TZ=Etc/UTC"))))
+    (when user-id
+      (setf svc (append svc (list :user user-id))))
+    (cond
+      (use-vpn
+       (setf svc (append svc (list :network-mode "container:wireguard"))))
+      (t
+       (setf svc (append svc (list :networks (list "mediaserver"))))
+       (when (and port (not (getf docker-cfg :ports)))
+         (setf svc (append svc
+                           (list :ports
+                                 (list (format nil "~A:~A" port port))))))))
+    ;; Merge docker_config keys: append in declaration order if not
+    ;; present, replace in place if present. Mirrors Ruby Hash#merge,
+    ;; which preserves original key positions and appends new ones.
+    (loop for (k v) on docker-cfg by #'cddr
+          do (let ((existing (getf svc k 'no)))
+               (if (eq existing 'no)
+                   (setf svc (append svc (list k v)))
+                   (setf (getf svc k) v))))
+    (when (and groups (consp groups))
+      (setf svc (append svc (list :group-add (mapcar (lambda (g)
+                                                       (if (stringp g)
+                                                           (parse-integer g)
+                                                           g))
+                                                     groups)))))
+    ;; The service name is data, not a plist-key — wrap as alist so the
+    ;; emitter passes it through verbatim instead of running it through
+    ;; the keyword->underscore conversion.
+    (let ((compose (list :services (list (cons name svc)))))
+      (unless use-vpn
+        (setf compose
+              (append compose
+                      (list :networks
+                            (list :mediaserver
+                                  (list :external t :name "mediaserver"))))))
+      (with-output-to-string (s)
+        (emit-yaml-block compose s 0)))))
+
 ;;; Render primitives.
 ;;;
 ;;; The Lisp side renders ONE template at a time, given a service

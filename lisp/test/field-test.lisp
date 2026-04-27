@@ -5,7 +5,7 @@
 
 (defun fixture-path (relative)
   (asdf:system-relative-pathname :mediaserver
-                                 (concatenate 'string "test/fixtures/" relative)))
+                                 (concatenate 'string "test/" relative)))
 
 (defun load-fixture-service (name)
   "Read a fixture service.yml and convert to plist. Note: ELP preprocessing

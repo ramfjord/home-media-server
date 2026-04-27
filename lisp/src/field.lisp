@@ -33,7 +33,31 @@
     (:has-unit
      . ,(lambda (s g)
           (declare (ignore g))
-          (and (getf s :unit) t))))
+          (and (getf s :unit) t)))
+    (:groups
+     . ,(lambda (s g)
+          (declare (ignore g))
+          ;; Always-known: templates ask for :groups even on services
+          ;; that don't set it. Return literal value if present, else
+          ;; NIL — this keeps the typo guard meaningful for fixtures
+          ;; that intentionally omit :groups (per BRANCHES.md, no
+          ;; fixture sets groups: to avoid getent non-determinism).
+          (getf s :groups)))
+    (:user-id
+     . ,(lambda (s g)
+          (declare (ignore g))
+          ;; Mirrors Ruby's user_id: hardcoded skip for wireguard (which
+          ;; runs as root for the network namespace), else shell out to
+          ;; `id -u <name>`. Empty string for unknown users — assigned
+          ;; verbatim into compose under user:, where YAML emits as ''.
+          (let ((name (getf s :name)))
+            (if (string= name "wireguard")
+                nil
+                (string-trim
+                 '(#\Space #\Tab #\Newline)
+                 (uiop:run-program (list "id" "-u" name)
+                                   :output :string
+                                   :ignore-error-status t)))))))
   "Alist of (KEY . FN) entries for computed service fields.
    FN takes (service-plist globals-plist), returns the value.")
 
