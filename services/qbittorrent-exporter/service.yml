@@ -7,8 +7,8 @@ docker_config:
   environment:
   - QBITTORRENT_HOST=qbittorrent
   - QBITTORRENT_PORT=8080
-  - QBITTORRENT_USERNAME=${qbittorrent_username}
-  - QBITTORRENT_PASSWORD=${qbittorrent_password}
+  - QBITTORRENT_USERNAME=<%= qbittorrent_username %>
+  - QBITTORRENT_PASSWORD=<%= qbittorrent_password %>
   labels:
     prometheus.io/scrape: 'true'
     prometheus.io/port: '8000'

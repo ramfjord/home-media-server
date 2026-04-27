@@ -7,6 +7,6 @@ use_vpn: true
 docker_config:
   image: lscr.io/linuxserver/prowlarr:latest
   volumes:
-  - "${install_base}/config/prowlarr:/config"
+  - "<%= install_base %>/config/prowlarr:/config"
   restart: unless-stopped
 order: 40

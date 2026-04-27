@@ -9,7 +9,7 @@ docker_config:
   - "--url"
   - http://caddy:8989
   - "--api-key"
-  - "${sonarr_apikey}"
+  - "<%= sonarr_apikey %>"
   - "--port"
   - '9145'
   labels:

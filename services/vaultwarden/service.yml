@@ -9,7 +9,7 @@ docker_config:
   ports:
   - 8000:80
   volumes:
-  - "${install_base}/config/vaultwarden:/data"
+  - "<%= install_base %>/config/vaultwarden:/data"
   environment:
   - LOG_LEVEL=info
   restart: unless-stopped

@@ -9,7 +9,7 @@ docker_config:
   - "--url"
   - http://caddy:7878
   - "--api-key"
-  - "${radarr_apikey}"
+  - "<%= radarr_apikey %>"
   - "--port"
   - '9144'
   labels:

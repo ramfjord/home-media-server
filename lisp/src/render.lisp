@@ -58,10 +58,14 @@
     ((stringp v)
      (cond
        ((string= v "") "''")
-       ;; Match Ruby Psych's defensive quoting for our fixture data:
-       ;; leading "/" (volume-mount paths) and leading "-" (CLI flags
-       ;; passed as compose command args). Other special chars haven't
-       ;; come up — extend as goldens find them.
+       ;; Strings that would parse back as a different type if emitted
+       ;; bare. Psych single-quotes these to lock them as strings.
+       ((or (member v '("true" "false" "yes" "no" "null" "~") :test #'equal)
+            (every #'digit-char-p v))
+        (format nil "'~A'" v))
+       ;; Match Ruby Psych's defensive quoting for our data: leading
+       ;; "/" (volume-mount paths) and leading "-" (CLI flags). Other
+       ;; special chars haven't come up — extend as goldens find them.
        ((and (> (length v) 0)
              (or (char= (char v 0) #\/)
                  (char= (char v 0) #\-)))
@@ -127,11 +131,21 @@
                    (setf svc (append svc (list k v)))
                    (setf (getf svc k) v))))
     (when (and groups (consp groups))
-      (setf svc (append svc (list :group-add (mapcar (lambda (g)
-                                                       (if (stringp g)
-                                                           (parse-integer g)
-                                                           g))
-                                                     groups)))))
+      ;; Mirrors Ruby's group_ids: resolve each group name to a GID via
+      ;; `getent group <name>` (cut field 3). Non-existent groups drop
+      ;; out so docker-compose doesn't get a literal name in group_add.
+      (let ((gids (loop for g in groups
+                        for line = (uiop:run-program
+                                    (list "getent" "group" g)
+                                    :output :string
+                                    :ignore-error-status t)
+                        for trimmed = (string-trim '(#\Space #\Tab #\Newline) line)
+                        when (and trimmed (> (length trimmed) 0))
+                          collect (parse-integer
+                                   (third (uiop:split-string trimmed
+                                                             :separator ":"))))))
+        (when gids
+          (setf svc (append svc (list :group-add gids))))))
     ;; The service name is data, not a plist-key — wrap as alist so the
     ;; emitter passes it through verbatim instead of running it through
     ;; the keyword->underscore conversion.

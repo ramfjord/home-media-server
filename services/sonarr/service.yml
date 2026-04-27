@@ -9,7 +9,7 @@ groups:
 docker_config:
   image: lscr.io/linuxserver/sonarr:latest
   volumes:
-  - "${install_base}/config/sonarr:/config"
-  - "${media_path}:/data"
+  - "<%= install_base %>/config/sonarr:/config"
+  - "<%= media_path %>:/data"
   restart: unless-stopped
 order: 30

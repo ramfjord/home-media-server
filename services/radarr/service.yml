@@ -9,7 +9,7 @@ groups:
 docker_config:
   image: lscr.io/linuxserver/radarr:latest
   volumes:
-  - "${install_base}/config/radarr:/config"
-  - "${media_path}:/data"
+  - "<%= install_base %>/config/radarr:/config"
+  - "<%= media_path %>:/data"
   restart: unless-stopped
 order: 20
