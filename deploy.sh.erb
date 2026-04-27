@@ -6,32 +6,42 @@
 # to <svc>:mediaserver. The compose's user: field has the same uid (resolved
 # from service_overrides in config.local.yml), so files match the container
 # user by owner. See plans/deploy-rebuild.md.
+#
+# Usage:
+#   bash deploy.sh           — apply (the default)
+#   bash deploy.sh preview   — dry-run + itemize per-file changes; no mutations
 set -euo pipefail
+
+MODE="${1:-apply}"
+DRY=""
+if [[ "$MODE" == "preview" ]]; then
+  DRY="--dry-run --itemize-changes"
+fi
 
 STAGING="<%= install_base %>/staging"
 INSTALL_BASE="<%= install_base %>"
 
 <% services.select(&:dockerized?).each do |svc| %>
 <% if svc.user_id %>
-echo "Deploying <%= svc.name %>"
-rsync -a --chown=<%= svc.name %>:mediaserver --chmod=Dg+s,Fg+w \
+echo "=== <%= svc.name %> ==="
+rsync -a $DRY --chown=<%= svc.name %>:mediaserver --chmod=Dg+s,Fg+w \
   "$STAGING/<%= svc.name %>/" "$INSTALL_BASE/config/<%= svc.name %>/"
 # Recursive chown catches runtime state (data/, logs/, db/) that rsync's
 # --chown skips because it's not in the transferred set.
-chown -R <%= svc.name %>:mediaserver "$INSTALL_BASE/config/<%= svc.name %>/"
+[[ "$MODE" == "apply" ]] && chown -R <%= svc.name %>:mediaserver "$INSTALL_BASE/config/<%= svc.name %>/"
 <% else %>
-echo "Deploying <%= svc.name %> (preserving ownership)"
-rsync -a --no-owner --no-group --chmod=Dg+s,Fg+w \
+echo "=== <%= svc.name %> (preserving ownership) ==="
+rsync -a $DRY --no-owner --no-group --chmod=Dg+s,Fg+w \
   "$STAGING/<%= svc.name %>/" "$INSTALL_BASE/config/<%= svc.name %>/"
 <% end %>
 <% end %>
 
-echo "Deploying certs"
-rsync -a --chown=caddy:mediaserver --chmod=D750,F640 \
+echo "=== certs ==="
+rsync -a $DRY --chown=caddy:mediaserver --chmod=D750,F640 \
   "$STAGING/certs/" "$INSTALL_BASE/certs/"
 
-echo "Installing systemd units"
-rsync -a "$STAGING/systemd/" /etc/systemd/system/
-systemctl daemon-reload
+echo "=== systemd units ==="
+rsync -a $DRY "$STAGING/systemd/" /etc/systemd/system/
+[[ "$MODE" == "apply" ]] && systemctl daemon-reload
 
-echo "Deploy complete."
+echo "Deploy $MODE complete."

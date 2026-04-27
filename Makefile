@@ -43,7 +43,7 @@ STATIC_SYSTEMD_UNITS := config/systemd/mediaserver-network.service
 AGGREGATOR_SYSTEMD_UNITS := config/systemd/mediaserver.target
 SYSTEMD_UNITS := $(STATIC_SYSTEMD_UNITS) $(AGGREGATOR_SYSTEMD_UNITS) $(SYSTEMD_SERVICE_UNITS) $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS) $(SYSTEMD_COMPOSE_RELOAD_UNITS) $(SIGHUP_RELOAD_UNITS)
 
-.PHONY: clean check test users install install-systemd $(addprefix systemd-,start stop restart enable disable status)
+.PHONY: clean check test users install preview $(addprefix systemd-,start stop restart enable disable status)
 
 test:
 	ruby -Ilib -Itest -e 'Dir["test/*_test.rb"].reject { |f| f == "test/golden_test.rb" }.each { |f| require "./#{f}" }'
@@ -154,6 +154,20 @@ install: check
 	rsync -av --rsync-path="sudo rsync" --mkpath \
 	  certs/  $(TARGET):/opt/mediaserver/staging/certs/
 	ssh $(TARGET) sudo bash /opt/mediaserver/staging/deploy.sh
+
+# Stage the bundle on the target like install:, but invoke deploy.sh in
+# preview mode (rsync --dry-run --itemize-changes; no chown -R, no
+# daemon-reload). Shows per-file changes that `make install` would apply.
+preview: check
+	@if [ "$(TARGET)" = "local" ]; then \
+	  echo "TARGET=local is not supported. Set TARGET=<ssh-alias> (e.g. fatlaptop)."; \
+	  exit 1; \
+	fi
+	rsync -av --rsync-path="sudo rsync" --delete --mkpath \
+	  config/ $(TARGET):/opt/mediaserver/staging/
+	rsync -av --rsync-path="sudo rsync" --mkpath \
+	  certs/  $(TARGET):/opt/mediaserver/staging/certs/
+	ssh $(TARGET) sudo bash /opt/mediaserver/staging/deploy.sh preview
 
 PATH_UNITS := $(notdir $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS))
 
