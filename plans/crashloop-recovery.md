@@ -372,18 +372,17 @@ handoff doc's premise (overlay-layer downloads) was wrong.
    - (e-bonus) **An existing rule already covers disk-fill**: `VolumeFillingUp` at >75% used (25% free), no `for:`, label `partof: streaming, service: disk`. It should have fired during the incident — possible reasons it didn't: prometheus itself died when disk filled, or alertmanager → discord webhook is broken. Worth a smoke test in commit 7 regardless. The plan's proposed *warning* threshold (15% free / 85% used) is *less strict* than the existing rule, so don't duplicate — keep `VolumeFillingUp` as the warning, add only a **critical** rule (5% free / 95% used, `for: 1m`).
    - (f) Single alertmanager receiver: `discord` (webhook). No severity-based routing today. New rules use the existing label convention (`partof:`, `service:`) rather than introducing a `severity:` label that nothing routes on.
 
-2. **Add deploy-freeze guardrail** — Fail `make install` with a
-   loud message when targeting any non-`local` host, until
-   `plans/static-uids.md` ships. The check goes early in the
-   `install` recipe, before any rsync. Mechanism: a sentinel file
-   (e.g. `.deploy-frozen`) the install rule checks for, with the
-   message pointing at this plan and at static-uids. Document in
-   CLAUDE.md under Workflow.
+2. ✅ **Add deploy-freeze guardrail** — Inline early-exit at the top
+   of the `install:` recipe: when `TARGET != local`, print why and
+   exit 1, pointing at this plan + static-uids. No sentinel file,
+   no CLAUDE.md churn — Thomas is the sole operator, so the guard
+   is just self-documentation; whoever wants to override comments
+   it out.
    *Verify:* `TARGET=fatlaptop make install` exits non-zero with the
-   freeze message before any rsync runs; `make install` (TARGET=local)
-   is unaffected; `rm .deploy-frozen` (after static-uids ships)
-   removes the freeze with no other code change. Manual check on
-   wording: the message tells the next person *exactly* what to do.
+   message before any rsync; `make install` (TARGET=local) is
+   unaffected.
+   **Decisions:**
+   - Scoped down from the original "sentinel file + CLAUDE.md doc + emergency-override section." Single-operator project; six lines of inline `@if` in the Makefile carries the same load with a fraction of the surface area. Override is "edit the Makefile."
 
 3. **Recover qbit + the rest of the linuxserver stack** —
    Per-service: ssh to fatlaptop, `chown -R <laptop-uid>:1002

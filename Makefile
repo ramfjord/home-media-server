@@ -142,6 +142,14 @@ check: all
 SYSTEMD_DIR := /etc/systemd/system
 
 install: check
+	@if [ "$(TARGET)" != "local" ]; then \
+	  echo "Remote install is currently broken: rendered compose 'user:' uses"; \
+	  echo "the laptop's uid for each service, but install rsync chowns config"; \
+	  echo "files to the target host's uid. Mismatch crashloops every container"; \
+	  echo "with 'user:' set. To be fixed by plans/static-uids.md; full"; \
+	  echo "diagnosis in plans/crashloop-recovery.md."; \
+	  exit 1; \
+	fi
 	@for svc in $(ALL_SERVICES); do \
 	  if [ -d config/$$svc ]; then \
 	    rsync -av --rsync-path="sudo rsync" --mkpath --chown=$$svc:mediaserver --chmod=Dg+s config/$$svc/ $(RSYNC_DEST)/opt/mediaserver/config/$$svc/; \
