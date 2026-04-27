@@ -1,0 +1,25 @@
+templates:
+  - templates/*.tmpl
+
+route:
+  group_by: ['alertname']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: discord
+
+receivers:
+#   - name: 'web.hook'
+#     webhook_configs:
+#       - url: 'http://127.0.0.1:5001/'
+  - name: discord
+    discord_configs:
+      - webhook_url: 'https://discord.com/api/webhooks/1302064758228254812/JEYtJUxH4yt_KBJ8cZqvZI8SWQ7WWDoJeem3PZDdbLiu155Gp-HNRLQc5c-xZn1OFBY4'
+
+
+inhibit_rules:
+  - equal: ['partof']
+    # source_match:
+    #   severity: 'critical'
+    # target_match:
+    #   severity: 'warning'

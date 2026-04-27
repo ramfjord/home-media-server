@@ -1,0 +1,16 @@
+{{ define "__alert_silence_link" -}}
+    {{ .ExternalURL }}/#/silences/new?filter=%7B
+    {{- range .CommonLabels.SortedPairs -}}
+	{{- .Name }}%3D"{{- .Value -}}"%2C%20
+    {{- end -}}
+{{- end }}
+
+{{ define "discord.title" -}}
+  [{{ .Status | toUpper -}} {{ .CommonLabels.alertname }} affected by {{ .Alerts.Firing | len }} alerts
+{{- end }}
+
+{{ define "discord.body" -}}
+{{ range .Alerts -}}
+* {{ .Labels.alertname }} : {{ .Labels.service }}
+{{ end }}
+{{ end }}
