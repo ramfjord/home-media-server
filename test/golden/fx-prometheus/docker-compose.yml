@@ -5,7 +5,7 @@ services:
     container_name: fx-prometheus
     environment:
     - TZ=Etc/UTC
-    user: ''
+    user: '99002'
     networks:
     - mediaserver
     ports:

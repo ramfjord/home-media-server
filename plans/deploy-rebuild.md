@@ -207,16 +207,27 @@ its own commit.
 
 ## Commits
 
-1. **Add `service_user_ids:` override + renderer support** —
-   New top-level field in `config.local.yml` (and optionally
-   `globals.yml`). Modify `lib/mediaserver/config.rb#user_id` to
-   check the override map first, fall back to `id -u` if not
-   present. Populate fatlaptop's `config.local.yml` with the 16
-   uids from `plans/crashloop-recovery.md` commit-1 audit.
+1. ✅ **Add `user_id:` field + renderer-side hard-required validation** —
+   `service.user_id` now reads `@definition['user_id']` directly
+   (post deep_merge), no shell-out. Per-host overrides go in
+   `config.local.yml`'s existing `service_overrides:` mechanism
+   (same shape as the jellyfin nvidia override, not a separate
+   `service_user_ids:` block). Renderer raises if a dockerized
+   service has no `user_id` defined; opt-out via `user_id: false`
+   for services that legitimately should not have a `user:` field
+   in compose (wireguard runs as root for NET_ADMIN; vaultwarden
+   has no host user).
    *Verify:* `make all` produces compose files with fatlaptop's
-   uids. `grep "user:" config/qbittorrent/docker-compose.yml`
-   shows `user: '1504'`. Goldens still pass (fixture services
-   don't use this override).
+   uids (qbit 1504, caddy 993, jellyfin 992). `make test` passes
+   after refreshing goldens to reflect the new shape (fixtures
+   declare explicit `user_id` to exercise both the number and
+   `false` code paths).
+   **Decisions:**
+   - User pushed back on the original `service_user_ids:` top-level field — wanted to reuse the existing `service_overrides:` mechanism for architectural consistency. Done that way.
+   - Validation strictness: renderer raises (with a helpful message naming the service and the two fix-it locations) when a dockerized service has no resolved `user_id`. Soft fallback to `id -u` removed — the host-shellout was the original incident's bug, no point preserving it.
+   - `user_id: false` as opt-out sentinel. Applied to `services/wireguard/service.yml` (replacing the in-code `if name == 'wireguard'` special case) and `services/vaultwarden/service.yml`.
+   - Fixture services updated: fx-wireguard gets `user_id: false`, the other four get sentinel uids 99001–99004 (above any real-uid range, so goldens cover both branches without colliding with deploy data).
+   - The dropped wireguard hardcode in `ProjectService#user_id` is a small purity win — service-shape concerns now live in service.yml, not in code.
 
 2. **Caddy certs bind-mount fix** — Add
    `${install_base}/certs:/etc/caddy/certs:ro` to caddy's
