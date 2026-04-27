@@ -9,7 +9,7 @@ groups:
 docker_config:
   image: lscr.io/linuxserver/qbittorrent:latest
   volumes:
-  - "${install_base}/config/qbittorrent:/config"
-  - "${media_path}:/data"
+  - "<%= install_base %>/config/qbittorrent:/config"
+  - "<%= media_path %>:/data"
   restart: unless-stopped
 order: 50
