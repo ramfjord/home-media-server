@@ -16,6 +16,7 @@ sbcl --non-interactive --no-sysinit --no-userinit \
   --eval "(push (truename \"$REPO_ROOT/\") asdf:*central-registry*)" \
   --eval "(push (truename \"$REPO_ROOT/elp/\") asdf:*central-registry*)" \
   --eval "(asdf:load-system :mediaserver)" \
+  --eval "(mediaserver::bake-config \"$REPO_ROOT/\")" \
   --eval "(sb-ext:save-lisp-and-die #p\"$OUTPUT\"
             :toplevel #'mediaserver/cli:main
             :executable t

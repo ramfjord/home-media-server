@@ -60,9 +60,19 @@ test:
 	ruby -Ilib -Itest -e 'Dir["test/*_test.rb"].reject { |f| f == "test/golden_test.rb" }.each { |f| require "./#{f}" }'
 	ruby test/golden_test.rb
 
-# Lisp render binary. Slow first build (~5s); ~100ms per invocation after.
+# Lisp render binary. Builds in ~2s; per-call render is ~25ms because
+# the production config (services + globals + local overrides) is baked
+# into the saved core. Rebuild triggers on Lisp source change *or* any
+# config file change, so deploys always run against current data.
+#
+# Deps are anchored to $(REPO_ROOT) so the binary doesn't get rebuilt
+# spuriously when invoked from test/ (different cwd, different
+# services/ tree). Test cwd uses the cold load-config path anyway.
 render-bin: $(RENDER_BIN)
-$(RENDER_BIN): $(LISP_SRCS) $(REPO_ROOT)/script/build-render.sh
+$(RENDER_BIN): $(LISP_SRCS) $(REPO_ROOT)/script/build-render.sh \
+               $(wildcard $(REPO_ROOT)/services/*/service.yml) \
+               $(REPO_ROOT)/globals.yml \
+               $(wildcard $(REPO_ROOT)/config.local.yml)
 	$(REPO_ROOT)/script/build-render.sh
 
 all: $(ELPS) $(NON_TPL_TARGETS) $(COMPOSE_TARGETS) $(SYSTEMD_UNITS) config/list-make.txt
