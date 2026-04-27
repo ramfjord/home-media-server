@@ -348,7 +348,7 @@ handoff doc's premise (overlay-layer downloads) was wrong.
 
 ## Commits
 
-1. **Audit affected services + alarm prerequisites** — Walk every
+1. ✅ **Audit affected services + alarm prerequisites** — Walk every
    service's rendered `docker-compose.yml` (under `config/` after
    `make all`) for the `user:` field. Cross-check against host users
    on fatlaptop. Note: (a) which services have `user:` rendered,
@@ -364,6 +364,13 @@ handoff doc's premise (overlay-layer downloads) was wrong.
    *Verify:* the affected-services list is concrete (names + uid
    pairs); the alarm prerequisites question for each subitem (a)–(f)
    has a documented answer.
+   **Decisions:**
+   - (a/b) Blast radius is **17 services**, not 5. Every service whose name exists as a user on both hosts has a uid mismatch. Pairs (`<svc> laptop=<uid> fatlaptop=<uid>`): qbittorrent 942/1504, sonarr 944/1502, radarr 945/1501, prowlarr 943/1503, jellyfin 941/992, homer 940/1505, caddy 946/993, grafana 938/472, prometheus 210/113, alertmanager 211/1508, qbittorrent-exporter 933/984, exportarr-sonarr 934/985, exportarr-radarr 935/986, cadvisor 937/1509, blackbox-exporter 939/1507, otelcol 936/995, vaultwarden (no user either side; rendered `user:` is empty — skip). `wireguard` has no laptop user, so `user:` not rendered — skip.
+   - (c) `mediaserver` gid is **1002 on both machines** — accidentally aligned. Static-uids will pin it. Not blocking.
+   - (d) `node_exporter` IS scraping fatlaptop filesystem metrics — confirmed by an existing rule using `node_filesystem_avail_bytes{mountpoint=~"/|/media.*"}`.
+   - (e) Rules live in `services/prometheus/rules/{rules,blackbox,mediaserver}.yaml.erb`. New disk rules go into `mediaserver.yaml.erb` (centralized, not per-service).
+   - (e-bonus) **An existing rule already covers disk-fill**: `VolumeFillingUp` at >75% used (25% free), no `for:`, label `partof: streaming, service: disk`. It should have fired during the incident — possible reasons it didn't: prometheus itself died when disk filled, or alertmanager → discord webhook is broken. Worth a smoke test in commit 7 regardless. The plan's proposed *warning* threshold (15% free / 85% used) is *less strict* than the existing rule, so don't duplicate — keep `VolumeFillingUp` as the warning, add only a **critical** rule (5% free / 95% used, `for: 1m`).
+   - (f) Single alertmanager receiver: `discord` (webhook). No severity-based routing today. New rules use the existing label convention (`partof:`, `service:`) rather than introducing a `severity:` label that nothing routes on.
 
 2. **Add deploy-freeze guardrail** — Fail `make install` with a
    loud message when targeting any non-`local` host, until
