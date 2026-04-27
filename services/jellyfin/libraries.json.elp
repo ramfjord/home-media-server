@@ -1,0 +1,59 @@
+{
+  "Version": 1,
+  "Libraries": [
+    {
+      "Name": "Movies",
+      "Enabled": true,
+      "MediaType": "Video",
+      "LibraryMediaType": "Movies",
+      "CollectionType": "movies",
+      "RefreshSettings": {
+        "MetadataRefreshMode": "FullRefresh",
+        "ImageRefreshMode": "ValidationOnly",
+        "ReplaceAllMetadata": false,
+        "ReplaceAllImages": false
+      },
+      "Folders": [
+        {
+          "Path": "/media/Movies",
+          "NetworkPath": null,
+          "LibraryFolderDto": null
+        }
+      ],
+      "SaveLocalMetadata": true,
+      "EnableAutomaticSeriesGrouping": true,
+      "EnableRealFolderPathDisplay": true,
+      "EnableChapterImageExtraction": false,
+      "ExtractChapterImagesDuringLibraryScan": false,
+      "PathInfos": [],
+      "SchemaVersion": 1
+    },
+    {
+      "Name": "TV Shows",
+      "Enabled": true,
+      "MediaType": "Video",
+      "LibraryMediaType": "Series",
+      "CollectionType": "tvshows",
+      "RefreshSettings": {
+        "MetadataRefreshMode": "FullRefresh",
+        "ImageRefreshMode": "ValidationOnly",
+        "ReplaceAllMetadata": false,
+        "ReplaceAllImages": false
+      },
+      "Folders": [
+        {
+          "Path": "/media/TV",
+          "NetworkPath": null,
+          "LibraryFolderDto": null
+        }
+      ],
+      "SaveLocalMetadata": true,
+      "EnableAutomaticSeriesGrouping": true,
+      "EnableRealFolderPathDisplay": true,
+      "EnableChapterImageExtraction": false,
+      "ExtractChapterImagesDuringLibraryScan": false,
+      "PathInfos": [],
+      "SchemaVersion": 1
+    }
+  ]
+}

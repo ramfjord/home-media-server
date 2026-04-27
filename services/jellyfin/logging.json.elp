@@ -1,0 +1,13 @@
+{
+  "Serilog": {
+    "MinimumLevel": "Information",
+    "WriteTo": [
+      {
+        "Name": "Console",
+        "Args": {
+          "theme": "Ansi"
+        }
+      }
+    ]
+  }
+}
