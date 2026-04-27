@@ -384,23 +384,28 @@ handoff doc's premise (overlay-layer downloads) was wrong.
    **Decisions:**
    - Scoped down from the original "sentinel file + CLAUDE.md doc + emergency-override section." Single-operator project; six lines of inline `@if` in the Makefile carries the same load with a fraction of the surface area. Override is "edit the Makefile."
 
-3. **Recover qbit + the rest of the linuxserver stack** —
+3. ✅ **Recover qbit + the rest of the linuxserver stack** —
    Per-service: ssh to fatlaptop, `chown -R <laptop-uid>:1002
-   /opt/mediaserver/config/<svc>` for each service identified in
-   commit 1 (qbittorrent, sonarr, radarr, prowlarr, jellyfin —
-   confirm full list from commit 1). Then `systemctl start` them
-   one at a time, watch logs (`journalctl -fu <svc>.service`) for
-   30s each before moving to the next. This commit makes no
-   repo changes — it documents the recovery procedure in the plan
-   as a `**Decisions:**` block (commands run, services that came up
-   cleanly, anything that needed extra attention). Recovery is
-   imperative, not committed code.
-   *Verify:* `docker compose ps` (or `systemctl --type=service | grep
-   -E '(qbit|sonarr|radarr|prowlarr|jellyfin)'`) shows all targeted
-   services Up / active. `df -h /` on fatlaptop holds steady over
-   30min. No new files in any overlay layer
-   (`sudo find /var/lib/docker/overlay2 -name 'core.*' -newer /tmp/recovery-marker`
-   empty). qbit web UI loads and shows torrents from `BT_backup`.
+   /opt/mediaserver/config/<svc>` for each of the 16 services
+   identified in commit 1. Then `systemctl restart
+   mediaserver.target`; let systemd's dependency graph order
+   bring-up. Validate by per-unit `systemctl is-active` 30s after
+   any change. Recovery is imperative — no committed code, just
+   a `**Decisions:**` block recording what was done.
+   *Verify:* `systemctl is-active` for each affected unit returns
+   `active`. `df -h /` on fatlaptop holds steady. No new files in
+   any overlay layer
+   (`sudo find /var/lib/docker/overlay2 -name 'core.*' -newer /tmp/recovery-marker-2`
+   returns 0).
+   **Decisions:**
+   - Chowned all 16 services per commit 1's table (vaultwarden skipped — no `user:` rendered). Single `ssh + sudo chown -R <uid>:1002` batch.
+   - Hit a **second wave** of stale-container references unrelated to UID drift. The disk-full event left the docker `mediaserver` network rebuilt with a new ID, but 14 stopped containers still referenced the old network ID (`d810fefd...`). Recovery pattern: stop `mediaserver.target`, `docker rm` the 14 containers, restart target. Then a third wave for qbit/sonarr/radarr/prowlarr — same shape, but stale ref was the *wireguard container ID* rather than network ID (since they use `network_mode: container:wireguard`). Same fix: `docker rm -f` the four, `systemctl reset-failed`, restart.
+   - **15 of 18 services active after recovery.** All chowned services came up clean (qbit's prior crashloop is gone — `systemctl is-active qbittorrent` is `active`).
+   - **3 services pre-existing-broken, unrelated to this incident:**
+     - `caddy`: rendered `Caddyfile` references `/etc/caddy/certs/fatlaptop.hippogriff-stonecat.ts.net.crt`, but caddy logs `no such file or directory`. Cert exists at `/opt/mediaserver/certs/` on host. Root cause: caddy's rendered compose only bind-mounts the Caddyfile, no `volumes:` entry maps the certs dir into the container. The cert never reaches the container. `mediaserver.bak/certs` has the same cert at the same path — restoring wouldn't help because the missing piece is the bind-mount, not the cert. Likely `services/caddy/service.yml` once had a `volumes:` extra that got dropped.
+     - `exportarr-radarr`, `exportarr-sonarr`: compose missing `radarr_apikey` / `sonarr_apikey` env vars. The exporters exit on missing required-arg, no API-key wiring in the rendered compose.
+   - Punt all three to a follow-up plan (added to `Future plans`); they pre-date this incident and recovering them isn't load-bearing for clearing the crashloop.
+   - Marker file: `/tmp/recovery-marker-2` on fatlaptop (the original `/tmp/recovery-marker` was set before stale-container cleanup).
 
 4. **Add `host/` skeleton + `script/install-host-config.sh`** —
    New `host/etc/` tree (empty for now), plus
