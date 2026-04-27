@@ -172,6 +172,12 @@ container could write, qbit was fine.
   plan adds under `host/` are throwaway at the NixOS cutover. Worth
   a header comment in the host files so future-us doesn't port them
   as-is. Same trajectory as `script/make_users.sh`.
+- `plans/per-service-health.md` — drafted during this branch's
+  execution as the durable answer to "the alerts didn't catch this
+  incident." Sequenced **after** crashloop-recovery merges. This
+  branch's `make systemd-status` (commit 4) is the dev-loop
+  ergonomic; per-service-health is the always-on monitoring layer.
+  Both stay; they cover different needs.
 - `plans/lisp-render.md`, `plans/deploy-preview.md`, `plans/pre-rewrite.md`
   — orthogonal. Renderer / preview work, no interaction.
 
@@ -407,7 +413,22 @@ handoff doc's premise (overlay-layer downloads) was wrong.
    - Punt all three to a follow-up plan (added to `Future plans`); they pre-date this incident and recovering them isn't load-bearing for clearing the crashloop.
    - Marker file: `/tmp/recovery-marker-2` on fatlaptop (the original `/tmp/recovery-marker` was set before stale-container cleanup).
 
-4. **Add `host/` skeleton + `script/install-host-config.sh`** —
+4. ✅ **Improve `make systemd-status`** — Replace the existing
+   target (which only ran `systemctl status mediaserver.target`)
+   with a per-service `is-active` table. Loops `$(ALL_SERVICES)`
+   on the target host and prints one line per unit. The dev-loop
+   complement to `plans/per-service-health.md`'s Prometheus-driven
+   alerts: `make systemd-status` is the "right now, eyes-on" view;
+   per-service-health is the always-on monitoring layer. Both are
+   useful, especially while deploy is frozen and per-service-health
+   can't ship to the live host.
+   *Verify:* `TARGET=fatlaptop make systemd-status` prints a clean
+   table with one line per service.
+   **Decisions:**
+   - Used during commit 3's recovery already (manually inlined). This commit just promotes that one-liner into a Makefile target.
+   - Kept the existing `mediaserver.target` joint recipe for `start/stop/restart`; `status` is the only verb that benefits from per-service granularity. Plex shows `inactive` (Debian package, no systemd unit) — accepted noise; out-of-scope to filter.
+
+5. **Add `host/` skeleton + `script/install-host-config.sh`** —
    New `host/etc/` tree (empty for now), plus
    `script/install-host-config.sh <target>` that takes an ssh alias
    (or `local`) and copies `host/etc/sysctl.d/*.conf` and
@@ -422,7 +443,7 @@ handoff doc's premise (overlay-layer downloads) was wrong.
    reloads exactly once. `script/install-host-config.sh fatlaptop`
    on a clean tree reloads nothing (since no files exist yet).
 
-5. **Add `kernel.core_pattern = |/bin/true` drop-in** — Write
+6. **Add `kernel.core_pattern = |/bin/true` drop-in** — Write
    `host/etc/sysctl.d/60-no-coredumps.conf`:
    `kernel.core_pattern = |/bin/true`, `kernel.core_uses_pid = 0`,
    `fs.suid_dumpable = 0`. Run
@@ -433,7 +454,7 @@ handoff doc's premise (overlay-layer downloads) was wrong.
    *Verify:* `ssh fatlaptop cat /proc/sys/kernel/core_pattern` is
    `|/bin/true`. Smoke test result documented in commit message.
 
-6. **Add Docker log-driver size cap** — Write
+7. **Add Docker log-driver size cap** — Write
    `host/etc/docker/daemon.json` with `log-driver: json-file`,
    `log-opts: { max-size: 50m, max-file: 3 }`. Run
    `script/install-host-config.sh fatlaptop` (which restarts
@@ -444,7 +465,7 @@ handoff doc's premise (overlay-layer downloads) was wrong.
    *Verify:* a freshly created container has the expected LogConfig.
    Stack still up after docker restart.
 
-7. **Add disk-pressure alarm** — Append (or new file under)
+8. **Add disk-pressure alarm** — Append (or new file under)
    `services/prometheus/rules/` per commit 1's finding for the
    rules layout. Two rules: `RootFilesystemFilling` at <15% for 5m,
    `RootFilesystemCritical` at <5% for 1m, both scoped to
@@ -460,7 +481,7 @@ handoff doc's premise (overlay-layer downloads) was wrong.
    (in test); clears when restored. Routes to whatever receiver
    commit 1 identified.
 
-8. **Cleanup: remove handoff doc, prune saved cores, document
+9. **Cleanup: remove handoff doc, prune saved cores, document
    freeze** — `git rm fatlaptop-docker-disk-handoff.md` (the
    diagnosis is wrong; this plan is the record). On fatlaptop:
    `sudo rm -rf /media/qbittorrent-cores/` once the host has been

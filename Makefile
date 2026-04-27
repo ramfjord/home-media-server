@@ -164,8 +164,13 @@ install-systemd: install $(SYSTEMD_UNITS)
 	rsync -av --rsync-path="sudo rsync" config/systemd/ $(RSYNC_DEST)$(SYSTEMD_DIR)/
 	$(REMOTE) sudo systemctl daemon-reload
 
-systemd-start systemd-stop systemd-restart systemd-status:
+systemd-start systemd-stop systemd-restart:
 	@$(REMOTE) sudo systemctl $(patsubst systemd-%,%,$@) mediaserver.target
+
+# Per-service is-active table. More useful than `systemctl status mediaserver.target`
+# when you actually want to know which units are inactive vs failed vs active.
+systemd-status:
+	@$(REMOTE) "for svc in $(ALL_SERVICES); do printf '%-22s %s\n' \"\$$svc\" \"\$$(systemctl is-active \$$svc.service 2>/dev/null)\"; done"
 
 systemd-enable:
 	$(REMOTE) sudo systemctl enable --now mediaserver-network.service
