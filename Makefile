@@ -10,12 +10,13 @@ REMOTE     = $(if $(filter local,$(TARGET)),,ssh $(TARGET))
 
 # Anchor: directory containing this Makefile, after symlink resolution.
 # When invoked via test/Makefile -> ../Makefile, this still points at
-# the repo root — so bin/render and the targets/debian templates resolve
-# the same way regardless of cwd. cwd-relative things (services/,
-# globals.yml, config.local.yml, config/) resolve to the invocation dir,
-# which is what makes the same Makefile drive both production and goldens.
+# the repo root — so the targets/debian templates and Lisp sources
+# resolve the same way regardless of cwd. cwd-relative things
+# (services/, globals.yml, config.local.yml, config/, bin/render)
+# resolve to the invocation dir, which is what makes the same Makefile
+# drive both production and goldens: each tree gets its own bin/render
+# with that tree's config baked in.
 REPO_ROOT  := $(patsubst %/,%,$(dir $(realpath $(firstword $(MAKEFILE_LIST)))))
-RENDER_BIN := $(REPO_ROOT)/bin/render
 TARGET_DIR := $(REPO_ROOT)/targets/debian
 LISP_SRCS  := $(wildcard $(REPO_ROOT)/lisp/src/*.lisp) $(REPO_ROOT)/mediaserver.asd
 
@@ -49,9 +50,9 @@ MANIFEST_TARGETS      := $(patsubst $(TARGET_PREFIX)%.elp,config/%.manifest,$(su
 ALL_OUTPUTS := $(SERVICE_OUTPUTS) $(NON_TPL_TARGETS) $(SINGLETON_OUTPUTS) $(TARGET_STATIC_OUTPUTS) $(MANIFEST_TARGETS)
 DIRS := $(sort $(dir $(ALL_OUTPUTS)))
 
-.PHONY: clean check test users install install-systemd render-bin all $(addprefix systemd-,start stop restart enable disable status)
+.PHONY: clean check test users install install-systemd all $(addprefix systemd-,start stop restart enable disable status)
 
-test: render-bin
+test: bin/render
 	ruby -Ilib -Itest -e 'Dir["test/*_test.rb"].reject { |f| f == "test/golden_test.rb" }.each { |f| require "./#{f}" }'
 	@cd test && $(MAKE) all > /dev/null
 	@git diff --exit-code test/config/ > /dev/null && echo "goldens clean" || \
@@ -59,13 +60,13 @@ test: render-bin
 
 # Lisp render binary. Builds in ~2s; per-call render is ~25ms because
 # the merged config (services + globals + local overrides) is baked
-# into the saved core.
-render-bin: $(RENDER_BIN)
-$(RENDER_BIN): $(LISP_SRCS) $(REPO_ROOT)/script/build-render.sh \
-               $(wildcard $(REPO_ROOT)/services/*/service.yml) \
-               $(REPO_ROOT)/globals.yml \
-               $(wildcard $(REPO_ROOT)/config.local.yml)
-	$(REPO_ROOT)/script/build-render.sh
+# into the saved core. Bake-root is cwd, so test/ builds its own
+# binary with test/services/ baked in.
+bin/render: $(LISP_SRCS) $(REPO_ROOT)/script/build-render.sh \
+               $(wildcard services/*/service.yml) \
+               globals.yml \
+               $(wildcard config.local.yml)
+	$(REPO_ROOT)/script/build-render.sh $(CURDIR)/bin/render $(CURDIR)
 
 all: $(ALL_OUTPUTS)
 
@@ -83,16 +84,16 @@ $(DIRS):
 svc_of = $(firstword $(subst /, ,$(1)))
 
 # Per-service ELPs in services/. Service name implicit from path.
-config/%: services/%.elp $(RENDER_BIN) | $$(@D)/
-	SERVICE_NAME=$(call svc_of,$*) $(RENDER_BIN) --root . $< > $@
+config/%: services/%.elp bin/render | $$(@D)/
+	SERVICE_NAME=$(call svc_of,$*) bin/render $< > $@
 
 # Non-template service files: copy.
 config/%: services/% | $$(@D)/
 	cp $< $@
 
 # Singleton ELPs under targets/debian/ (no $service in path).
-config/%: $(TARGET_DIR)/%.elp $(RENDER_BIN) | $$(@D)/
-	$(RENDER_BIN) --root . $< > $@
+config/%: $(TARGET_DIR)/%.elp bin/render | $$(@D)/
+	bin/render $< > $@
 
 # Non-template files under targets/debian/: copy.
 config/%: $(TARGET_DIR)/% | $$(@D)/
@@ -102,12 +103,12 @@ config/%: $(TARGET_DIR)/% | $$(@D)/
 # non-empty renders write the unit file and append its path to the
 # manifest. SECONDEXPANSION on the prereq swaps `mediaserver` back
 # to `$service` so the actual source file resolves.
-config/%.manifest: $$(subst mediaserver,__service__,$(TARGET_DIR)/%.elp) $(RENDER_BIN) | $$(@D)/
+config/%.manifest: $$(subst mediaserver,__service__,$(TARGET_DIR)/%.elp) bin/render | $$(@D)/
 	@> $@
 	@for svc in $(ALL_SERVICES); do \
 	  f=$$(echo "$*" | sed "s|mediaserver|$$svc|"); out="config/$$f"; \
 	  mkdir -p "$$(dirname "$$out")"; \
-	  $(RENDER_BIN) --service $$svc --root . $< > "$$out.tmp"; \
+	  bin/render --service $$svc $< > "$$out.tmp"; \
 	  if [ -s "$$out.tmp" ]; then mv "$$out.tmp" "$$out"; echo "$$f" >> $@; else rm "$$out.tmp"; fi; \
 	done
 

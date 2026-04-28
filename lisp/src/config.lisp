@@ -127,51 +127,36 @@
         :key #'namestring))
 
 (defparameter *baked-config* nil
-  "Pre-loaded config plist baked into the binary at build time.
-   When non-NIL and the requested ROOT matches *BAKED-ROOT*, LOAD-CONFIG
-   returns this verbatim instead of re-parsing every service.yml. The
-   :root match guard means `make` invoked from test/ (a different ROOT)
-   still re-loads from disk — same binary, two cwd-personalities.")
-
-(defparameter *baked-root* nil
-  "Absolute namestring of the ROOT *BAKED-CONFIG* was loaded from.
-   Set by BAKE-CONFIG at build time.")
+  "Config plist baked into the binary at build time by BAKE-CONFIG.
+   Runtime LOAD-CONFIG returns this verbatim — no YAML parsing per call.
+   To render a different tree, build a separate binary with that tree
+   as the bake-root (see script/build-render.sh).")
 
 (defun bake-config (root)
   "Build-time entry point: load the config at ROOT and freeze it into
-   *BAKED-CONFIG* / *BAKED-ROOT*. Called from script/build-render.sh
-   before SAVE-LISP-AND-DIE so per-call YAML loading drops to a single
-   plist lookup."
+   *BAKED-CONFIG*. Called from script/build-render.sh before
+   SAVE-LISP-AND-DIE."
   (let ((abs (namestring (truename (uiop:ensure-directory-pathname root)))))
-    (setf *baked-config* (load-config :root abs)
-          *baked-root* abs)))
+    (setf *baked-config* (load-config-from-disk abs))))
 
-(defun load-config (&key (root "."))
-  "Load the full config rooted at ROOT (a directory).
+(defun load-config ()
+  "Return the baked config plist. Re-establishes *GLOBALS* and
+   *KNOWN-FIELDS* as a side effect so FIELD calls resolve derived
+   fields like :compose-file."
+  (unless *baked-config*
+    (error "load-config called but no config was baked into this binary"))
+  (setf *globals* (getf *baked-config* :globals)
+        *known-fields* (collect-known-fields (getf *baked-config* :services)))
+  *baked-config*)
+
+(defun load-config-from-disk (root)
+  "Read the config tree at ROOT from disk. Used at build time by
+   BAKE-CONFIG; not called at runtime.
 
    Reads globals.yml + config.local.yml top-level + every
    services/*/service.yml. Service files are ELP-preprocessed with
    the merged globals as bindings, then YAML-parsed. Service overrides
-   from config.local.yml are deep-merged afterward.
-
-   Sets the special variable *GLOBALS* as a side effect so subsequent
-   FIELD calls can resolve derived fields like :compose-file.
-
-   Returns a plist (:services LIST :globals PLIST :raw PLIST).
-
-   Fast path: when *BAKED-CONFIG* is non-NIL and the requested ROOT
-   resolves to *BAKED-ROOT*, the baked plist is returned and no YAML
-   parsing happens. This is what makes the saved-core invocation cheap."
-  (let ((abs (and *baked-config*
-                  (ignore-errors
-                    (namestring (truename
-                                 (uiop:ensure-directory-pathname root)))))))
-    (when (and abs (equal abs *baked-root*))
-      ;; Re-establish the dynamic side effect that the cold path sets.
-      (setf *globals* (getf *baked-config* :globals)
-            *known-fields* (collect-known-fields
-                            (getf *baked-config* :services)))
-      (return-from load-config *baked-config*)))
+   from config.local.yml are deep-merged afterward."
   (let* ((root         (uiop:ensure-directory-pathname root))
          (globals-yml  (read-yaml-file (merge-pathnames "globals.yml" root)))
          (local-yml    (read-yaml-file (merge-pathnames "config.local.yml" root)))
