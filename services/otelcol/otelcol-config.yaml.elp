@@ -48,15 +48,15 @@ receivers:
                 partof: monitoring
           # Map systemd unit names to service/partof labels
           metric_relabel_configs:
-<%- (dolist (svc (remove-if-not (lambda (s) (getf s :unit)) services)) -%>
+<%- (loopservices (services :where unit) -%>
             - source_labels: [name]
               target_label: service
-              replacement: <%= (field svc :name) %>
-              regex: "<%= (getf svc :unit) %>.service"
+              replacement: <%= name %>
+              regex: "<%= unit %>.service"
             - source_labels: [name]
               target_label: partof
-              replacement: <%= (field svc :partof) %>
-              regex: "<%= (getf svc :unit) %>.service"
+              replacement: <%= partof %>
+              regex: "<%= unit %>.service"
 <%- ) -%>
 
         # SNMP scrape of Synology NAS via snmp_exporter (disabled until NAS is set up).

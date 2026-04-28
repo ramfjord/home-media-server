@@ -17,67 +17,67 @@
    LOAD-CONFIG. Templates that need globals reach in via
    (getf *globals* :install-base) or pass them explicitly.")
 
-(defparameter *derived-fields*
-  `((:compose-file
-     . ,(lambda (s g)
-          (format nil "~A/config/~A/docker-compose.yml"
-                  (getf g :install-base) (getf s :name))))
-    (:source-dir
-     . ,(lambda (s g)
-          (declare (ignore g))
-          (format nil "services/~A" (getf s :name))))
-    (:dockerized
-     . ,(lambda (s g)
-          (declare (ignore g))
-          (and (getf s :docker-config) t)))
-    (:has-unit
-     . ,(lambda (s g)
-          (declare (ignore g))
-          (and (getf s :unit) t)))
-    (:groups
-     . ,(lambda (s g)
-          (declare (ignore g))
-          ;; Always-known: templates ask for :groups even on services
-          ;; that don't set it. Return literal value if present, else
-          ;; NIL — this keeps the typo guard meaningful for fixtures
-          ;; that intentionally omit :groups (per BRANCHES.md, no
-          ;; fixture sets groups: to avoid getent non-determinism).
-          (getf s :groups)))
-    (:user-id
-     . ,(lambda (s g)
-          (declare (ignore g))
-          ;; Mirrors Ruby's user_id: hardcoded skip for wireguard (which
-          ;; runs as root for the network namespace), else shell out to
-          ;; `id -u <name>`. Empty string for unknown users — assigned
-          ;; verbatim into compose under user:, where YAML emits as ''.
-          (let ((name (getf s :name)))
-            (if (string= name "wireguard")
-                nil
-                (string-trim
-                 '(#\Space #\Tab #\Newline)
-                 (uiop:run-program (list "id" "-u" name)
-                                   :output :string
-                                   :ignore-error-status t))))))
-    (:config-files
-     . ,(lambda (s g)
-          (declare (ignore g))
-          ;; Deployed-config filenames under services/<name>/, relative
-          ;; to that dir. Skips service.yml (data) and *.erb (legacy
-          ;; shadows). Strips .elp so the listed name matches the
-          ;; deployed file. Used by the systemd .path watcher template
-          ;; both as predicate (skip if empty) and as the watch list.
-          (let ((src (truename (format nil "services/~A/" (getf s :name)))))
-            (loop for p in (directory (merge-pathnames "**/*.*" src))
-                  for r = (enough-namestring p src)
-                  ;; CL's DIRECTORY returns both file- and dir-pathnames;
-                  ;; filter file-pathnames so subdirs don't leak in as
-                  ;; bogus PathChanged= entries.
-                  when (uiop:file-pathname-p p)
-                  unless (or (string= r "service.yml") (uiop:string-suffix-p r ".erb"))
-                  collect (if (uiop:string-suffix-p r ".elp")
-                              (subseq r 0 (- (length r) 4)) r))))))
-  "Alist of (KEY . FN) entries for computed service fields.
-   FN takes (service-plist globals-plist), returns the value.")
+(defparameter *derived-fields* nil
+  "Alist of (KEY . FN) entries for computed service fields. FN takes
+   (service-plist globals-plist) and returns the value. Populated by
+   DEFINE-SERVICE-FIELD forms below.")
+
+(defmacro define-service-field (key &body body)
+  "Declare KEY as a known service field. Without BODY, the field is a
+   passthrough that returns (getf service KEY). With BODY, the body
+   computes the value with these lexical bindings:
+     SERVICE        the service plist
+     GLOBALS        the globals plist
+     (svc-field K)  shorthand for (FIELD service K globals); resolves
+                    through *derived-fields*, so composites of other
+                    declared fields work naturally."
+  `(setf *derived-fields*
+         (append (remove ,key *derived-fields* :key #'car)
+                 (list (cons ,key
+                             (lambda (service globals)
+                               (declare (ignorable globals))
+                               (flet ((svc-field (k) (field service k globals)))
+                                 (declare (ignorable (function svc-field)))
+                                 ,@(or body `((getf service ,key))))))))))
+
+(define-service-field :unit)
+(define-service-field :groups)
+(define-service-field :compose-file
+  (format nil "~A/config/~A/docker-compose.yml"
+          (getf globals :install-base) (svc-field :name)))
+(define-service-field :source-dir
+  (format nil "services/~A" (svc-field :name)))
+(define-service-field :dockerized
+  (and (getf service :docker-config) t))
+(define-service-field :has-unit
+  (and (svc-field :unit) t))
+(define-service-field :user-id
+  ;; Mirrors Ruby's user_id: hardcoded skip for wireguard (which runs
+  ;; as root for the network namespace), else shell out to `id -u
+  ;; <name>`. Empty string for unknown users — assigned verbatim into
+  ;; compose under user:, where YAML emits as ''.
+  (let ((name (svc-field :name)))
+    (unless (string= name "wireguard")
+      (string-trim '(#\Space #\Tab #\Newline)
+                   (uiop:run-program (list "id" "-u" name)
+                                     :output :string
+                                     :ignore-error-status t)))))
+(define-service-field :config-files
+  ;; Deployed-config filenames under services/<name>/, relative to
+  ;; that dir. Skips service.yml (data) and *.erb (legacy shadows).
+  ;; Strips .elp so the listed name matches the deployed file. Used
+  ;; by the systemd .path watcher template both as predicate (skip if
+  ;; empty) and as the watch list.
+  (let ((src (truename (format nil "services/~A/" (svc-field :name)))))
+    (loop for p in (directory (merge-pathnames "**/*.*" src))
+          for r = (enough-namestring p src)
+          ;; CL's DIRECTORY returns both file- and dir-pathnames;
+          ;; filter file-pathnames so subdirs don't leak in as bogus
+          ;; PathChanged= entries.
+          when (uiop:file-pathname-p p)
+          unless (or (string= r "service.yml") (uiop:string-suffix-p r ".erb"))
+          collect (if (uiop:string-suffix-p r ".elp")
+                      (subseq r 0 (- (length r) 4)) r))))
 
 (defparameter *known-fields* nil
   "Set by VALIDATE-SERVICES at load time: union of every keyword key
