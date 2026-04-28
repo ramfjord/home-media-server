@@ -215,6 +215,41 @@
         (setf (gethash (car entry) seen) t)
         (push entry result)))))
 
+(defmacro with-service-scope (svc &body body)
+  "Bind every key in *KNOWN-FIELDS* as a symbol-macro that looks up
+   that field on SVC. Lets template bodies write `name` instead of
+   (field svc :name).
+
+   FIELD's globals fallback comes from the GLOBALS symbol in the ELP
+   context. Expanded at template-compile time, so *KNOWN-FIELDS* must
+   be populated — the normal LOAD-CONFIG path does this before any
+   render. SVC is evaluated once."
+  (unless *known-fields*
+    (error "with-service-scope expanded before *known-fields* was set; ~
+            ensure config is loaded before rendering."))
+  (let ((svc-var (gensym "SVC")))
+    `(let ((,svc-var ,svc))
+       (symbol-macrolet
+           ,(mapcar (lambda (k)
+                      (list (%field-binding-symbol k)
+                            `(field ,svc-var ,k globals)))
+                    *known-fields*)
+         ,@body))))
+
+(defmacro loopservices ((source-form &key (where t)) &body body)
+  "Iterate over services from SOURCE-FORM, exposing each service's
+   fields as bare symbols (`name`, `port`, `public_url`, ...) within
+   BODY and any :where clause.
+
+   SOURCE-FORM is evaluated once in the enclosing scope. :WHERE, when
+   given, is evaluated in field-scope per candidate; services for
+   which it returns NIL are skipped."
+  (let ((s (gensym "SVC")))
+    `(dolist (,s ,source-form)
+       (with-service-scope ,s
+         (when ,where
+           ,@body)))))
+
 (defun service-render-context (service config)
   "Build the ELP context-alist for a render.
 

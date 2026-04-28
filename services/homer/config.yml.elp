@@ -38,11 +38,10 @@ services:
   - name: "<%= (mediaserver::ruby-capitalize category) %>"
     icon: "<%= (or (cdr (assoc category icons :test #'equal)) "fas fa-folder") %>"
     items:
-<%-   (dolist (svc (remove-if-not (lambda (s) (equal (field s :partof) category))
-                                  displayable)) -%>
-      - name: "<%= (mediaserver::ruby-capitalize (field svc :name)) %>"
-        subtitle: "<%= (field svc :desc) %>"
-        logo: "assets/tools/<%= (field svc :name) %>.png"
-        url: "<%= (or (field svc :public-url) (format nil "http://~A:~A" hostname (field svc :port))) %>"
+<%-   (loopservices (displayable :where (equal partof category)) -%>
+      - name: "<%= (mediaserver::ruby-capitalize name) %>"
+        subtitle: "<%= desc %>"
+        logo: "assets/tools/<%= name %>.png"
+        url: "<%= (or public_url (format nil "http://~A:~A" hostname port)) %>"
         target: "_blank"
 <%- ))) -%>

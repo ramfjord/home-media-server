@@ -28,15 +28,15 @@ receivers:
               target_label: job
           # Map cadvisor container name labels to service/partof
           metric_relabel_configs:
-<%- (dolist (svc (remove-if-not (lambda (s) (field s :dockerized)) services)) -%>
+<%- (loopservices (services :where dockerized) -%>
             - source_labels: [name]
               target_label: service
-              replacement: <%= (field svc :name) %>
-              regex: "<%= (field svc :name) %>"
+              replacement: <%= name %>
+              regex: "<%= name %>"
             - source_labels: [name]
               target_label: partof
-              replacement: <%= (field svc :partof) %>
-              regex: "<%= (field svc :name) %>"
+              replacement: <%= partof %>
+              regex: "<%= name %>"
 <%- ) -%>
 
         # Host-level exporters running outside docker
@@ -82,14 +82,10 @@ receivers:
         #       replacement: "snmp-exporter:9116"
 
         # HTTP probes via blackbox exporter for dockerized services
-<%- (dolist (svc (remove-if-not (lambda (s)
-                                  (and (field s :port)
-                                       (field s :dockerized)
-                                       (not (member (field s :name)
-                                                    '("grafana" "homer" "cadvisor")
-                                                    :test #'equal))))
-                                services)) -%>
-        - job_name: 'http_probe_<%= (field svc :name) %>'
+<%- (loopservices (services :where (and port dockerized
+                                       (not (member name '("grafana" "homer" "cadvisor")
+                                                    :test #'equal)))) -%>
+        - job_name: 'http_probe_<%= name %>'
           metrics_path: /probe
           params:
             module: [http_basic]
@@ -97,11 +93,11 @@ receivers:
             # VPN services share wireguard's netns and have no DNS name
             # on the mediaserver network — probe via wireguard.
             - targets:
-              - http://<%= (if (field svc :use-vpn) "wireguard" (field svc :name)) %>:<%= (field svc :port) %><%= (or (field svc :healthz) "") %>
+              - http://<%= (if use_vpn "wireguard" name) %>:<%= port %><%= (or healthz "") %>
               labels:
-                service: <%= (field svc :name) %>
-                partof: <%= (field svc :partof) %>
-                description: "<%= (field svc :desc) %>"
+                service: <%= name %>
+                partof: <%= partof %>
+                description: "<%= desc %>"
           relabel_configs:
             - source_labels: [__address__]
               target_label: __param_target

@@ -1,6 +1,6 @@
-<%- (dolist (svc (remove-if-not (lambda (s) (and (field s :use-vpn) (field s :port))) services)) -%>
-:<%= (field svc :port) %> {
-  reverse_proxy wireguard:<%= (field svc :port) %>
+<%- (loopservices (services :where (and use_vpn port)) -%>
+:<%= port %> {
+  reverse_proxy wireguard:<%= port %>
 }
 <%- ) -%>
 

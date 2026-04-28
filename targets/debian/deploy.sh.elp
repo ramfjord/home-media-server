@@ -21,21 +21,20 @@ fi
 STAGING="<%= install_base %>/staging"
 INSTALL_BASE="<%= install_base %>"
 
-<%- (dolist (svc (remove-if-not (lambda (s) (field s :dockerized)) services)) -%>
-<%- (let ((n (field svc :name)) (uid (field svc :user-id))) -%>
-<%- (when uid -%>
-echo "=== <%= n %> ==="
-rsync -a $DRY --chown=<%= n %>:mediaserver --chmod=Dg+s,Fg+w \
-  "$STAGING/<%= n %>/" "$INSTALL_BASE/config/<%= n %>/"
+<%- (loopservices (services :where dockerized) -%>
+<%- (when user_id -%>
+echo "=== <%= name %> ==="
+rsync -a $DRY --chown=<%= name %>:mediaserver --chmod=Dg+s,Fg+w \
+  "$STAGING/<%= name %>/" "$INSTALL_BASE/config/<%= name %>/"
 # Recursive chown catches runtime state (data/, logs/, db/) that rsync's
 # --chown skips because it's not in the transferred set.
-[[ "$MODE" == "apply" ]] && chown -R <%= n %>:mediaserver "$INSTALL_BASE/config/<%= n %>/"
+[[ "$MODE" == "apply" ]] && chown -R <%= name %>:mediaserver "$INSTALL_BASE/config/<%= name %>/"
 <%- ) -%>
-<%- (unless uid -%>
-echo "=== <%= n %> (preserving ownership) ==="
+<%- (unless user_id -%>
+echo "=== <%= name %> (preserving ownership) ==="
 rsync -a $DRY --no-owner --no-group --chmod=Dg+s,Fg+w \
-  "$STAGING/<%= n %>/" "$INSTALL_BASE/config/<%= n %>/"
-<%- ))) -%>
+  "$STAGING/<%= name %>/" "$INSTALL_BASE/config/<%= name %>/"
+<%- )) -%>
 
 echo "=== systemd units ==="
 rsync -a $DRY "$STAGING/systemd/" /etc/systemd/system/
