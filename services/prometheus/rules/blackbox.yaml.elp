@@ -1,15 +1,14 @@
 groups:
 - name: HTTPChecks
   rules:
-  # Disabled - grafana, homer, cadvisor probes failing due to docker network issues
-  # - alert: BlackboxProbeFailed
-  #   expr: probe_success == 0
-  #   for: 0m
-  #   labels:
-  #     severity: critical
-  #   annotations:
-  #     summary: Blackbox probe failed (instance {{ $labels.instance }})
-  #     description: "Probe failed\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+  - alert: BlackboxProbeFailed
+    expr: probe_success == 0
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Blackbox probe failed: {{ $labels.service }}"
+      description: "Probe of {{ $labels.instance }} has been failing for 5m\n  LABELS = {{ $labels }}"
 
   - alert: BlackboxConfigurationReloadFailure
     expr: blackbox_exporter_config_last_reload_successful != 1
