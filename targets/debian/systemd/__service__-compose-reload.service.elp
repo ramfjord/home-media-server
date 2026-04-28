@@ -1,3 +1,4 @@
+<%- (when (and dockerized (not has_unit)) -%>
 [Unit]
 Description=Restart docker compose service <%= name %>
 After=<%= name %>.service
@@ -5,3 +6,4 @@ After=<%= name %>.service
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/systemctl restart <%= name %>.service
+<% ) -%>

@@ -1,0 +1,5 @@
+systemd/fx-caddy-compose-reload.service
+systemd/fx-prometheus-compose-reload.service
+systemd/fx-qbittorrent-compose-reload.service
+systemd/fx-sonarr-compose-reload.service
+systemd/fx-wireguard-compose-reload.service

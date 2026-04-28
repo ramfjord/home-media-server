@@ -1,0 +1,5 @@
+systemd/fx-caddy-compose.path
+systemd/fx-prometheus-compose.path
+systemd/fx-qbittorrent-compose.path
+systemd/fx-sonarr-compose.path
+systemd/fx-wireguard-compose.path

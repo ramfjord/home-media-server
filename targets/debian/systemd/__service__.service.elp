@@ -1,3 +1,4 @@
+<%- (when (and dockerized (not has_unit)) -%>
 [Unit]
 Description=<%= desc %> (<%= name %>)
 After=docker.service mediaserver-network.service<% (when use_vpn %> wireguard.service<% ) %>
@@ -5,7 +6,7 @@ Requires=docker.service mediaserver-network.service
 PartOf=mediaserver-network.service mediaserver.target
 <%- (when use_vpn -%>
 BindsTo=wireguard.service
-<%- ) -%>
+<% ) -%>
 
 [Service]
 Type=simple
@@ -14,12 +15,13 @@ Restart=on-failure
 RestartSec=10
 <%- (when use_vpn -%>
 ExecStartPre=/bin/sh -c 'for i in {1..30}; do docker inspect wireguard --format="{{.State.Health.Status}}" 2>/dev/null | grep -q healthy && exit 0; sleep 1; done; exit 1'
-<%- ) -%>
+<% ) -%>
 ExecStart=/usr/bin/docker compose -f <%= compose_file %> up <%= name %>
 ExecStop=/usr/bin/docker compose -f <%= compose_file %> stop <%= name %>
 <%- (when sighup_reload -%>
 ExecReload=/usr/bin/docker compose -f <%= compose_file %> kill --signal SIGHUP <%= name %>
-<%- ) -%>
+<% ) -%>
 
 [Install]
 WantedBy=mediaserver.target
+<% ) -%>

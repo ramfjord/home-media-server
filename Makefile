@@ -10,50 +10,46 @@ REMOTE     = $(if $(filter local,$(TARGET)),,ssh $(TARGET))
 
 # Anchor: directory containing this Makefile, after symlink resolution.
 # When invoked via test/Makefile -> ../Makefile, this still points at
-# the repo root — so bin/render and the systemd/*.elp templates resolve
+# the repo root — so bin/render and the targets/debian templates resolve
 # the same way regardless of cwd. cwd-relative things (services/,
 # globals.yml, config.local.yml, config/) resolve to the invocation dir,
 # which is what makes the same Makefile drive both production and goldens.
 REPO_ROOT  := $(patsubst %/,%,$(dir $(realpath $(firstword $(MAKEFILE_LIST)))))
 RENDER_BIN := $(REPO_ROOT)/bin/render
-SYSTEMD    := $(REPO_ROOT)/systemd
+TARGET_DIR := $(REPO_ROOT)/targets/debian
 LISP_SRCS  := $(wildcard $(REPO_ROOT)/lisp/src/*.lisp) $(REPO_ROOT)/mediaserver.asd
 
-# ELP source → target mapping:
-#   services/<svc>/<path>.elp  →  config/<svc>/<path>
-#   <aggregator>.elp           →  config/<aggregator>
+ALL_SERVICES := $(notdir $(wildcard services/*))
+
+# services/<svc>/<path>.elp -> config/<svc>/<path>
 SERVICE_ELPS := $(shell find services -name '*.elp' 2>/dev/null)
-TOP_ELPS     := $(wildcard *.elp)
-ELPS := $(patsubst services/%.elp,config/%,$(SERVICE_ELPS)) \
-        $(patsubst %.elp,config/%,$(TOP_ELPS))
+SERVICE_OUTPUTS := $(patsubst services/%.elp,config/%,$(SERVICE_ELPS))
 
-# Cached service lists. bin/render bakes in the merged config, so its
-# mtime is the right trigger — re-running --list-make against a fresh
-# binary picks up any service.yml change automatically.
-.make.services: $(RENDER_BIN)
-	@$(RENDER_BIN) --list-make --root . > $@
-
--include .make.services
-
-# Files under services/ to copy verbatim (not templates, not service.yml,
-# not legacy .erb shadows kept around for reference).
+# Non-template files under services/ get copied verbatim.
 NON_TPL_CONFIGS := $(patsubst services/%,%,$(shell find services -type f ! -name '*.elp' ! -name '*.erb' ! -name 'service.yml' 2>/dev/null))
 NON_TPL_TARGETS := $(addprefix config/,$(NON_TPL_CONFIGS))
 
-# Per-service docker-compose.yml targets
-COMPOSE_TARGETS := $(foreach s,$(DOCKERIZED_SERVICES),config/$(s)/docker-compose.yml)
+# Target tree (debian).
+#
+# Templates with `__service__` in the path = fan-out (one render per
+# service, empty output skipped). Templates without it = singleton.
+#
+# Manifests live at config/<path-with-__service__-replaced-by-mediaserver>.manifest;
+# the pattern rule swaps `mediaserver` back to `__service__` via $(subst)
+# to find the actual source file.
+SINGLETON_ELPS := $(shell find $(TARGET_DIR) -name '*.elp' -not -path '*__service__*')
+FANOUT_ELPS    := $(shell find $(TARGET_DIR) -name '*.elp' -path '*__service__*')
+TARGET_STATIC  := $(shell find $(TARGET_DIR) -type f -not -name '*.elp' -not -path '*__service__*')
 
-# Systemd unit variables (derived from cached service lists above)
-SYSTEMD_SERVICE_UNITS := $(addprefix config/systemd/,$(addsuffix .service,$(SYSTEMD_SERVICES)))
-SYSTEMD_PATH_UNITS    := $(addprefix config/systemd/,$(addsuffix .path,$(SERVICES_WITH_CONFIG)))
-SYSTEMD_COMPOSE_PATH_UNITS := $(addprefix config/systemd/,$(addsuffix -compose.path,$(SYSTEMD_SERVICES)))
-SYSTEMD_COMPOSE_RELOAD_UNITS := $(addprefix config/systemd/,$(addsuffix -compose-reload.service,$(SYSTEMD_SERVICES)))
-SIGHUP_RELOAD_UNITS   := $(addprefix config/systemd/,$(addsuffix -reload.service,$(SIGHUP_SERVICES)))
-STATIC_SYSTEMD_UNITS := config/systemd/mediaserver-network.service
-AGGREGATOR_SYSTEMD_UNITS := config/systemd/mediaserver.target
-SYSTEMD_UNITS := $(STATIC_SYSTEMD_UNITS) $(AGGREGATOR_SYSTEMD_UNITS) $(SYSTEMD_SERVICE_UNITS) $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS) $(SYSTEMD_COMPOSE_RELOAD_UNITS) $(SIGHUP_RELOAD_UNITS)
+TARGET_PREFIX  := $(TARGET_DIR)/
+SINGLETON_OUTPUTS     := $(patsubst $(TARGET_PREFIX)%.elp,config/%,$(SINGLETON_ELPS))
+TARGET_STATIC_OUTPUTS := $(patsubst $(TARGET_PREFIX)%,config/%,$(TARGET_STATIC))
+MANIFEST_TARGETS      := $(patsubst $(TARGET_PREFIX)%.elp,config/%.manifest,$(subst __service__,mediaserver,$(FANOUT_ELPS)))
 
-.PHONY: clean check test users install install-systemd render-bin $(addprefix systemd-,start stop restart enable disable status)
+ALL_OUTPUTS := $(SERVICE_OUTPUTS) $(NON_TPL_TARGETS) $(SINGLETON_OUTPUTS) $(TARGET_STATIC_OUTPUTS) $(MANIFEST_TARGETS)
+DIRS := $(sort $(dir $(ALL_OUTPUTS)))
+
+.PHONY: clean check test users install install-systemd render-bin all $(addprefix systemd-,start stop restart enable disable status)
 
 test: render-bin
 	ruby -Ilib -Itest -e 'Dir["test/*_test.rb"].reject { |f| f == "test/golden_test.rb" }.each { |f| require "./#{f}" }'
@@ -63,12 +59,7 @@ test: render-bin
 
 # Lisp render binary. Builds in ~2s; per-call render is ~25ms because
 # the merged config (services + globals + local overrides) is baked
-# into the saved core, so cl-yaml load + ELP preprocessing happen once
-# at build time, not per call.
-#
-# Deps are anchored to $(REPO_ROOT) so the binary doesn't get rebuilt
-# spuriously when invoked from test/ (different cwd, different
-# services/ tree). Test cwd uses the cold load-config path anyway.
+# into the saved core.
 render-bin: $(RENDER_BIN)
 $(RENDER_BIN): $(LISP_SRCS) $(REPO_ROOT)/script/build-render.sh \
                $(wildcard $(REPO_ROOT)/services/*/service.yml) \
@@ -76,94 +67,60 @@ $(RENDER_BIN): $(LISP_SRCS) $(REPO_ROOT)/script/build-render.sh \
                $(wildcard $(REPO_ROOT)/config.local.yml)
 	$(REPO_ROOT)/script/build-render.sh
 
-all: $(ELPS) $(NON_TPL_TARGETS) $(COMPOSE_TARGETS) $(SYSTEMD_UNITS) config/list-make.txt
-
-# Snapshot of service-list make variables. Same data as .make.services
-# (the cached, gitignored copy used for Make dispatch) — checked-in
-# under test/config/ for goldens so format changes are reviewable.
-config/list-make.txt: $(RENDER_BIN) | $(@D)/
-	$(RENDER_BIN) --list-make --root . > $@
+all: $(ALL_OUTPUTS)
 
 clean:
-	rm -rf config/ .make.services
+	rm -rf config/
 
 users:
 	script/make_users.sh
 
-# Order-only directory creation. One mkdir per dir, never repeated;
-# render rules say `| $(@D)` so Make ensures the dir exists without
-# rebuilding the target on dir mtime ticks.
-DIRS := $(sort $(dir $(ELPS) $(NON_TPL_TARGETS) $(COMPOSE_TARGETS) $(SYSTEMD_UNITS) config/list-make.txt))
+# Order-only directory creation. One mkdir per dir, never repeated.
 $(DIRS):
 	mkdir -p $@
 
 # --- Render rules ---
-#
-# bin/render bakes the merged config (services + globals + locals) into
-# its saved core, so every render output transitively depends on the
-# binary — no need for per-rule SERVICE_YAMLS / globals.yml / config.local.yml
-# deps. When any of those change, bin/render rebuilds (per the
-# $(RENDER_BIN) rule above) and Make re-runs every render that depends
-# on it.
 svc_of = $(firstword $(subst /, ,$(1)))
 
-# Per-service ELP rendering. Covers both per-service templates
-# (services/qbittorrent/qBittorrent/qBittorrent.conf.elp ->
-# config/qbittorrent/qBittorrent/qBittorrent.conf) and aggregators
-# (services/caddy/Caddyfile.elp -> config/caddy/Caddyfile) — the
-# template knows whether to iterate over `services` or use the bound
-# `service`; Make doesn't.
+# Per-service ELPs in services/. Service name implicit from path.
 config/%: services/%.elp $(RENDER_BIN) | $$(@D)/
 	SERVICE_NAME=$(call svc_of,$*) $(RENDER_BIN) --root . $< > $@
 
-# Top-level *.elp at repo root (e.g. deploy.sh.elp).
-config/%: %.elp $(RENDER_BIN) | $$(@D)/
-	$(RENDER_BIN) --root . $< > $@
-
-# Copy non-template files from services/<svc>/... to config/<svc>/...
+# Non-template service files: copy.
 config/%: services/% | $$(@D)/
 	cp $< $@
 
-# Per-service docker-compose.yml: shared template, SERVICE_NAME per file.
-config/%/docker-compose.yml: $(SYSTEMD)/service.compose.yml.elp $(RENDER_BIN) | $$(@D)/
-	SERVICE_NAME=$* $(RENDER_BIN) --root . $< > $@
-
-# mediaserver.target is the one aggregator template that lives under
-# systemd/ (not services/), so it doesn't fit the per-service pattern.
-# Explicit rule for it; everything else collapses.
-config/systemd/mediaserver.target: $(SYSTEMD)/mediaserver.target.elp $(RENDER_BIN) | $$(@D)/
+# Singleton ELPs under targets/debian/ (no $service in path).
+config/%: $(TARGET_DIR)/%.elp $(RENDER_BIN) | $$(@D)/
 	$(RENDER_BIN) --root . $< > $@
 
-# Static systemd units (no rendering, just copy).
-config/systemd/%.service: $(SYSTEMD)/%.service | $$(@D)/
+# Non-template files under targets/debian/: copy.
+config/%: $(TARGET_DIR)/% | $$(@D)/
 	cp $< $@
 
-config/systemd/%-compose-reload.service: $(SYSTEMD)/service-compose-reload.service.elp $(RENDER_BIN) | $$(@D)/
-	SERVICE_NAME=$* $(RENDER_BIN) --root . $< > $@
+# Per-template fan-out manifest. The recipe iterates ALL_SERVICES;
+# non-empty renders write the unit file and append its path to the
+# manifest. SECONDEXPANSION on the prereq swaps `mediaserver` back
+# to `$service` so the actual source file resolves.
+config/%.manifest: $$(subst mediaserver,__service__,$(TARGET_DIR)/%.elp) $(RENDER_BIN) | $$(@D)/
+	@> $@
+	@for svc in $(ALL_SERVICES); do \
+	  f=$$(echo "$*" | sed "s|mediaserver|$$svc|"); out="config/$$f"; \
+	  mkdir -p "$$(dirname "$$out")"; \
+	  $(RENDER_BIN) --service $$svc --root . $< > "$$out.tmp"; \
+	  if [ -s "$$out.tmp" ]; then mv "$$out.tmp" "$$out"; echo "$$f" >> $@; else rm "$$out.tmp"; fi; \
+	done
 
-config/systemd/%-compose.path: $(SYSTEMD)/service-compose.path.elp $(RENDER_BIN) | $$(@D)/
-	SERVICE_NAME=$* $(RENDER_BIN) --root . $< > $@
-
-config/systemd/%-reload.service: $(SYSTEMD)/sighup-reload.service.elp $(RENDER_BIN) | $$(@D)/
-	SERVICE_NAME=$* $(RENDER_BIN) --root . $< > $@
-
-config/systemd/%.service: $(SYSTEMD)/service.service.elp $(RENDER_BIN) | $$(@D)/
-	SERVICE_NAME=$* $(RENDER_BIN) --root . $< > $@
-
-# .path units enumerate the service's deployed files. Make computes
-# the list here (it's the dispatcher), passes via SERVICE_FILES env
-# var, which the .elp template walks. Excludes service.yml, .erb
-# shadows, .elp extension stripped to match the deployed filename.
-service_files = $(shell cd services/$(1) 2>/dev/null && find . -type f ! -name 'service.yml' ! -name '*.erb' -printf '%P\n' | sed 's/\.elp$$//' | tr '\n' ' ')
-config/systemd/%.path: $(SYSTEMD)/service.path.elp $(RENDER_BIN) $$(shell find services/$$* -type f 2>/dev/null) | $$(@D)/
-	SERVICE_NAME=$* SERVICE_FILES="$(call service_files,$*)" $(RENDER_BIN) --root . $< > $@
+PATH_MANIFESTS := config/systemd/mediaserver.path.manifest \
+                  config/systemd/mediaserver-compose.path.manifest
+COMPOSE_MANIFEST := config/mediaserver/docker-compose.yml.manifest
 
 check: all
 	# TODO convert these to use the container versions of promtool/amtool
 	promtool check config config/prometheus/prometheus.yml
 	amtool check-config config/alertmanager/alertmanager.yml
-	@for f in $(COMPOSE_TARGETS); do \
-	  docker compose -f "$$f" config > /dev/null || (echo "FAIL: $$f" && exit 1); \
+	@for f in $$(cat $(COMPOSE_MANIFEST) 2>/dev/null); do \
+	  docker compose -f "config/$$f" config > /dev/null || (echo "FAIL: $$f" && exit 1); \
 	done
 	docker run --rm \
 		-v $(CURDIR)/config/otelcol:/etc/otelcol \
@@ -183,9 +140,7 @@ install: check
 	done
 	rsync -av --rsync-path="sudo rsync" certs/ $(RSYNC_DEST)/opt/mediaserver/certs/
 
-PATH_UNITS := $(notdir $(SYSTEMD_PATH_UNITS) $(SYSTEMD_COMPOSE_PATH_UNITS))
-
-install-systemd: install $(SYSTEMD_UNITS)
+install-systemd: install
 	$(REMOTE) sudo mkdir -p $(SYSTEMD_DIR)
 	rsync -av --rsync-path="sudo rsync" config/systemd/ $(RSYNC_DEST)$(SYSTEMD_DIR)/
 	$(REMOTE) sudo systemctl daemon-reload
@@ -195,12 +150,14 @@ systemd-start systemd-stop systemd-restart systemd-status:
 
 systemd-enable:
 	$(REMOTE) sudo systemctl enable --now mediaserver-network.service
-	$(REMOTE) sudo systemctl enable --force mediaserver.target
-	$(REMOTE) sudo systemctl enable --now --force $(PATH_UNITS)
+	$(REMOTE) sudo systemctl enable mediaserver.target
+	@units=$$(cat $(PATH_MANIFESTS) 2>/dev/null | xargs -n1 basename | tr '\n' ' '); \
+	  $(REMOTE) sudo systemctl enable --now $$units
 
 systemd-disable:
 	$(REMOTE) sudo systemctl disable mediaserver.target
-	$(REMOTE) sudo systemctl disable $(PATH_UNITS)
+	@units=$$(cat $(PATH_MANIFESTS) 2>/dev/null | xargs -n1 basename | tr '\n' ' '); \
+	  $(REMOTE) sudo systemctl disable $$units
 
 # Force-restart a single service. Path units already redeploy on
 # `make install`; use this when you want to bounce a service without

@@ -57,7 +57,25 @@
                  '(#\Space #\Tab #\Newline)
                  (uiop:run-program (list "id" "-u" name)
                                    :output :string
-                                   :ignore-error-status t)))))))
+                                   :ignore-error-status t))))))
+    (:config-files
+     . ,(lambda (s g)
+          (declare (ignore g))
+          ;; Deployed-config filenames under services/<name>/, relative
+          ;; to that dir. Skips service.yml (data) and *.erb (legacy
+          ;; shadows). Strips .elp so the listed name matches the
+          ;; deployed file. Used by the systemd .path watcher template
+          ;; both as predicate (skip if empty) and as the watch list.
+          (let ((src (truename (format nil "services/~A/" (getf s :name)))))
+            (loop for p in (directory (merge-pathnames "**/*.*" src))
+                  for r = (enough-namestring p src)
+                  ;; CL's DIRECTORY returns both file- and dir-pathnames;
+                  ;; filter file-pathnames so subdirs don't leak in as
+                  ;; bogus PathChanged= entries.
+                  when (uiop:file-pathname-p p)
+                  unless (or (string= r "service.yml") (uiop:string-suffix-p r ".erb"))
+                  collect (if (uiop:string-suffix-p r ".elp")
+                              (subseq r 0 (- (length r) 4)) r))))))
   "Alist of (KEY . FN) entries for computed service fields.
    FN takes (service-plist globals-plist), returns the value.")
 

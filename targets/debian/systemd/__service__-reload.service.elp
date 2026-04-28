@@ -1,3 +1,4 @@
+<%- (when sighup_reload -%>
 [Unit]
 Description=Config reload (SIGHUP) for <%= name %>
 After=<%= name %>.service
@@ -6,3 +7,4 @@ After=<%= name %>.service
 Type=oneshot
 ExecStart=/usr/bin/docker compose -f <%= compose_file %> kill --signal SIGHUP <%= name %>
 RemainAfterExit=no
+<% ) -%>

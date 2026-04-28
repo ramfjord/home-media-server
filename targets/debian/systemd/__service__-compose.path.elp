@@ -1,3 +1,4 @@
+<%- (when (and dockerized (not has_unit)) -%>
 [Unit]
 Description=Docker compose change watcher for <%= name %>
 
@@ -8,3 +9,4 @@ Unit=<%= name %>-compose-reload.service
 [Install]
 WantedBy=<%= name %>.service
 RequiredBy=<%= name %>.service
+<% ) -%>

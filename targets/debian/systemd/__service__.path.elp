@@ -1,12 +1,14 @@
+<%- (when (and (and dockerized (not has_unit)) config_files) -%>
 [Unit]
 Description=Config watcher for <%= name %>
 
 [Path]
-<%- (dolist (f service_files) -%>
+<%- (dolist (f config_files) -%>
 PathChanged=<%= install_base %>/config/<%= name %>/<%= f %>
-<%- ) -%>
+<% ) -%>
 Unit=<%= (if sighup_reload (format nil "~A-reload.service" name) (format nil "~A.service" name)) %>
 
 [Install]
 WantedBy=<%= name %>.service
 RequiredBy=<%= name %>.service
+<% ) -%>
