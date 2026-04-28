@@ -35,9 +35,7 @@ rsync -a $DRY --chown=<%= n %>:mediaserver --chmod=Dg+s,Fg+w \
 echo "=== <%= n %> (preserving ownership) ==="
 rsync -a $DRY --no-owner --no-group --chmod=Dg+s,Fg+w \
   "$STAGING/<%= n %>/" "$INSTALL_BASE/config/<%= n %>/"
-<%- ) -%>
-<%- ) -%>
-<%- ) -%>
+<%- ))) -%>
 
 echo "=== systemd units ==="
 rsync -a $DRY "$STAGING/systemd/" /etc/systemd/system/

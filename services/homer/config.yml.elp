@@ -45,6 +45,4 @@ services:
         logo: "assets/tools/<%= (field svc :name) %>.png"
         url: "<%= (or (field svc :public-url) (format nil "https://~A:~A" hostname (field svc :port))) %>"
         target: "_blank"
-<%-   ) -%>
-<%- ) -%>
-<%- ) -%>
+<%- ))) -%>

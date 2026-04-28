@@ -47,6 +47,10 @@ make restart-<service> # force-restart one service (no install)
 TARGET := fatlaptop
 ```
 
+## ELP template style
+
+Stack adjacent close-paren-only tags onto a single tag, Lisp-style: prefer `<%- )) -%>` over two consecutive `<%- ) -%>` lines (and `))) ` for three, etc.). The trim semantics are the same and the rendered output is byte-identical, but it reads as the Lisp form it actually is rather than as HTML-like standalone tags.
+
 ## Workflow
 
 1. Edit `services/<name>/service.yml`, templates, and/or `config.local.yml`
