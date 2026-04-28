@@ -2,13 +2,11 @@
 name: vaultwarden
 partof: security
 desc: Password manager
-port: 8000
+port: 80
 healthz: "/alive"
 user_id: false  # no dedicated host user; image runs as its own internal user
 docker_config:
   image: vaultwarden/server:latest
-  ports:
-  - 8000:80
   volumes:
   - "<%= install_base %>/config/vaultwarden:/data"
   environment:

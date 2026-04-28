@@ -118,7 +118,14 @@
        (setf svc (append svc (list :network-mode "container:wireguard"))))
       (t
        (setf svc (append svc (list :networks (list "mediaserver"))))
-       (when (and port (not (getf docker-cfg :ports)))
+       ;; Auto-publish container :port to host :port unless the user
+       ;; pinned :ports explicitly OR set :public-url. The public-url
+       ;; case means "users reach this via a proxy, not a host port" —
+       ;; auto-publishing would shadow the proxy and (for vaultwarden)
+       ;; expose plaintext on the TLS port.
+       (when (and port
+                  (not (getf docker-cfg :ports))
+                  (not (getf service :public-url)))
          (setf svc (append svc
                            (list :ports
                                  (list (format nil "~A:~A" port port))))))))

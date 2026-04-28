@@ -96,7 +96,15 @@
   (dolist (s services)
     (unless (getf s :name)
       (error "service missing :name: ~S" s)))
-  (let ((ports (remove nil (mapcar (lambda (s) (getf s :port)) services))))
+  ;; Host-port conflict check: only services that auto-publish their
+  ;; :port to the host can collide. Services with :public-url are
+  ;; reached through a proxy and don't bind a host port (see
+  ;; emit-compose), so exclude them.
+  (let ((ports (remove nil
+                       (mapcar (lambda (s)
+                                 (and (not (getf s :public-url))
+                                      (getf s :port)))
+                               services))))
     (dolist (p (remove-duplicates ports))
       (when (> (count p ports) 1)
         (error "duplicate port across services: ~A" p))))

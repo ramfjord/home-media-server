@@ -13,5 +13,6 @@ docker_config:
   - 7878:7878
   - 8989:8989
   - 9696:9696
+  - 8000:8000
   restart: unless-stopped
 order: 10
