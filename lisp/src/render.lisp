@@ -108,6 +108,7 @@
          (port        (field service :port))
          (user-id     (field service :user-id))
          (docker-cfg  (or (field service :docker-config) '()))
+         (explicit-net-mode (getf docker-cfg :network-mode))
          (groups      (field service :groups))
          (svc (list :container-name name
                     :environment (list "TZ=Etc/UTC"))))
@@ -116,6 +117,9 @@
     (cond
       (use-vpn
        (setf svc (append svc (list :network-mode "container:wireguard"))))
+      (explicit-net-mode
+       ;; docker_config.network_mode wins; skip mediaserver-network injection.
+       )
       (t
        (setf svc (append svc (list :networks (list "mediaserver"))))
        ;; Auto-publish container :port to host :port unless the user
@@ -157,7 +161,7 @@
     ;; emitter passes it through verbatim instead of running it through
     ;; the keyword->underscore conversion.
     (let ((compose (list :services (list (cons name svc)))))
-      (unless use-vpn
+      (unless (or use-vpn explicit-net-mode)
         (setf compose
               (append compose
                       (list :networks

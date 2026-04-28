@@ -32,7 +32,7 @@ services:
       - name: "<%= svc['name'].capitalize %>"
         subtitle: "<%= svc['desc'] %>"
         logo: "assets/tools/<%= svc['name'] %>.png"
-        url: "<%= svc['public_url'] || "https://#{hostname}:#{svc['port']}" %>"
+        url: "<%= svc['public_url'] || "http://#{hostname}:#{svc['port']}" %>"
         target: "_blank"
   <% end %>
 <% end %>
