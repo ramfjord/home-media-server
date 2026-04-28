@@ -2,6 +2,7 @@
 name: fx-wireguard
 partof: vpn
 desc: Fixture VPN container
+user_id: false
 docker_config:
   image: example.invalid/fx-wireguard:latest
   cap_add:

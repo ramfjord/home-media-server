@@ -17,6 +17,7 @@ Makefile.local
 audio-normalizer/examples
 .swank-port
 .mcp.json
+.claude
 
 # Lisp build artifacts
 *.fasl

@@ -5,7 +5,7 @@ services:
     container_name: fx-caddy
     environment:
     - TZ=Etc/UTC
-    user: ''
+    user: '99001'
     networks:
     - mediaserver
     image: example.invalid/fx-caddy:overridden

@@ -5,7 +5,6 @@ services:
     container_name: fx-wireguard
     environment:
     - TZ=Etc/UTC
-    user: ''
     networks:
     - mediaserver
     image: example.invalid/fx-wireguard:latest

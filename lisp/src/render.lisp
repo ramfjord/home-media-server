@@ -112,7 +112,7 @@
          (svc (list :container-name name
                     :environment (list "TZ=Etc/UTC"))))
     (when user-id
-      (setf svc (append svc (list :user user-id))))
+      (setf svc (append svc (list :user (princ-to-string user-id)))))
     (cond
       (use-vpn
        (setf svc (append svc (list :network-mode "container:wireguard"))))

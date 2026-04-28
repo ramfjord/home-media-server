@@ -50,7 +50,7 @@ MANIFEST_TARGETS      := $(patsubst $(TARGET_PREFIX)%.elp,config/%.manifest,$(su
 ALL_OUTPUTS := $(SERVICE_OUTPUTS) $(NON_TPL_TARGETS) $(SINGLETON_OUTPUTS) $(TARGET_STATIC_OUTPUTS) $(MANIFEST_TARGETS)
 DIRS := $(sort $(dir $(ALL_OUTPUTS)))
 
-.PHONY: clean check test users install install-systemd all $(addprefix systemd-,start stop restart enable disable status)
+.PHONY: clean check test users install preview all $(addprefix systemd-,start stop restart enable disable status)
 
 test: bin/render
 	ruby -Ilib -Itest -e 'Dir["test/*_test.rb"].reject { |f| f == "test/golden_test.rb" }.each { |f| require "./#{f}" }'
@@ -131,23 +131,38 @@ check: all
 	  systemd-analyze verify "$$f" > /dev/null || (echo "FAIL: $$f" && exit 1); \
 	done
 
-SYSTEMD_DIR := /etc/systemd/system
-
 install: check
-	@for svc in $(ALL_SERVICES); do \
-	  if [ -d config/$$svc ]; then \
-	    rsync -av --rsync-path="sudo rsync" --mkpath --chown=$$svc:mediaserver --chmod=Dg+s config/$$svc/ $(RSYNC_DEST)/opt/mediaserver/config/$$svc/; \
-	  fi; \
-	done
-	rsync -av --rsync-path="sudo rsync" certs/ $(RSYNC_DEST)/opt/mediaserver/certs/
+	@if [ "$(TARGET)" = "local" ]; then \
+	  echo "TARGET=local is not supported. Set TARGET=<ssh-alias> (e.g. fatlaptop)."; \
+	  exit 1; \
+	fi
+	rsync -av --rsync-path="sudo rsync" --delete --mkpath \
+	  config/ $(TARGET):/opt/mediaserver/staging/
+	rsync -av --rsync-path="sudo rsync" --mkpath \
+	  certs/  $(TARGET):/opt/mediaserver/staging/certs/
+	ssh $(TARGET) sudo bash /opt/mediaserver/staging/deploy.sh
 
-install-systemd: install
-	$(REMOTE) sudo mkdir -p $(SYSTEMD_DIR)
-	rsync -av --rsync-path="sudo rsync" config/systemd/ $(RSYNC_DEST)$(SYSTEMD_DIR)/
-	$(REMOTE) sudo systemctl daemon-reload
+# Stage the bundle on the target like install:, but invoke deploy.sh in
+# preview mode (rsync --dry-run --itemize-changes; no chown -R, no
+# daemon-reload). Shows per-file changes that `make install` would apply.
+preview: check
+	@if [ "$(TARGET)" = "local" ]; then \
+	  echo "TARGET=local is not supported. Set TARGET=<ssh-alias> (e.g. fatlaptop)."; \
+	  exit 1; \
+	fi
+	rsync -av --rsync-path="sudo rsync" --delete --mkpath \
+	  config/ $(TARGET):/opt/mediaserver/staging/
+	rsync -av --rsync-path="sudo rsync" --mkpath \
+	  certs/  $(TARGET):/opt/mediaserver/staging/certs/
+	ssh $(TARGET) sudo bash /opt/mediaserver/staging/deploy.sh preview
 
-systemd-start systemd-stop systemd-restart systemd-status:
+systemd-start systemd-stop systemd-restart:
 	@$(REMOTE) sudo systemctl $(patsubst systemd-%,%,$@) mediaserver.target
+
+# Per-service is-active table. More useful than `systemctl status mediaserver.target`
+# when you actually want to know which units are inactive vs failed vs active.
+systemd-status:
+	@$(REMOTE) "for svc in $(ALL_SERVICES); do printf '%-22s %s\n' \"\$$svc\" \"\$$(systemctl is-active \$$svc.service 2>/dev/null)\"; done"
 
 systemd-enable:
 	$(REMOTE) sudo systemctl enable --now mediaserver-network.service

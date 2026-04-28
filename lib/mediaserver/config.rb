@@ -77,8 +77,11 @@ module Mediaserver
     end
 
     def user_id
-      return nil if name == 'wireguard'
-      @user_id ||= `id -u #{name} 2>/dev/null`.strip
+      uid = @definition['user_id']
+      return nil if uid == false
+      return uid.to_s if uid
+      raise "Service '#{name}' has no user_id defined. Add `user_id: <number>` to services/#{name}/service.yml or to config.local.yml's service_overrides:#{name}:user_id (or `user_id: false` to opt out of having a user: in compose)." if dockerized?
+      nil
     end
 
     def partof
