@@ -25,12 +25,10 @@
 ;;; Tested against test/config/*/docker-compose.yml goldens.
 
 (defun %yaml-key-name (k)
-  "Map :container-name -> \"container_name\" (keyword keys carry the
-   plist-key convention, where hyphens stand in for YAML's underscores).
-   String keys (e.g. service names like \"fx-caddy\") pass through
-   unchanged."
+  "Map :container_name -> \"container_name\". String keys (e.g.
+   service names like \"fx-caddy\") pass through unchanged."
   (etypecase k
-    (keyword (substitute #\_ #\- (string-downcase (symbol-name k))))
+    (keyword (string-downcase (symbol-name k)))
     (string  k)))
 
 (defun %yaml-pairs (obj)
@@ -104,39 +102,39 @@
    then optional group_add. The networks block is appended at top level
    for non-VPN services."
   (let* ((name        (field :name service))
-         (use-vpn     (field :use-vpn service))
+         (use_vpn     (field :use_vpn service))
          (port        (field :port service))
-         (user-id     (field :user-id service))
-         (docker-cfg  (or (field :docker-config service) '()))
-         (explicit-net-mode (getf docker-cfg :network-mode))
+         (user_id     (field :user_id service))
+         (docker_cfg  (or (field :docker_config service) '()))
+         (explicit_net_mode (getf docker_cfg :network_mode))
          (groups      (field :groups service))
-         (svc (list :container-name name
+         (svc (list :container_name name
                     :environment (list "TZ=Etc/UTC"))))
-    (when user-id
-      (setf svc (append svc (list :user (princ-to-string user-id)))))
+    (when user_id
+      (setf svc (append svc (list :user (princ-to-string user_id)))))
     (cond
-      (use-vpn
-       (setf svc (append svc (list :network-mode "container:wireguard"))))
-      (explicit-net-mode
+      (use_vpn
+       (setf svc (append svc (list :network_mode "container:wireguard"))))
+      (explicit_net_mode
        ;; docker_config.network_mode wins; skip mediaserver-network injection.
        )
       (t
        (setf svc (append svc (list :networks (list "mediaserver"))))
        ;; Auto-publish container :port to host :port unless the user
-       ;; pinned :ports explicitly OR set :public-url. The public-url
+       ;; pinned :ports explicitly OR set :public_url. The public_url
        ;; case means "users reach this via a proxy, not a host port" —
        ;; auto-publishing would shadow the proxy and (for vaultwarden)
        ;; expose plaintext on the TLS port.
        (when (and port
-                  (not (getf docker-cfg :ports))
-                  (not (getf service :public-url)))
+                  (not (getf docker_cfg :ports))
+                  (not (getf service :public_url)))
          (setf svc (append svc
                            (list :ports
                                  (list (format nil "~A:~A" port port))))))))
     ;; Merge docker_config keys: append in declaration order if not
     ;; present, replace in place if present. Mirrors Ruby Hash#merge,
     ;; which preserves original key positions and appends new ones.
-    (loop for (k v) on docker-cfg by #'cddr
+    (loop for (k v) on docker_cfg by #'cddr
           do (let ((existing (getf svc k 'no)))
                (if (eq existing 'no)
                    (setf svc (append svc (list k v)))
@@ -156,12 +154,12 @@
                                    (third (uiop:split-string trimmed
                                                              :separator ":"))))))
         (when gids
-          (setf svc (append svc (list :group-add gids))))))
+          (setf svc (append svc (list :group_add gids))))))
     ;; The service name is data, not a plist-key — wrap as alist so the
     ;; emitter passes it through verbatim instead of running it through
     ;; the keyword->underscore conversion.
     (let ((compose (list :services (list (cons name svc)))))
-      (unless (or use-vpn explicit-net-mode)
+      (unless (or use_vpn explicit_net_mode)
         (setf compose
               (append compose
                       (list :networks
@@ -185,8 +183,8 @@
       (elp:render (probe-file path) context s))))
 
 (defun %field-binding-symbol (key)
-  "Convert :install-base -> install_base (a symbol in :mediaserver)."
-  (intern (substitute #\_ #\- (symbol-name key)) :mediaserver))
+  "Convert :install_base -> install_base (a symbol in :mediaserver)."
+  (intern (symbol-name key) :mediaserver))
 
 (defun service-field-bindings (service globals)
   "Return an alist binding every key in *known-fields* (direct or

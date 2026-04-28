@@ -17,15 +17,15 @@
 (defun synth-config ()
   "A minimal hand-built config plist (no fixture files needed)."
   (let ((mediaserver::*known-fields*
-          '(:name :port :docker-config :sighup-reload
-            :compose-file :source-dir :dockerized :has-unit)))
+          '(:name :port :docker_config :sighup_reload
+            :compose_file :source_dir :dockerized :has_unit)))
     (declare (ignore mediaserver::*known-fields*))
     (list :services
-          (list (list :name "alpha" :port 1234 :docker-config '(:image "x"))
-                (list :name "beta"  :port 5678 :docker-config '(:image "y")
-                      :sighup-reload t))
+          (list (list :name "alpha" :port 1234 :docker_config '(:image "x"))
+                (list :name "beta"  :port 5678 :docker_config '(:image "y")
+                      :sighup_reload t))
           :globals
-          '(:install-base "/opt/test" :media-path "/d" :hostname "h"))))
+          '(:install_base "/opt/test" :media_path "/d" :hostname "h"))))
 
 (test render-template-bare-name-bindings
   "Per-field bindings let a template say <%= name %> instead of (field service :name)."
@@ -34,8 +34,8 @@
          (cfg  (synth-config))
          (svc  (first (getf cfg :services)))
          (mediaserver::*known-fields*
-           '(:name :port :docker-config :compose-file :source-dir
-             :dockerized :has-unit))
+           '(:name :port :docker_config :compose_file :source_dir
+             :dockerized :has_unit))
          (mediaserver:*globals* (getf cfg :globals)))
     (with-open-file (s path :direction :output :if-exists :supersede)
       (write-string "hello <%= name %> on port <%= port %>" s))
@@ -50,8 +50,8 @@
          (cfg  (synth-config))
          (svc  (first (getf cfg :services)))
          (mediaserver::*known-fields*
-           '(:name :port :docker-config :compose-file :source-dir
-             :dockerized :has-unit))
+           '(:name :port :docker_config :compose_file :source_dir
+             :dockerized :has_unit))
          (mediaserver:*globals* (getf cfg :globals)))
     (with-open-file (s path :direction :output :if-exists :supersede)
       (write-string "<%= compose_file %> dockerized=<%= (if dockerized \"y\" \"n\") %>" s))
@@ -65,8 +65,8 @@
          (path (merge-pathnames "names.elp" tmp))
          (cfg  (synth-config))
          (mediaserver::*known-fields*
-           '(:name :port :docker-config :sighup-reload
-             :compose-file :source-dir :dockerized :has-unit))
+           '(:name :port :docker_config :sighup_reload
+             :compose_file :source_dir :dockerized :has_unit))
          (mediaserver:*globals* (getf cfg :globals)))
     (with-open-file (s path :direction :output :if-exists :supersede)
       (write-string "<% (dolist (s services) %><%= (field :name s) %>:<%= (field :port s) %> <% ) %>" s))
@@ -83,8 +83,8 @@
          (cfg  (synth-config))
          (svc  (first (getf cfg :services)))
          (mediaserver::*known-fields*
-           '(:name :port :docker-config :compose-file :source-dir
-             :dockerized :has-unit))
+           '(:name :port :docker_config :compose_file :source_dir
+             :dockerized :has_unit))
          (mediaserver:*globals* (getf cfg :globals)))
     (with-open-file (s path :direction :output :if-exists :supersede)
       (write-string "<%- (dolist (f service_files) -%>

@@ -24,7 +24,7 @@
   (let* ((cfg (mediaserver::load-config-from-disk (fixture-root)))
          (qbt (find "fx-qbittorrent" (getf cfg :services)
                     :key (lambda (s) (getf s :name)) :test #'equal))
-         (volumes (getf (getf qbt :docker-config) :volumes)))
+         (volumes (getf (getf qbt :docker_config) :volumes)))
     (is (equal "/opt/fx-mediaserver/config/fx-qbittorrent:/config"
                (first volumes)))
     (is (equal "/data:/data" (second volumes)))))
@@ -35,7 +35,7 @@
   (let* ((cfg (mediaserver::load-config-from-disk (fixture-root)))
          (sonarr (find "fx-sonarr" (getf cfg :services)
                        :key (lambda (s) (getf s :name)) :test #'equal))
-         (volumes (getf (getf sonarr :docker-config) :volumes)))
+         (volumes (getf (getf sonarr :docker_config) :volumes)))
     ;; media_path isn't in globals.yml or config.local.yml — only in
     ;; *default-globals*. Should still substitute to "/data".
     (is (equal "/data:/data" (second volumes)))))
@@ -47,14 +47,14 @@
                       :key (lambda (s) (getf s :name)) :test #'equal)))
     (is (equal "Fixture reverse proxy (overridden)" (getf caddy :desc)))
     (is (equal "example.invalid/fx-caddy:overridden"
-               (getf (getf caddy :docker-config) :image)))))
+               (getf (getf caddy :docker_config) :image)))))
 
 (test load-config-overrides-array-union
   "service_overrides array values union, not replace."
   (let* ((cfg (mediaserver::load-config-from-disk (fixture-root)))
          (caddy (find "fx-caddy" (getf cfg :services)
                       :key (lambda (s) (getf s :name)) :test #'equal))
-         (volumes (getf (getf caddy :docker-config) :volumes)))
+         (volumes (getf (getf caddy :docker_config) :volumes)))
     (is (= 3 (length volumes)))
     (is (find "/etc/caddy-extra:/etc/caddy/extra:ro" volumes :test #'equal))))
 
@@ -63,9 +63,9 @@
    globals.yml, media-path from defaults, and custom keys (fx-label)."
   (let* ((cfg (mediaserver::load-config-from-disk (fixture-root)))
          (g   (getf cfg :globals)))
-    (is (equal "/opt/fx-mediaserver" (getf g :install-base)))
+    (is (equal "/opt/fx-mediaserver" (getf g :install_base)))
     (is (equal "fx-host" (getf g :hostname)))
-    (is (equal "/data" (getf g :media-path)))
+    (is (equal "/data" (getf g :media_path)))
     (is (equal "fixture-deployment" (getf g :fx-label)))))
 
 (test load-config-sets-known-fields

@@ -11,7 +11,7 @@
   "Read a fixture service.yml and convert to plist. Note: ELP preprocessing
    (which substitutes <%= install_base %> etc.) happens at LOAD-CONFIG time
    in the real flow; these field tests only exercise plist+field semantics
-   on data that doesn't depend on substitution (:name, :port, :use-vpn)."
+   on data that doesn't depend on substitution (:name, :port, :use_vpn)."
   (mediaserver::yaml->plist
    (cl-yaml:parse (fixture-path
                    (format nil "services/~A/service.yml" name)))))
@@ -20,17 +20,17 @@
   "Underscored YAML keys become hyphenated keywords."
   (let ((s (load-fixture-service "fx-qbittorrent")))
     (is (equal "fx-qbittorrent" (getf s :name)))
-    (is (eq t (getf s :use-vpn)))
+    (is (eq t (getf s :use_vpn)))
     (is (= 18080 (getf s :port)))))
 
 (test field-direct-lookup
   "FIELD returns the literal value for keys present in the service plist."
   (let ((s (load-fixture-service "fx-qbittorrent"))
-        (mediaserver:*globals* '(:install-base "/opt/mediaserver"
-                                 :media-path "/data"
+        (mediaserver:*globals* '(:install_base "/opt/mediaserver"
+                                 :media_path "/data"
                                  :hostname "fixture-host")))
     (is (equal "fx-qbittorrent" (mediaserver:field :name s)))
-    (is (eq t (mediaserver:field :use-vpn s)))
+    (is (eq t (mediaserver:field :use_vpn s)))
     (is (= 18080 (mediaserver:field :port s)))))
 
 (test field-missing-returns-nil
@@ -38,19 +38,19 @@
    Without *known-fields* set, no typo guard fires."
   (let ((s (load-fixture-service "fx-qbittorrent"))
         (mediaserver::*known-fields* nil))
-    (is (null (mediaserver:field :sighup-reload s)))
+    (is (null (mediaserver:field :sighup_reload s)))
     (is (null (mediaserver:field :groups s)))))
 
 (test field-derived-compose-file
   "Compose-file is derived from globals install-base + service name.
    Source-dir and dockerized are also derived."
   (let ((s (load-fixture-service "fx-qbittorrent"))
-        (mediaserver:*globals* '(:install-base "/opt/mediaserver"
-                                 :media-path "/data"
+        (mediaserver:*globals* '(:install_base "/opt/mediaserver"
+                                 :media_path "/data"
                                  :hostname "fixture-host")))
     (is (equal "/opt/mediaserver/config/fx-qbittorrent/docker-compose.yml"
-               (mediaserver:field :compose-file s)))
-    (is (equal "services/fx-qbittorrent" (mediaserver:field :source-dir s)))
+               (mediaserver:field :compose_file s)))
+    (is (equal "services/fx-qbittorrent" (mediaserver:field :source_dir s)))
     (is (eq t (mediaserver:field :dockerized s)))))
 
 (defun run-tests ()

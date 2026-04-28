@@ -2,11 +2,11 @@
 
 ;;; The single public accessor for service plists.
 ;;;
-;;; Templates write (field s :name) / (field s :use-vpn) / etc.
+;;; Templates write (field s :name) / (field s :use_vpn) / etc.
 ;;; There is no service class. Missing keys return NIL so template
 ;;; conditionals stay clean.
 ;;;
-;;; Computed values (e.g. :compose-file derived from install-base
+;;; Computed values (e.g. :compose_file derived from install-base
 ;;; and name) live in *derived-fields*. The accessor falls through
 ;;; to that alist after a literal lookup miss, so callers can't
 ;;; tell direct fields from derived ones.
@@ -15,7 +15,7 @@
   "Plist of host-level config (install-base, media-path, hostname,
    plus anything else from globals.yml + config.local.yml). Set by
    LOAD-CONFIG. Templates that need globals reach in via
-   (getf *globals* :install-base) or pass them explicitly.")
+   (getf *globals* :install_base) or pass them explicitly.")
 
 (defparameter *derived-fields* nil
   "Alist of (KEY . FN) entries for computed service fields. FN takes
@@ -42,16 +42,16 @@
 
 (define-service-field :unit)
 (define-service-field :groups)
-(define-service-field :compose-file
+(define-service-field :compose_file
   (format nil "~A/config/~A/docker-compose.yml"
-          (getf globals :install-base) (svc-field :name)))
-(define-service-field :source-dir
+          (getf globals :install_base) (svc-field :name)))
+(define-service-field :source_dir
   (format nil "services/~A" (svc-field :name)))
 (define-service-field :dockerized
-  (and (getf service :docker-config) t))
-(define-service-field :has-unit
+  (and (getf service :docker_config) t))
+(define-service-field :has_unit
   (and (svc-field :unit) t))
-(define-service-field :user-id
+(define-service-field :user_id
   ;; Mirrors Ruby's user_id: hardcoded skip for wireguard (which runs
   ;; as root for the network namespace), else shell out to `id -u
   ;; <name>`. Empty string for unknown users — assigned verbatim into
@@ -62,7 +62,7 @@
                    (uiop:run-program (list "id" "-u" name)
                                      :output :string
                                      :ignore-error-status t)))))
-(define-service-field :config-files
+(define-service-field :config_files
   ;; Deployed-config filenames under services/<name>/, relative to
   ;; that dir. Skips service.yml (data) and *.erb (legacy shadows).
   ;; Strips .elp so the listed name matches the deployed file. Used

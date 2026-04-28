@@ -6,16 +6,16 @@
 ;;; more hash-tables, sequences as conses, atoms as native Lisp types
 ;;; (booleans -> T/NIL, integers, strings).
 ;;;
-;;; We flatten to plists with keyword keys; underscores in YAML keys
-;;; become hyphens: "use_vpn" -> :USE-VPN.
+;;; We flatten to plists with keyword keys; YAML keys carry through
+;;; verbatim (so "use_vpn" -> :USE_VPN). Underscores match the YAML
+;;; convention; the codebase uses :foo_bar uniformly.
 
 (defun yaml->plist (x)
   "Recursively convert cl-yaml output to keyword-keyed plists.
    Hash-tables become plists; conses are mapcar'd; atoms pass through."
   (etypecase x
     (hash-table (loop for k being the hash-keys of x using (hash-value v)
-                      collect (intern (string-upcase (substitute #\- #\_ k))
-                                      :keyword)
+                      collect (intern (string-upcase k) :keyword)
                       collect (yaml->plist v)))
     (cons       (mapcar #'yaml->plist x))
     (t          x)))
@@ -57,15 +57,13 @@
 ;;; Each service.yml is rendered through ELP before YAML parsing:
 ;;; templates write <%= install_base %> instead of literal paths.
 ;;; The context-alist binds the same names the YAML files use
-;;; (Ruby-style underscored: install_base, media_path, hostname).
+;;; (underscored: install_base, media_path, hostname).
 
 (defun globals->elp-context (globals-plist)
-  "Convert :install-base etc. (keyword, hyphens) to (install_base . val)
-   etc. (symbol, underscores) — matching the template variable names."
+  "Build the ELP context-alist from GLOBALS-PLIST: each keyword key
+   becomes a same-named symbol in :mediaserver."
   (loop for (k v) on globals-plist by #'cddr
-        collect (cons (intern (substitute #\_ #\- (symbol-name k))
-                              :mediaserver)
-                      v)))
+        collect (cons (intern (symbol-name k) :mediaserver) v)))
 
 (defun render-service-yaml (path globals)
   "ELP-render the file at PATH with GLOBALS bound, return the rendered
@@ -84,11 +82,20 @@
 ;;;      plus the derived-field names).
 
 (defun collect-known-fields (services)
-  "Return the union of every keyword key in SERVICES plus *derived-fields*."
-  (let ((known (mapcar #'car *derived-fields*)))
-    (dolist (s services)
-      (loop for k in s by #'cddr do (pushnew k known)))
-    known))
+  "Auto-register every keyword key found in SERVICES as a passthrough
+   field (if not already declared), then return the resulting field
+   list. After this call, every accessible service field has an entry
+   in *derived-fields* — the canonical schema."
+  (dolist (s services)
+    (loop for k in s by #'cddr do
+      (let ((field-key k))
+        (unless (assoc field-key *derived-fields*)
+          (push (cons field-key
+                      (lambda (service globals)
+                        (declare (ignore globals))
+                        (getf service field-key)))
+                *derived-fields*)))))
+  (mapcar #'car *derived-fields*))
 
 (defun validate-services (services)
   "Run load-time invariants on SERVICES; signal error on any violation.
@@ -97,12 +104,12 @@
     (unless (getf s :name)
       (error "service missing :name: ~S" s)))
   ;; Host-port conflict check: only services that auto-publish their
-  ;; :port to the host can collide. Services with :public-url are
+  ;; :port to the host can collide. Services with :public_url are
   ;; reached through a proxy and don't bind a host port (see
   ;; emit-compose), so exclude them.
   (let ((ports (remove nil
                        (mapcar (lambda (s)
-                                 (and (not (getf s :public-url))
+                                 (and (not (getf s :public_url))
                                       (getf s :port)))
                                services))))
     (dolist (p (remove-duplicates ports))
@@ -114,8 +121,8 @@
 ;;; Top-level load entry point.
 
 (defparameter *default-globals*
-  '(:install-base "/opt/mediaserver"
-    :media-path   "/data"
+  '(:install_base "/opt/mediaserver"
+    :media_path   "/data"
     :hostname     "localhost")
   "Fallback values for globals not set in any config file.
    Mirrors Ruby's Mediaserver::DEFAULT_GLOBALS.")
@@ -150,7 +157,7 @@
 (defun load-config ()
   "Return the baked config plist. Re-establishes *GLOBALS* and
    *KNOWN-FIELDS* as a side effect so FIELD calls resolve derived
-   fields like :compose-file."
+   fields like :compose_file."
   (unless *baked-config*
     (error "load-config called but no config was baked into this binary"))
   (setf *globals* (getf *baked-config* :globals)
@@ -168,9 +175,9 @@
   (let* ((root         (uiop:ensure-directory-pathname root))
          (globals-yml  (read-yaml-file (merge-pathnames "globals.yml" root)))
          (local-yml    (read-yaml-file (merge-pathnames "config.local.yml" root)))
-         (overrides    (getf local-yml :service-overrides))
+         (overrides    (getf local-yml :service_overrides))
          (local-no-ovr (loop for (k v) on local-yml by #'cddr
-                             unless (eq k :service-overrides)
+                             unless (eq k :service_overrides)
                              collect k and collect v))
          ;; Layered globals for ELP binding: defaults < globals.yml < local top-level.
          (elp-globals  (deep-merge *default-globals*
