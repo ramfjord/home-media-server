@@ -21,12 +21,14 @@ groups:
     # <% ) %>
 
     - alert: VolumeFillingUp
-      expr: (100 - ((node_filesystem_avail_bytes{mountpoint=~"/|/media.*"} * 100) / node_filesystem_size_bytes)) > 75
+      expr: |
+        predict_linear(node_filesystem_avail_bytes{mountpoint=~"/|/media.*"}[6h], 5 * 24 * 3600) <= 0
+        and node_filesystem_avail_bytes{mountpoint=~"/|/media.*"} > 0
       labels:
         partof: streaming
         service: disk
       annotations:
-        description: "Volume mounted at is over 75% full {{ $labels }}"
+        description: "Volume {{ $labels.mountpoint }} on {{ $labels.instance }} is projected to fill within 5 days based on the last 6h of usage"
 
     # Disabled - media mount not reported by node_exporter
     # - alert: MediaVolumeUnmounted
