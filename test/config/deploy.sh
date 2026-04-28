@@ -49,10 +49,6 @@ rsync -a $DRY --chown=fx-prometheus:mediaserver --chmod=Dg+s,Fg+w \
 # --chown skips because it's not in the transferred set.
 [[ "$MODE" == "apply" ]] && chown -R fx-prometheus:mediaserver "$INSTALL_BASE/config/fx-prometheus/"
 
-echo "=== certs ==="
-rsync -a $DRY --chown=caddy:mediaserver --chmod=D750,F640 \
-  "$STAGING/certs/" "$INSTALL_BASE/certs/"
-
 echo "=== systemd units ==="
 rsync -a $DRY "$STAGING/systemd/" /etc/systemd/system/
 [[ "$MODE" == "apply" ]] && systemctl daemon-reload

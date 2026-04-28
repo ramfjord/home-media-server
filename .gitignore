@@ -1,15 +1,16 @@
 tmp
 config.local.yml
 config/
-certs/
 elp
 
 docker-compose.yml
 
+# Real certs live alongside caddy's other config; gitignored.
+# Test fixture certs (test/services/fx-caddy/certs/) are checked in.
+services/caddy/certs/
+
 # Fixture tree (test goldens) overrides the above ignores.
 !test/config.local.yml
-!test/certs/
-!test/certs/**
 !test/config/
 !test/config/**
 .make.services

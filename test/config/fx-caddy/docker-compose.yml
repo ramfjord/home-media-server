@@ -11,7 +11,7 @@ services:
     image: example.invalid/fx-caddy:overridden
     volumes:
     - "/opt/fx-mediaserver/config/fx-caddy/Caddyfile:/etc/caddy/Caddyfile:ro"
-    - "/opt/fx-mediaserver/certs:/etc/caddy/certs:ro"
+    - "/opt/fx-mediaserver/config/fx-caddy/certs:/etc/caddy/certs:ro"
     - "/etc/caddy-extra:/etc/caddy/extra:ro"
     ports:
     - 18080:18080

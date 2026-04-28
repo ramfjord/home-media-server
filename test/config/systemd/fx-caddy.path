@@ -3,6 +3,9 @@ Description=Config watcher for fx-caddy
 
 [Path]
 PathChanged=/opt/fx-mediaserver/config/fx-caddy/Caddyfile
+PathChanged=/opt/fx-mediaserver/config/fx-caddy/certs/README.md
+PathChanged=/opt/fx-mediaserver/config/fx-caddy/certs/fullchain.pem
+PathChanged=/opt/fx-mediaserver/config/fx-caddy/certs/privkey.pem
 Unit=fx-caddy-reload.service
 
 [Install]

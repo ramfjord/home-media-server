@@ -138,8 +138,6 @@ install: check
 	fi
 	rsync -av --rsync-path="sudo rsync" --delete --mkpath \
 	  config/ $(TARGET):/opt/mediaserver/staging/
-	rsync -av --rsync-path="sudo rsync" --mkpath \
-	  certs/  $(TARGET):/opt/mediaserver/staging/certs/
 	ssh $(TARGET) sudo bash /opt/mediaserver/staging/deploy.sh
 
 # Stage the bundle on the target like install:, but invoke deploy.sh in
@@ -152,8 +150,6 @@ preview: check
 	fi
 	rsync -av --rsync-path="sudo rsync" --delete --mkpath \
 	  config/ $(TARGET):/opt/mediaserver/staging/
-	rsync -av --rsync-path="sudo rsync" --mkpath \
-	  certs/  $(TARGET):/opt/mediaserver/staging/certs/
 	ssh $(TARGET) sudo bash /opt/mediaserver/staging/deploy.sh preview
 
 systemd-start systemd-stop systemd-restart:
