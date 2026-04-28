@@ -1,5 +1,12 @@
 .SECONDEXPANSION:
 
+# Silence recipe echo by default. Recipes opt back in with explicit `echo`
+# lines for the steps worth showing. Override with `make V=1`.
+ifndef V
+MAKEFLAGS += --silent
+endif
+MAKEFLAGS += -j$(shell nproc)
+
 # Deploy target — SSH alias of the host receiving rsync + side-effect
 # commands. Required by install/preview/systemd-*/restart-*; unused by
 # all/test/check. Set in Makefile.local or pass on the command line:
@@ -88,7 +95,7 @@ svc_of = $(firstword $(subst /, ,$(1)))
 
 # Per-service ELPs in services/. Service name implicit from path.
 config/%: services/%.elp bin/render | $$(@D)/
-	SERVICE_NAME=$(call svc_of,$*) bin/render $< > $@
+	SERVICE_NAME=$(call svc_of,$*) bin/render $< > $@ && printf .
 
 # Non-template service files: copy.
 config/%: services/% | $$(@D)/
@@ -96,7 +103,7 @@ config/%: services/% | $$(@D)/
 
 # Singleton ELPs under targets/debian/ (no $service in path).
 config/%: $(TARGET_DIR)/%.elp bin/render | $$(@D)/
-	bin/render $< > $@
+	bin/render $< > $@ && printf .
 
 # Non-template files under targets/debian/: copy.
 config/%: $(TARGET_DIR)/% | $$(@D)/
@@ -111,8 +118,8 @@ config/%.manifest: $$(subst mediaserver,__service__,$(TARGET_DIR)/%.elp) bin/ren
 	@for svc in $(ALL_SERVICES); do \
 	  f=$$(echo "$*" | sed "s|mediaserver|$$svc|"); out="config/$$f"; \
 	  mkdir -p "$$(dirname "$$out")"; \
-	  bin/render --service $$svc $< > "$$out.tmp"; \
-	  if [ -s "$$out.tmp" ]; then mv "$$out.tmp" "$$out"; echo "$$f" >> $@; else rm "$$out.tmp"; fi; \
+	  bin/render --service $$svc $< > "$$out"; \
+	  [ -s "$$out" ] && { echo "$$f" >> $@; printf .; } || rm "$$out"; \
 	done
 
 PATH_MANIFESTS := config/systemd/mediaserver.path.manifest \
