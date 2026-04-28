@@ -1,12 +1,15 @@
 .SECONDEXPANSION:
 
-# Deploy target. `local` (default) keeps current behavior — rsync and
-# side-effecting commands run on this host. Set TARGET=<ssh-host> to
-# rsync over ssh and run side-effects on the remote host.
-TARGET ?= local
+# Deploy target — SSH alias of the host receiving rsync + side-effect
+# commands. Required by install/preview/systemd-*/restart-*; unused by
+# all/test/check. Set in Makefile.local or pass on the command line:
+# `make TARGET=fatlaptop install`.
 -include Makefile.local
-RSYNC_DEST = $(if $(filter local,$(TARGET)),,$(TARGET):)
-REMOTE     = $(if $(filter local,$(TARGET)),,ssh $(TARGET))
+ifneq (,$(filter install preview restart-% systemd-%,$(MAKECMDGOALS)))
+ifndef TARGET
+$(error TARGET must be set (e.g. TARGET=fatlaptop, or via Makefile.local))
+endif
+endif
 
 # Anchor: directory containing this Makefile, after symlink resolution.
 # When invoked via test/Makefile -> ../Makefile, this still points at
@@ -132,10 +135,6 @@ check: all
 	done
 
 install: check
-	@if [ "$(TARGET)" = "local" ]; then \
-	  echo "TARGET=local is not supported. Set TARGET=<ssh-alias> (e.g. fatlaptop)."; \
-	  exit 1; \
-	fi
 	rsync -av --rsync-path="sudo rsync" --delete --mkpath \
 	  config/ $(TARGET):/opt/mediaserver/staging/
 	ssh $(TARGET) sudo bash /opt/mediaserver/staging/deploy.sh
@@ -144,35 +143,31 @@ install: check
 # preview mode (rsync --dry-run --itemize-changes; no chown -R, no
 # daemon-reload). Shows per-file changes that `make install` would apply.
 preview: check
-	@if [ "$(TARGET)" = "local" ]; then \
-	  echo "TARGET=local is not supported. Set TARGET=<ssh-alias> (e.g. fatlaptop)."; \
-	  exit 1; \
-	fi
 	rsync -av --rsync-path="sudo rsync" --delete --mkpath \
 	  config/ $(TARGET):/opt/mediaserver/staging/
 	ssh $(TARGET) sudo bash /opt/mediaserver/staging/deploy.sh preview
 
 systemd-start systemd-stop systemd-restart:
-	@$(REMOTE) sudo systemctl $(patsubst systemd-%,%,$@) mediaserver.target
+	@ssh $(TARGET) sudo systemctl $(patsubst systemd-%,%,$@) mediaserver.target
 
 # Per-service is-active table. More useful than `systemctl status mediaserver.target`
 # when you actually want to know which units are inactive vs failed vs active.
 systemd-status:
-	@$(REMOTE) "for svc in $(ALL_SERVICES); do printf '%-22s %s\n' \"\$$svc\" \"\$$(systemctl is-active \$$svc.service 2>/dev/null)\"; done"
+	@ssh $(TARGET) "for svc in $(ALL_SERVICES); do printf '%-22s %s\n' \"\$$svc\" \"\$$(systemctl is-active \$$svc.service 2>/dev/null)\"; done"
 
 systemd-enable:
-	$(REMOTE) sudo systemctl enable --now mediaserver-network.service
-	$(REMOTE) sudo systemctl enable mediaserver.target
+	ssh $(TARGET) sudo systemctl enable --now mediaserver-network.service
+	ssh $(TARGET) sudo systemctl enable mediaserver.target
 	@units=$$(cat $(PATH_MANIFESTS) 2>/dev/null | xargs -n1 basename | tr '\n' ' '); \
-	  $(REMOTE) sudo systemctl enable --now $$units
+	  ssh $(TARGET) sudo systemctl enable --now $$units
 
 systemd-disable:
-	$(REMOTE) sudo systemctl disable mediaserver.target
+	ssh $(TARGET) sudo systemctl disable mediaserver.target
 	@units=$$(cat $(PATH_MANIFESTS) 2>/dev/null | xargs -n1 basename | tr '\n' ' '); \
-	  $(REMOTE) sudo systemctl disable $$units
+	  ssh $(TARGET) sudo systemctl disable $$units
 
 # Force-restart a single service. Path units already redeploy on
 # `make install`; use this when you want to bounce a service without
 # changing config. Combine: `make install restart-radarr`.
 restart-%:
-	@$(REMOTE) sudo systemctl restart $*.service
+	@ssh $(TARGET) sudo systemctl restart $*.service
