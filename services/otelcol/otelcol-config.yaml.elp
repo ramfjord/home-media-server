@@ -94,8 +94,10 @@ receivers:
           params:
             module: [http_basic]
           static_configs:
+            # VPN services share wireguard's netns and have no DNS name
+            # on the mediaserver network — probe via wireguard.
             - targets:
-              - http://<%= (field svc :name) %>:<%= (field svc :port) %><%= (or (field svc :healthz) "") %>
+              - http://<%= (if (field svc :use-vpn) "wireguard" (field svc :name)) %>:<%= (field svc :port) %><%= (or (field svc :healthz) "") %>
               labels:
                 service: <%= (field svc :name) %>
                 partof: <%= (field svc :partof) %>

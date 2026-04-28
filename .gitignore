@@ -2,6 +2,7 @@ tmp
 config.local.yml
 config/
 elp
+.claude
 
 docker-compose.yml
 

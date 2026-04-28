@@ -2,7 +2,6 @@
 name: otelcol
 partof: monitoring
 desc: OpenTelemetry metrics collector
-port: 8888
 groups:
 - docker
 docker_config:
