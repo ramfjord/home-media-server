@@ -70,36 +70,25 @@
    YAML string."
   (with-output-to-string (s)
     (let ((*package* (find-package :mediaserver)))
-      (elp:render path (globals->elp-context globals) s))))
+      (elp:render (pathname path) (globals->elp-context globals) s))))
 
 ;;; Validation
 ;;;
-;;; Three checks at load time:
+;;; Two checks at load time:
 ;;;   1. Every service has a :name.
 ;;;   2. No two services share a :port.
-;;;   3. Sets *known-fields* so the FIELD accessor errors on typos
-;;;      thereafter (union of every key seen in any service plist
-;;;      plus the derived-field names).
+;;;
+;;; *known-fields* (the typo guard) is set by LOAD-CONFIG, not here.
 
 (defun collect-known-fields (services)
-  "Auto-register every keyword key found in SERVICES as a passthrough
-   field (if not already declared), then return the resulting field
-   list. After this call, every accessible service field has an entry
-   in *derived-fields* — the canonical schema."
-  (dolist (s services)
-    (loop for k in s by #'cddr do
-      (let ((field-key k))
-        (unless (assoc field-key *derived-fields*)
-          (push (cons field-key
-                      (lambda (service globals)
-                        (declare (ignore globals))
-                        (getf service field-key)))
-                *derived-fields*)))))
-  (mapcar #'car *derived-fields*))
+  "Return the union of every keyword key found in SERVICES."
+  (let (known)
+    (dolist (s services)
+      (loop for k in s by #'cddr do (pushnew k known)))
+    known))
 
 (defun validate-services (services)
-  "Run load-time invariants on SERVICES; signal error on any violation.
-   Sets *known-fields* on success."
+  "Run load-time invariants on SERVICES; signal error on any violation."
   (dolist (s services)
     (unless (getf s :name)
       (error "service missing :name: ~S" s)))
@@ -115,7 +104,6 @@
     (dolist (p (remove-duplicates ports))
       (when (> (count p ports) 1)
         (error "duplicate port across services: ~A" p))))
-  (setf *known-fields* (collect-known-fields services))
   services)
 
 ;;; Top-level load entry point.
@@ -130,58 +118,59 @@
 (defun read-yaml-file (path)
   "Read PATH as plain YAML, returning a plist (or NIL for missing file
    or empty contents)."
-  (when (probe-file path)
-    (let ((parsed (cl-yaml:parse path)))
-      (and parsed (yaml->plist parsed)))))
+  (let ((p (probe-file path)))
+    (when p
+      (let ((parsed (cl-yaml:parse p)))
+        (and parsed (yaml->plist parsed))))))
 
-(defun service-files (root)
-  "Glob ROOT/services/*/service.yml, sorted lexicographically."
-  (sort (directory (merge-pathnames "services/*/service.yml"
-                                    (uiop:ensure-directory-pathname root)))
-        #'string<
-        :key #'namestring))
+(defun plist->cl-yaml (x)
+  "Convert plists/lists/atoms to the hash-table+cons shape cl-yaml's
+   emitter expects. Plists become hash-tables (string keys), lists
+   recurse, atoms pass through."
+  (cond
+    ((plistp x)
+     (let ((h (make-hash-table :test 'equal)))
+       (loop for (k v) on x by #'cddr
+             do (setf (gethash (string-downcase (symbol-name k)) h)
+                      (plist->cl-yaml v)))
+       h))
+    ((listp x) (mapcar #'plist->cl-yaml x))
+    (t x)))
 
-(defparameter *baked-config* nil
-  "Config plist baked into the binary at build time by BAKE-CONFIG.
-   Runtime LOAD-CONFIG returns this verbatim — no YAML parsing per call.
-   To render a different tree, build a separate binary with that tree
-   as the bake-root (see script/build-render.sh).")
+(defun emit-manifest (cfg stream)
+  "Emit CFG (a plist with :globals and :services) as block-style YAML
+   to STREAM. The output round-trips back to an equivalent CFG via
+   cl-yaml:parse + yaml->plist."
+  (yaml:with-emitter-to-stream (em stream)
+    (yaml:emit-pretty-as-document em (plist->cl-yaml cfg))))
 
-(defun bake-config (root)
-  "Build-time entry point: load the config at ROOT and freeze it into
-   *BAKED-CONFIG*. Called from script/build-render.sh before
-   SAVE-LISP-AND-DIE."
-  (let ((abs (namestring (truename (uiop:ensure-directory-pathname root)))))
-    (setf *baked-config* (load-config-from-disk abs))))
+(defun load-config-from-args (service-paths override-paths)
+  "Build a config plist from explicit paths. SERVICE-PATHS is a list
+   of service.yml files; OVERRIDE-PATHS is a list of override yamls
+   in last-wins order (config.yaml then config.local.yaml).
 
-(defun load-config ()
-  "Return the baked config plist. Re-establishes *GLOBALS* and
-   *KNOWN-FIELDS* as a side effect so FIELD calls resolve derived
-   fields like :compose_file."
-  (unless *baked-config*
-    (error "load-config called but no config was baked into this binary"))
-  (setf *globals* (getf *baked-config* :globals)
-        *known-fields* (collect-known-fields (getf *baked-config* :services)))
-  *baked-config*)
-
-(defun load-config-from-disk (root)
-  "Read the config tree at ROOT from disk. Used at build time by
-   BAKE-CONFIG; not called at runtime.
-
-   Reads globals.yml + config.local.yml top-level + every
-   services/*/service.yml. Service files are ELP-preprocessed with
-   the merged globals as bindings, then YAML-parsed. Service overrides
-   from config.local.yml are deep-merged afterward."
-  (let* ((root         (uiop:ensure-directory-pathname root))
-         (globals-yml  (read-yaml-file (merge-pathnames "globals.yml" root)))
-         (local-yml    (read-yaml-file (merge-pathnames "config.local.yml" root)))
-         (overrides    (getf local-yml :service_overrides))
-         (local-no-ovr (loop for (k v) on local-yml by #'cddr
-                             unless (eq k :service_overrides)
-                             collect k and collect v))
-         ;; Layered globals for ELP binding: defaults < globals.yml < local top-level.
-         (elp-globals  (deep-merge *default-globals*
-                                   (deep-merge globals-yml local-no-ovr)))
+   Each service.yml is ELP-preprocessed with the merged globals as
+   bindings, then YAML-parsed. Per-service overrides from any
+   :service_overrides key in any override file are deep-merged in
+   override-list order."
+  (let* (;; Layered globals: defaults < every override (last-wins).
+         (elp-globals
+          (reduce (lambda (acc path)
+                    (let ((y (read-yaml-file path)))
+                      (deep-merge acc
+                                  (loop for (k v) on y by #'cddr
+                                        unless (eq k :service_overrides)
+                                        collect k and collect v))))
+                  override-paths
+                  :initial-value *default-globals*))
+         ;; Per-service overrides: union across all override files,
+         ;; later files winning on conflict.
+         (overrides
+          (reduce (lambda (acc path)
+                    (deep-merge acc (getf (read-yaml-file path)
+                                          :service_overrides)))
+                  override-paths
+                  :initial-value nil))
          ;; Render + parse each service.yml.
          (services
           (remove nil
@@ -189,7 +178,7 @@
                             (let ((parsed (cl-yaml:parse
                                            (render-service-yaml path elp-globals))))
                               (and parsed (yaml->plist parsed))))
-                          (service-files root))))
+                          service-paths)))
          ;; Stable sort by :order; missing -> end.
          (services
           (stable-sort services
@@ -204,10 +193,24 @@
                                           (intern (string-upcase (getf s :name))
                                                   :keyword)))))
                       (if ovr (deep-merge s ovr) s)))
-                  services)))
+                  services))
+         ;; Compute derived fields into each service plist.
+         (services
+          (mapcar (lambda (s) (derive-fields s elp-globals)) services)))
     (validate-services services)
-    (let ((globals elp-globals))
-      (setf *globals* globals)
-      (list :services services
-            :globals  globals
-            :raw      (append local-no-ovr (list :services services))))))
+    (list :services services :globals elp-globals)))
+
+(defun load-config (&optional (manifest "services/manifest.yaml"))
+  "Read the manifest yaml at MANIFEST, set *GLOBALS* and *KNOWN-FIELDS*
+   as side effects, return the config plist (:services :globals).
+
+   The manifest is produced by bin/build-service-config — see
+   build-cli.lisp."
+  (let ((p (probe-file manifest)))
+    (unless p
+      (error "manifest not found: ~A (run `make ~A`?)" manifest manifest))
+    (let* ((parsed (cl-yaml:parse p))
+           (cfg    (yaml->plist parsed)))
+      (setf *globals*      (getf cfg :globals)
+            *known-fields* (collect-known-fields (getf cfg :services)))
+      cfg)))

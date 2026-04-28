@@ -8,11 +8,19 @@
   :serial t
   :components
   ((:file "package")
-   (:file "config")
    (:file "field")
+   (:file "derive")
+   (:file "config")
    (:file "render")
    (:file "cli"))
   :in-order-to ((test-op (test-op "mediaserver/tests"))))
+
+(defsystem "mediaserver/build"
+  :description "Build the services manifest yaml from service.yml inputs."
+  :depends-on ("mediaserver")
+  :pathname "lisp/src/"
+  :serial t
+  :components ((:file "build-cli")))
 
 (defsystem "mediaserver/tests"
   :description "Tests for mediaserver."
@@ -22,5 +30,4 @@
   :components
   ((:file "package")
    (:file "field-test")
-   (:file "load-test")
    (:file "render-test")))

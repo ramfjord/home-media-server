@@ -7,19 +7,6 @@ groups:
       annotations:
         summary: "{{ $labels.service }} - systemd unit {{ $labels.name}} is down"
 
-    # Disabled for now - too many false positives
-    # <% (loopservices (services) %>
-    # - alert: UnitNeverStarted<%= (or name "") %>
-    #   expr: absent(node_systemd_unit_state{name="<%= (or unit "") %>.service"})
-    #   for: 5m
-    #   labels:
-    #     partof: <%= (or partof "") %>
-    #     service: <%= (or name "") %>
-    #   annotations:
-    #     summary: "<%= (or name "") %> - missing metrics for systemd unit <%= (or unit "") %>"
-    #     description: "<%= (or desc "") %>"
-    # <% ) %>
-
     - alert: VolumeFillingUp
       expr: |
         predict_linear(node_filesystem_avail_bytes{fstype=~"ext4|xfs|btrfs|zfs|vfat|exfat|ntfs|fuseblk"}[6h], 5 * 24 * 3600) <= 0

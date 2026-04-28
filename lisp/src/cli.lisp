@@ -13,9 +13,9 @@
 ;;; --service NAME sets which service is in scope for the render. Falls
 ;;;   back to the SERVICE_NAME env var, then nil (singleton templates).
 ;;;
-;;; The config root is baked into the binary at build time — see
-;;; script/build-render.sh. To render against a different tree (e.g.
-;;; test/), build a separate binary with that tree as bake-root.
+;;; Reads the services manifest from `services/manifest.yaml` (relative
+;;; to cwd) at startup. The manifest is built by bin/build-service-config;
+;;; see the Makefile.
 ;;;
 ;;; Make is the dispatcher: each per-template recipe invokes this CLI
 ;;; once with the right --service / template path / output redirect.

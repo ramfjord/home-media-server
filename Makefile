@@ -30,7 +30,7 @@ REPO_ROOT  := $(patsubst %/,%,$(dir $(realpath $(firstword $(MAKEFILE_LIST)))))
 TARGET_DIR := $(REPO_ROOT)/targets/debian
 LISP_SRCS  := $(wildcard $(REPO_ROOT)/lisp/src/*.lisp) $(REPO_ROOT)/mediaserver.asd
 
-ALL_SERVICES := $(notdir $(wildcard services/*))
+ALL_SERVICES := $(patsubst services/%/,%,$(sort $(dir $(wildcard services/*/.))))
 
 # services/<svc>/<path>.elp -> config/<svc>/<path>
 SERVICE_ELPS := $(shell find services -name '*.elp' 2>/dev/null)
@@ -68,20 +68,33 @@ test: bin/render
 	@git diff --exit-code test/config/ > /dev/null && echo "goldens clean" || \
 	  (echo "GOLDEN DIFF in test/config/. Inspect via 'git diff test/config/'."; exit 1)
 
-# Lisp render binary. Builds in ~2s; per-call render is ~25ms because
-# the merged config (services + globals + local overrides) is baked
-# into the saved core. Bake-root is cwd, so test/ builds its own
-# binary with test/services/ baked in.
-bin/render: $(LISP_SRCS) $(REPO_ROOT)/script/build-render.sh \
-               $(wildcard services/*/service.yml) \
-               globals.yml \
-               $(wildcard config.local.yml)
-	$(REPO_ROOT)/script/build-render.sh $(CURDIR)/bin/render $(CURDIR)
+# Lisp binaries. Built once at repo root and reused (cwd-relative
+# bin/ is a symlink) — no config is baked in, so a single binary
+# works against any tree.
+$(REPO_ROOT)/bin/render: $(LISP_SRCS) $(REPO_ROOT)/script/build.sh
+	$(REPO_ROOT)/script/build.sh mediaserver mediaserver/cli:main $@
+
+$(REPO_ROOT)/bin/build-service-config: $(LISP_SRCS) $(REPO_ROOT)/script/build.sh
+	$(REPO_ROOT)/script/build.sh mediaserver/build mediaserver/build-cli:main $@
+
+bin/%: $(REPO_ROOT)/bin/%
+	@mkdir -p bin && [ -e $@ ] || ln -s $< $@
+
+# The services manifest is the single source of truth at render time.
+# Built from the per-service yamls + override files. Cwd-relative so
+# test/ builds its own manifest from test/services/.
+SERVICE_YMLS := $(wildcard services/*/service.yml)
+OVERRIDE_YMLS := $(wildcard globals.yml) $(wildcard config.local.yml)
+
+services/manifest.yaml: bin/build-service-config $(SERVICE_YMLS) $(OVERRIDE_YMLS)
+	bin/build-service-config \
+	  $(addprefix --override=,$(OVERRIDE_YMLS)) \
+	  $(SERVICE_YMLS) > $@
 
 all: $(ALL_OUTPUTS)
 
 clean:
-	rm -rf config/
+	rm -rf config/ services/manifest.yaml
 
 users:
 	script/make_users.sh
@@ -94,7 +107,7 @@ $(DIRS):
 svc_of = $(firstword $(subst /, ,$(1)))
 
 # Per-service ELPs in services/. Service name implicit from path.
-config/%: services/%.elp bin/render | $$(@D)/
+config/%: services/%.elp bin/render services/manifest.yaml | $$(@D)/
 	SERVICE_NAME=$(call svc_of,$*) bin/render $< > $@ && printf .
 
 # Non-template service files: copy.
@@ -102,7 +115,7 @@ config/%: services/% | $$(@D)/
 	cp $< $@
 
 # Singleton ELPs under targets/debian/ (no $service in path).
-config/%: $(TARGET_DIR)/%.elp bin/render | $$(@D)/
+config/%: $(TARGET_DIR)/%.elp bin/render services/manifest.yaml | $$(@D)/
 	bin/render $< > $@ && printf .
 
 # Non-template files under targets/debian/: copy.
@@ -113,7 +126,7 @@ config/%: $(TARGET_DIR)/% | $$(@D)/
 # non-empty renders write the unit file and append its path to the
 # manifest. SECONDEXPANSION on the prereq swaps `mediaserver` back
 # to `$service` so the actual source file resolves.
-config/%.manifest: $$(subst mediaserver,__service__,$(TARGET_DIR)/%.elp) bin/render | $$(@D)/
+config/%.manifest: $$(subst mediaserver,__service__,$(TARGET_DIR)/%.elp) bin/render services/manifest.yaml | $$(@D)/
 	@> $@
 	@for svc in $(ALL_SERVICES); do \
 	  f=$$(echo "$*" | sed "s|mediaserver|$$svc|"); out="config/$$f"; \

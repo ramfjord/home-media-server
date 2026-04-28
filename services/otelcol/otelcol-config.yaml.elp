@@ -46,18 +46,6 @@ receivers:
               labels:
                 job: node_exporter
                 partof: monitoring
-          # Map systemd unit names to service/partof labels
-          metric_relabel_configs:
-<%- (loopservices (services :where unit) -%>
-            - source_labels: [name]
-              target_label: service
-              replacement: <%= name %>
-              regex: "<%= unit %>.service"
-            - source_labels: [name]
-              target_label: partof
-              replacement: <%= partof %>
-              regex: "<%= unit %>.service"
-<%- ) -%>
 
         # SNMP scrape of Synology NAS via snmp_exporter (disabled until NAS is set up).
         # Uncomment together with the snmp-exporter service in services.yml and set
