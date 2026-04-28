@@ -51,6 +51,14 @@ TARGET := fatlaptop
 
 Stack adjacent close-paren-only tags onto a single tag, Lisp-style: prefer `<%- )) -%>` over two consecutive `<%- ) -%>` lines (and `))) ` for three, etc.). The trim semantics are the same and the rendered output is byte-identical, but it reads as the Lisp form it actually is rather than as HTML-like standalone tags.
 
+## Field access in templates
+
+Templates render with every service field bound as a bare symbol (`name`, `port`, `use_vpn`, `compose_file`, ...). Hyphens in field keys become underscores, matching Ruby convention. Inside per-service templates and inside `loopservices`, write `<%= name %>` rather than `(field :name service)`.
+
+For higher-order use, `field` is curried: `(field :name)` returns a lookup function — `(mapcar (field :name) services)` and `(remove-if-not (field :dockerized) services)`. Two-arg form `(field :key svc)` is the explicit lookup; key always comes first.
+
+`loopservices` iterates with field-scope: `(loopservices (services :where (and port use_vpn)) ...)` exposes each service's fields as bare symbols inside body and `:where`. New service fields (declared or computed) are added via `define-service-field` in `lisp/src/field.lisp`.
+
 ## Workflow
 
 1. Edit `services/<name>/service.yml`, templates, and/or `config.local.yml`

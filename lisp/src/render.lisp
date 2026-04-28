@@ -103,13 +103,13 @@
    line-for-line: predefined keys first, then docker_config merged in,
    then optional group_add. The networks block is appended at top level
    for non-VPN services."
-  (let* ((name        (field service :name))
-         (use-vpn     (field service :use-vpn))
-         (port        (field service :port))
-         (user-id     (field service :user-id))
-         (docker-cfg  (or (field service :docker-config) '()))
+  (let* ((name        (field :name service))
+         (use-vpn     (field :use-vpn service))
+         (port        (field :port service))
+         (user-id     (field :user-id service))
+         (docker-cfg  (or (field :docker-config service) '()))
          (explicit-net-mode (getf docker-cfg :network-mode))
-         (groups      (field service :groups))
+         (groups      (field :groups service))
          (svc (list :container-name name
                     :environment (list "TZ=Etc/UTC"))))
     (when user-id
@@ -195,14 +195,14 @@
    to NIL via FIELD's default. Returns NIL when SERVICE is NIL.
 
    Templates can write <%= name %> / <%= compose_file %> /
-   <%- (when use_vpn -%> instead of (field service :name) etc.
+   <%- (when use_vpn -%> instead of (field :name service) etc.
 
    A service field shadows a like-named global when both bind the
    same symbol; in practice this hasn't happened on real fixtures."
   (when service
     (mapcar (lambda (k)
               (cons (%field-binding-symbol k)
-                    (field service k globals)))
+                    (field k service globals)))
             *known-fields*)))
 
 (defun %dedup-alist (alist)
@@ -218,7 +218,7 @@
 (defmacro with-service-scope (svc &body body)
   "Bind every key in *KNOWN-FIELDS* as a symbol-macro that looks up
    that field on SVC. Lets template bodies write `name` instead of
-   (field svc :name).
+   (field :name svc).
 
    FIELD's globals fallback comes from the GLOBALS symbol in the ELP
    context. Expanded at template-compile time, so *KNOWN-FIELDS* must
@@ -232,7 +232,7 @@
        (symbol-macrolet
            ,(mapcar (lambda (k)
                       (list (%field-binding-symbol k)
-                            `(field ,svc-var ,k globals)))
+                            `(field ,k ,svc-var globals)))
                     *known-fields*)
          ,@body))))
 

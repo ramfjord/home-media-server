@@ -1,6 +1,6 @@
-<%- (dolist (svc (remove-if-not (lambda (s) (and (field s :use-vpn) (field s :port))) services)) -%>
-:<%= (field svc :port) %> {
-  reverse_proxy fx-wireguard:<%= (field svc :port) %>
+<%- (loopservices (services :where (and use_vpn port)) -%>
+:<%= port %> {
+  reverse_proxy fx-wireguard:<%= port %>
   tls /etc/caddy/certs/fullchain.pem /etc/caddy/certs/privkey.pem
 }
 <%- ) -%>

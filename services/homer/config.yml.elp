@@ -4,21 +4,15 @@ subtitle: Service Dashboard
 logo: logo.png
 icon: fas fa-server
 
-# Group services by category
 <%-
-;; Categories: every distinct :partof value except "dashboard" (homer
-;; itself). Map each to a font-awesome icon; unknown categories fall
-;; through to a folder default. Items within a category are services
-;; with a :port that aren't homer/dashboard.
 (let* ((displayable
         (remove-if (lambda (s)
-                     (or (string= (field s :name) "homer")
-                         (string= (field s :partof) "dashboard")
-                         (not (field s :port))))
+                     (or (string= (field :name s) "homer")
+                         (string= (field :partof s) "dashboard")
+                         (not (field :port s))))
                    services))
        (categories
-        (sort (remove-duplicates (mapcar (lambda (s) (field s :partof))
-                                         displayable)
+        (sort (remove-duplicates (mapcar (field :partof) displayable)
                                  :test #'equal)
               #'string<))
        (icons '(("downloading" . "fas fa-cloud-download-alt")
@@ -26,12 +20,10 @@ icon: fas fa-server
                 ("vpn"         . "fas fa-shield-alt")
                 ("security"    . "fas fa-lock")
                 ("monitoring"  . "fas fa-chart-line"))))
-  ;; Asset-presence check mirrors the Ruby template's runtime guard.
-  (dolist (svc displayable)
-    (let ((icon-path (format nil "services/homer/assets/tools/~A.png"
-                             (field svc :name))))
+  (loopservices (displayable)
+    (let ((icon-path (format nil "services/homer/assets/tools/~A.png" name)))
       (unless (probe-file icon-path)
-        (error "Missing icon for ~A: ~A" (field svc :name) icon-path))))
+        (error "Missing icon for ~A: ~A" name icon-path))))
 -%>
 services:
 <%- (dolist (category categories) -%>

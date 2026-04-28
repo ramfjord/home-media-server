@@ -36,7 +36,7 @@
                  (list (cons ,key
                              (lambda (service globals)
                                (declare (ignorable globals))
-                               (flet ((svc-field (k) (field service k globals)))
+                               (flet ((svc-field (k) (field k service globals)))
                                  (declare (ignorable (function svc-field)))
                                  ,@(or body `((getf service ,key))))))))))
 
@@ -85,17 +85,22 @@
    *DERIVED-FIELDS*. Used by FIELD to detect typos at access time.
    When NIL (e.g. before load), no typo checking happens.")
 
-(defun field (service key &optional (globals *globals*))
+(defun field (key &optional (service nil service-supplied) (globals *globals*))
   "Look up KEY on SERVICE plist. Falls through to *DERIVED-FIELDS*
    when KEY is absent. Errors when *KNOWN-FIELDS* is set and KEY
-   isn't a recognized field name (typo guard)."
+   isn't a recognized field name (typo guard).
+
+   With only KEY supplied, returns a curried function (lambda (s)
+   ...) for use with mapcar/remove-if-not/etc."
   (when (and *known-fields* (not (member key *known-fields*)))
     (error "Unknown field ~S. Known: ~{~S~^ ~}" key *known-fields*))
-  (let ((direct (getf service key 'no)))
-    (if (eq direct 'no)
-        (let ((derived (cdr (assoc key *derived-fields*))))
-          (and derived (funcall derived service globals)))
-        direct)))
+  (if (not service-supplied)
+      (lambda (s) (field key s globals))
+      (let ((direct (getf service key 'no)))
+        (if (eq direct 'no)
+            (let ((derived (cdr (assoc key *derived-fields*))))
+              (and derived (funcall derived service globals)))
+            direct))))
 
 ;;; Note: target-specific helpers (file enumeration, deploy-path
 ;;; computation, etc.) belong with the templates that need them, not

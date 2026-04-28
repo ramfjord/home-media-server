@@ -5,11 +5,11 @@ global:
     host: <%= hostname %>
 
 scrape_configs:
-<%- (dolist (svc (remove-if-not (lambda (s) (and (field s :port) (field s :healthz))) services)) -%>
-  - job_name: "<%= (field svc :name) %>"
-    metrics_path: <%= (field svc :healthz) %>
+<%- (loopservices (services :where (and port healthz)) -%>
+  - job_name: "<%= name %>"
+    metrics_path: <%= healthz %>
     static_configs:
-      - targets: ["<%= (field svc :name) %>:<%= (field svc :port) %>"]
+      - targets: ["<%= name %>:<%= port %>"]
         labels:
-          partof: <%= (field svc :partof) %>
+          partof: <%= partof %>
 <%- ) -%>

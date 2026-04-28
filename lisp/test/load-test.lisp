@@ -73,11 +73,11 @@
   (let* ((cfg (mediaserver::load-config-from-disk (fixture-root)))
          (s (first (getf cfg :services))))
     (is (not (null mediaserver::*known-fields*)))
-    (signals error (mediaserver:field s :prot))
+    (signals error (mediaserver:field :prot s))
     ;; :groups isn't on this service but IS in *known-fields* if any
     ;; service has it. fx-* fixtures don't have :groups (per design),
     ;; so :groups would also error — confirming the typo guard.
-    (is-true (mediaserver:field s :name))))  ; sanity: real fields work
+    (is-true (mediaserver:field :name s))))  ; sanity: real fields work
 
 (test validate-rejects-missing-name
   "validate-services errors on a service without :name."

@@ -8,16 +8,16 @@ groups:
         summary: "{{ $labels.service }} - systemd unit {{ $labels.name}} is down"
 
     # Disabled for now - too many false positives
-    # <% (dolist (svc services) %>
-    # - alert: UnitNeverStarted<%= (or (field svc :name) "") %>
-    #   expr: absent(node_systemd_unit_state{name="<%= (or (getf svc :unit) "") %>.service"})
+    # <% (loopservices (services) %>
+    # - alert: UnitNeverStarted<%= (or name "") %>
+    #   expr: absent(node_systemd_unit_state{name="<%= (or unit "") %>.service"})
     #   for: 5m
     #   labels:
-    #     partof: <%= (or (field svc :partof) "") %>
-    #     service: <%= (or (field svc :name) "") %>
+    #     partof: <%= (or partof "") %>
+    #     service: <%= (or name "") %>
     #   annotations:
-    #     summary: "<%= (or (field svc :name) "") %> - missing metrics for systemd unit <%= (or (getf svc :unit) "") %>"
-    #     description: "<%= (or (field svc :desc) "") %>"
+    #     summary: "<%= (or name "") %> - missing metrics for systemd unit <%= (or unit "") %>"
+    #     description: "<%= (or desc "") %>"
     # <% ) %>
 
     - alert: VolumeFillingUp

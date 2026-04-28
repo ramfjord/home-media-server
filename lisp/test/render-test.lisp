@@ -69,7 +69,7 @@
              :compose-file :source-dir :dockerized :has-unit))
          (mediaserver:*globals* (getf cfg :globals)))
     (with-open-file (s path :direction :output :if-exists :supersede)
-      (write-string "<% (dolist (s services) %><%= (field s :name) %>:<%= (field s :port) %> <% ) %>" s))
+      (write-string "<% (dolist (s services) %><%= (field :name s) %>:<%= (field :port s) %> <% ) %>" s))
     (is (equal "alpha:1234 beta:5678 "
                (mediaserver:render-template-to-string
                 path (mediaserver::service-render-context nil cfg))))))

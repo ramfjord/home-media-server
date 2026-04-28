@@ -29,17 +29,17 @@
         (mediaserver:*globals* '(:install-base "/opt/mediaserver"
                                  :media-path "/data"
                                  :hostname "fixture-host")))
-    (is (equal "fx-qbittorrent" (mediaserver:field s :name)))
-    (is (eq t (mediaserver:field s :use-vpn)))
-    (is (= 18080 (mediaserver:field s :port)))))
+    (is (equal "fx-qbittorrent" (mediaserver:field :name s)))
+    (is (eq t (mediaserver:field :use-vpn s)))
+    (is (= 18080 (mediaserver:field :port s)))))
 
 (test field-missing-returns-nil
   "Keys absent from the service plist (and not derived) return NIL.
    Without *known-fields* set, no typo guard fires."
   (let ((s (load-fixture-service "fx-qbittorrent"))
         (mediaserver::*known-fields* nil))
-    (is (null (mediaserver:field s :sighup-reload)))
-    (is (null (mediaserver:field s :groups)))))
+    (is (null (mediaserver:field :sighup-reload s)))
+    (is (null (mediaserver:field :groups s)))))
 
 (test field-derived-compose-file
   "Compose-file is derived from globals install-base + service name.
@@ -49,9 +49,9 @@
                                  :media-path "/data"
                                  :hostname "fixture-host")))
     (is (equal "/opt/mediaserver/config/fx-qbittorrent/docker-compose.yml"
-               (mediaserver:field s :compose-file)))
-    (is (equal "services/fx-qbittorrent" (mediaserver:field s :source-dir)))
-    (is (eq t (mediaserver:field s :dockerized)))))
+               (mediaserver:field :compose-file s)))
+    (is (equal "services/fx-qbittorrent" (mediaserver:field :source-dir s)))
+    (is (eq t (mediaserver:field :dockerized s)))))
 
 (defun run-tests ()
   (let ((results (run 'field-suite)))
