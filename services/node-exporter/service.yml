@@ -1,0 +1,14 @@
+---
+name: node-exporter
+partof: monitoring
+desc: Host metrics exporter
+docker_config:
+  image: prom/node-exporter:latest
+  network_mode: host
+  pid: host
+  volumes:
+  - "/:/host:ro,rslave"
+  command:
+  - "--path.rootfs=/host"
+  restart: unless-stopped
+order: 145
