@@ -15,7 +15,7 @@
    Hash-tables become plists; conses are mapcar'd; atoms pass through."
   (etypecase x
     (hash-table (loop for k being the hash-keys of x using (hash-value v)
-                      collect (intern (string-upcase k) :keyword)
+                      collect (alexandria:make-keyword (string-upcase k))
                       collect (yaml->plist v)))
     (cons       (mapcar #'yaml->plist x))
     (t          x)))
@@ -63,7 +63,7 @@
   "Build the ELP context-alist from GLOBALS-PLIST: each keyword key
    becomes a same-named symbol in :mediaserver."
   (loop for (k v) on globals-plist by #'cddr
-        collect (cons (intern (symbol-name k) :mediaserver) v)))
+        collect (cons (alexandria:ensure-symbol k :mediaserver) v)))
 
 (defun render-service-yaml (path globals)
   "ELP-render the file at PATH with GLOBALS bound, return the rendered
@@ -131,7 +131,7 @@
     ((plistp x)
      (let ((h (make-hash-table :test 'equal)))
        (loop for (k v) on x by #'cddr
-             do (setf (gethash (string-downcase (symbol-name k)) h)
+             do (setf (gethash (str:downcase (symbol-name k)) h)
                       (plist->cl-yaml v)))
        h))
     ((listp x) (mapcar #'plist->cl-yaml x))
@@ -190,8 +190,8 @@
           (mapcar (lambda (s)
                     (let ((ovr (and overrides
                                     (getf overrides
-                                          (intern (string-upcase (getf s :name))
-                                                  :keyword)))))
+                                          (alexandria:make-keyword
+                                           (string-upcase (getf s :name)))))))
                       (if ovr (deep-merge s ovr) s)))
                   services))
          ;; Compute derived fields into each service plist.

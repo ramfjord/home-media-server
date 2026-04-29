@@ -27,11 +27,11 @@ icon: fas fa-server
 -%>
 services:
 <%- (dolist (category categories) -%>
-  - name: "<%= (mediaserver::ruby-capitalize category) %>"
+  - name: "<%= (str:capitalize category) %>"
     icon: "<%= (or (cdr (assoc category icons :test #'equal)) "fas fa-folder") %>"
     items:
 <%-   (loopservices (displayable :where (equal partof category)) -%>
-      - name: "<%= (mediaserver::ruby-capitalize name) %>"
+      - name: "<%= (str:capitalize name) %>"
         subtitle: "<%= desc %>"
         logo: "assets/tools/<%= name %>.png"
         url: "<%= (or public_url (format nil "http://~A:~A" hostname port)) %>"

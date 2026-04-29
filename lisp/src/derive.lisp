@@ -18,8 +18,8 @@
     (loop for p in (directory (merge-pathnames "**/*.*" src))
           for r = (enough-namestring p src)
           when (uiop:file-pathname-p p)
-          unless (or (string= r "service.yml") (uiop:string-suffix-p r ".erb"))
-          collect (if (uiop:string-suffix-p r ".elp")
+          unless (or (string= r "service.yml") (str:ends-with? ".erb" r))
+          collect (if (str:ends-with? ".elp" r)
                       (subseq r 0 (- (length r) 4)) r))))
 
 (defun derive-fields (service globals)

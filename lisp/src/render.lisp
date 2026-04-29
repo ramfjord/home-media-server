@@ -1,16 +1,5 @@
 (in-package :mediaserver)
 
-(defun ruby-capitalize (s)
-  "Mirror Ruby's String#capitalize: upcase the first character, downcase
-   the rest. CL's string-capitalize splits on word boundaries, which
-   would turn \"blackbox-exporter\" into \"Blackbox-Exporter\" instead
-   of \"Blackbox-exporter\"."
-  (if (zerop (length s))
-      s
-      (concatenate 'string
-                   (string (char-upcase (char s 0)))
-                   (string-downcase (subseq s 1)))))
-
 ;;; Block-style YAML emit, the subset templates need.
 ;;;
 ;;; Mirrors Ruby Psych's defaults closely enough for the docker-compose
@@ -148,11 +137,10 @@
                                     (list "getent" "group" g)
                                     :output :string
                                     :ignore-error-status t)
-                        for trimmed = (string-trim '(#\Space #\Tab #\Newline) line)
+                        for trimmed = (str:trim line)
                         when (and trimmed (> (length trimmed) 0))
                           collect (parse-integer
-                                   (third (uiop:split-string trimmed
-                                                             :separator ":"))))))
+                                   (third (str:split ":" trimmed))))))
         (when gids
           (setf svc (append svc (list :group_add gids))))))
     ;; The service name is data, not a plist-key — wrap as alist so the
@@ -184,7 +172,7 @@
 
 (defun %field-binding-symbol (key)
   "Convert :install_base -> install_base (a symbol in :mediaserver)."
-  (intern (symbol-name key) :mediaserver))
+  (alexandria:ensure-symbol key :mediaserver))
 
 (defun service-field-bindings (service globals)
   "Return an alist binding every key in *known-fields* (direct or
@@ -264,6 +252,6 @@
     (%dedup-alist
      (append (service-field-bindings service globals)
              (globals->elp-context globals)
-             (list (cons (intern "SERVICE"  :mediaserver) service)
-                   (cons (intern "SERVICES" :mediaserver) services)
-                   (cons (intern "GLOBALS"  :mediaserver) globals))))))
+             (list (cons (alexandria:ensure-symbol "SERVICE"  :mediaserver) service)
+                   (cons (alexandria:ensure-symbol "SERVICES" :mediaserver) services)
+                   (cons (alexandria:ensure-symbol "GLOBALS"  :mediaserver) globals))))))
