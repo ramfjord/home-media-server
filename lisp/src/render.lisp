@@ -35,16 +35,6 @@
                     (field k service globals)))
             *known-fields*)))
 
-(defun %dedup-alist (alist)
-  "Return ALIST with duplicate keys removed; first occurrence wins.
-   Needed because ELP wraps the context alist in a LET, and CL signals
-   on duplicate variable bindings."
-  (let ((seen (make-hash-table)) (result nil))
-    (dolist (entry alist (nreverse result))
-      (unless (gethash (car entry) seen)
-        (setf (gethash (car entry) seen) t)
-        (push entry result)))))
-
 (defmacro with-service-scope (svc &body body)
   "Bind every key in *KNOWN-FIELDS* as a symbol-macro that looks up
    that field on SVC. Lets template bodies write `name` instead of
@@ -83,19 +73,26 @@
 (defun service-render-context (service config)
   "Build the ELP context-alist for a render.
 
-   Includes, in priority order (first wins on duplicates):
+   Priority order (highest wins on duplicates):
    - Per-service field bindings (only when SERVICE is non-nil) —
      every key in *known-fields*, named with underscores
      (e.g. install_base, compose_file, sighup_reload).
    - Underscored globals (install_base, media_path, hostname, plus
      any custom keys from config files).
    - SERVICE / SERVICES / GLOBALS, for templates that need raw plists
-     (most commonly inside iteration loops over SERVICES)."
+     (most commonly inside iteration loops over SERVICES).
+
+   Duplicates are resolved via a hash: lower-priority sources are
+   inserted first and overwritten by higher-priority sources."
   (let ((globals  (getf config :globals))
-        (services (getf config :services)))
-    (%dedup-alist
-     (append (service-field-bindings service globals)
-             (globals->elp-context globals)
-             (list (cons (alexandria:ensure-symbol "SERVICE"  :mediaserver) service)
-                   (cons (alexandria:ensure-symbol "SERVICES" :mediaserver) services)
-                   (cons (alexandria:ensure-symbol "GLOBALS"  :mediaserver) globals))))))
+        (services (getf config :services))
+        (h (make-hash-table)))
+    (flet ((merge-in (entries)
+             (dolist (entry entries)
+               (setf (gethash (car entry) h) (cdr entry)))))
+      (merge-in (list (cons (alexandria:ensure-symbol "SERVICE"  :mediaserver) service)
+                      (cons (alexandria:ensure-symbol "SERVICES" :mediaserver) services)
+                      (cons (alexandria:ensure-symbol "GLOBALS"  :mediaserver) globals)))
+      (merge-in (globals->elp-context globals))
+      (merge-in (service-field-bindings service globals)))
+    (alexandria:hash-table-alist h)))
