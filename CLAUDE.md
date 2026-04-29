@@ -2,6 +2,8 @@
 
 Personal media server using Docker containers and dynamic config generation.
 
+The renderer is a Common Lisp binary (`bin/render`, built from `lisp/src/`) that consumes ELP templates — an ERB-style Lisp template engine vendored at `elp/`.
+
 ## Network Architecture
 
 Two separate VPN networks:
@@ -12,7 +14,7 @@ Services run on Tailscale. Caddy bridges both networks when needed, exposing ing
 
 ## Overview
 
-Services defined in `services.yml`: downloading (Radarr, Sonarr, Prowlarr, qBittorrent), streaming (Plex), monitoring (Prometheus, Alertmanager, Grafana), and dashboard (Homer). All configs are generated from `.erb` templates via `render.rb` and placed in `config/` (git-ignored).
+Services defined per-service in `services/<name>/service.yml`: downloading (Radarr, Sonarr, Prowlarr, qBittorrent), streaming (Plex), monitoring (Prometheus, Alertmanager, Grafana), and dashboard (Homer). All configs are generated from `.elp` templates via `bin/render` and placed in `config/` (git-ignored).
 
 ## Configuration
 
@@ -26,7 +28,7 @@ Services defined in `services.yml`: downloading (Radarr, Sonarr, Prowlarr, qBitt
 ## Commands
 
 ```bash
-make all               # Render all .erb files → config/
+make all               # Render all .elp templates → config/
 make clean             # Remove config/
 make check             # Validate prometheus, alertmanager, docker-compose syntax
 make test              # Run unit tests + golden renderer tests (test/golden_test.rb)

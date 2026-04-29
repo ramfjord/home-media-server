@@ -4,11 +4,11 @@
 
 (in-package :mediaserver/cli)
 
-;;; Drop-in interface compatible with render.rb:
+;;; CLI entry point:
 ;;;
 ;;;   bin/render [--service NAME] [TEMPLATE]
 ;;;
-;;; If TEMPLATE is omitted, reads from stdin (mirroring `./render.rb < x`).
+;;; If TEMPLATE is omitted, reads from stdin.
 ;;;
 ;;; --service NAME sets which service is in scope for the render. Falls
 ;;;   back to the SERVICE_NAME env var, then nil (singleton templates).
@@ -20,30 +20,6 @@
 ;;; Make is the dispatcher: each per-template recipe invokes this CLI
 ;;; once with the right --service / template path / output redirect.
 
-(defun usage (stream)
-  (format stream "Usage: render [--service NAME] [TEMPLATE]~%")
-  (format stream "       render --help~%~%")
-  (format stream "  --service NAME   Service in scope. Defaults to SERVICE_NAME env.~%")
-  (format stream "  TEMPLATE         Template path. If omitted, reads stdin.~%"))
-
-(defun parse-args (args)
-  (let (service template help)
-    (loop while args do
-      (let ((arg (pop args)))
-        (cond
-          ((or (string= arg "-h") (string= arg "--help"))
-           (setf help t))
-          ((string= arg "--service")
-           (setf service (or (pop args)
-                             (error "--service requires an argument"))))
-          ((and (> (length arg) 0) (char= (char arg 0) #\-))
-           (error "unknown flag: ~A" arg))
-          (t
-           (when template
-             (error "extra positional arg: ~A" arg))
-           (setf template arg)))))
-    (list :service service :template template :help help)))
-
 (defun stdin-to-tempfile ()
   "Read stdin to a tempfile (ELP needs a file path). Caller deletes it."
   (let ((path (uiop:tmpize-pathname #p"/tmp/render-stdin.elp")))
@@ -52,16 +28,23 @@
             while line do (write-line line out)))
     path))
 
-(defun main (&optional args)
+(defun options ()
+  (list
+   (clingon:make-option
+    :string
+    :description "service in scope for the render"
+    :short-name #\s
+    :long-name "service"
+    :env-vars '("SERVICE_NAME")
+    :key :service)))
+
+(defun handler (cmd)
   (handler-case
-      (let* ((argv (or args (uiop:command-line-arguments)))
-             (opts (parse-args argv))
-             (service-name (or (getf opts :service)
-                               (uiop:getenv "SERVICE_NAME")))
-             (template-arg (getf opts :template)))
-        (when (getf opts :help)
-          (usage *standard-output*)
-          (uiop:quit 0))
+      (let* ((service-name (clingon:getopt cmd :service))
+             (free (clingon:command-arguments cmd))
+             (template-arg (first free)))
+        (when (rest free)
+          (error "extra positional arg: ~A" (second free)))
         (let* ((cfg (mediaserver:load-config))
                (svc (and service-name
                          (not (string= "" service-name))
@@ -78,8 +61,18 @@
                         (mediaserver::service-render-context svc cfg))))
           (write-string output *standard-output*)
           (finish-output *standard-output*)
-          (when cleanup-template (ignore-errors (delete-file template)))
-          (uiop:quit 0)))
+          (when cleanup-template (ignore-errors (delete-file template)))))
     (error (e)
       (format *error-output* "render: ~A~%" e)
       (uiop:quit 1))))
+
+(defun command ()
+  (clingon:make-command
+   :name "render"
+   :description "Render an ELP template against the services manifest."
+   :usage "[--service NAME] [TEMPLATE]"
+   :options (options)
+   :handler #'handler))
+
+(defun main (&optional args)
+  (clingon:run (command) (or args (uiop:command-line-arguments))))

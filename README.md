@@ -4,8 +4,8 @@ Yet another self-hosted media server, with a focus on **observability, flexibili
 
 ## Philosophy
 
-- **Configuration as Code**: each service lives in `services/<name>/` (a `service.yml` plus any `.erb` templates it owns). `globals.yml` and `config.local.yml` cover the rest.
-- **Templated everything**: `render.rb` turns the per-service definitions into Prometheus configs, Caddy routes, per-service `docker-compose.yml` files, systemd units, and Homer dashboard entries.
+- **Configuration as Code**: each service lives in `services/<name>/` (a `service.yml` plus any `.elp` templates it owns). `globals.yml` and `config.local.yml` cover the rest.
+- **Templated everything**: a Lisp-based renderer (`bin/render`, sources under `lisp/`) turns the per-service definitions into Prometheus configs, Caddy routes, per-service `docker-compose.yml` files, systemd units, and Homer dashboard entries. Templates use ELP, an ERB-style Common Lisp template engine vendored at `elp/`.
 - **Systemd-native**: every service is a systemd unit on a shared `mediaserver-network`. A `.path` watcher hot-reloads each service when its config changes; `mediaserver.target` brings the whole stack up or down.
 - **Vendor-agnostic monitoring**: OpenTelemetry Collector sits in front of Prometheus/Grafana so the backend can be swapped without restructuring.
 
@@ -51,7 +51,7 @@ Caddy bridges the two and terminates HTTPS for the few services that require it 
 ### Prerequisites
 
 - Docker + Docker Compose V2
-- Linux host with `make` and `ruby`
+- Linux host with `make` and SBCL (Common Lisp). Quicklisp is required to load `cl-yaml`; on Arch, `pacman -S sbcl libyaml` plus a Quicklisp install.
 - A WireGuard VPN subscription (Mullvad, ProtonVPN, etc.)
 - Optional: Tailscale
 
@@ -109,7 +109,7 @@ The remote host needs passwordless sudo for `rsync` and `systemctl`, and `script
 | Remote access | Tailscale (private) | Internet-facing (Traefik + Let's Encrypt) |
 | Reverse proxy | Caddy (internal + HTTPS where required) | Traefik (internet ingress) |
 | Monitoring | Prometheus + Grafana + Alertmanager + OTel | Live dashboard only |
-| Config | Per-service YAML + ERB templates | Individual compose files |
+| Config | Per-service YAML + ELP (Lisp) templates | Individual compose files |
 | Compose layout | One compose file per service on shared `mediaserver-network` | Single monolithic compose file |
 
 ## Storage

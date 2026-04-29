@@ -112,8 +112,7 @@
   '(:install_base "/opt/mediaserver"
     :media_path   "/data"
     :hostname     "localhost")
-  "Fallback values for globals not set in any config file.
-   Mirrors Ruby's Mediaserver::DEFAULT_GLOBALS.")
+  "Fallback values for globals not set in any config file.")
 
 (defun read-yaml-file (path)
   "Read PATH as plain YAML, returning a plist (or NIL for missing file

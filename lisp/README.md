@@ -1,10 +1,10 @@
 # mediaserver (Lisp)
 
-Lisp implementation of the config renderer. Currently scoped to the
-fixture tree under `test/fixtures/`; the Ruby renderer
-(`render.rb` + `lib/mediaserver/`) still drives all real services.
+Lisp implementation of the config renderer — the only renderer.
+Drives all real services. Built as `bin/render`; sources under `src/`.
 
-See `../plans/lisp-render.md` for scope and design decisions.
+See `../plans/lisp-render.md` for the original scope and design decisions
+that shaped the port from the (now removed) Ruby renderer.
 
 ## Loading
 

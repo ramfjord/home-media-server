@@ -2,7 +2,7 @@
 
 The `fullchain.pem` / `privkey.pem` files in this directory are
 **self-signed throwaway certs** generated solely so that the
-fixture `Caddyfile.erb` template has real cert paths to reference
+fixture `Caddyfile.elp` template has real cert paths to reference
 during golden-test renders.
 
 - Subject: `CN=fx-fixture-do-not-use`

@@ -37,7 +37,7 @@ SERVICE_ELPS := $(shell find services -name '*.elp' 2>/dev/null)
 SERVICE_OUTPUTS := $(patsubst services/%.elp,config/%,$(SERVICE_ELPS))
 
 # Non-template files under services/ get copied verbatim.
-NON_TPL_CONFIGS := $(patsubst services/%,%,$(shell find services -type f ! -name '*.elp' ! -name '*.erb' ! -name 'service.yml' 2>/dev/null))
+NON_TPL_CONFIGS := $(patsubst services/%,%,$(shell find services -type f ! -name '*.elp' ! -name 'service.yml' 2>/dev/null))
 NON_TPL_TARGETS := $(addprefix config/,$(NON_TPL_CONFIGS))
 
 # Target tree (debian).
@@ -63,7 +63,6 @@ DIRS := $(sort $(dir $(ALL_OUTPUTS)))
 .PHONY: clean check test users install preview all $(addprefix systemd-,start stop restart enable disable status)
 
 test: bin/render
-	ruby -Ilib -Itest -e 'Dir["test/*_test.rb"].reject { |f| f == "test/golden_test.rb" }.each { |f| require "./#{f}" }'
 	@cd test && $(MAKE) all > /dev/null
 	@git diff --exit-code test/config/ > /dev/null && echo "goldens clean" || \
 	  (echo "GOLDEN DIFF in test/config/. Inspect via 'git diff test/config/'."; exit 1)

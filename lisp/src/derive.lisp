@@ -23,13 +23,13 @@
 
 (defun config-files-for (name)
   "Files under services/<NAME>/ that get deployed verbatim. Skips
-   service.yml (data) and *.erb (legacy shadows). Strips .elp so the
-   listed name matches the deployed file."
+   service.yml (data). Strips .elp so the listed name matches the
+   deployed file."
   (let ((src (truename (format nil "services/~A/" name))))
     (loop for p in (directory (merge-pathnames "**/*.*" src))
           for r = (enough-namestring p src)
           when (uiop:file-pathname-p p)
-          unless (or (string= r "service.yml") (str:ends-with? ".erb" r))
+          unless (string= r "service.yml")
           collect (if (str:ends-with? ".elp" r)
                       (subseq r 0 (- (length r) 4)) r))))
 

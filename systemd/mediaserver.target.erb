@@ -1,8 +1,0 @@
-<% dockerized = services.select(&:dockerized?) %>
-[Unit]
-Description=Mediaserver stack
-After=docker.service mediaserver-network.service
-Wants=mediaserver-network.service <%= dockerized.map { |s| "#{s.name}.service" }.join(' ') %>
-
-[Install]
-WantedBy=multi-user.target

@@ -1,8 +1,0 @@
-[Unit]
-Description=Config reload (SIGHUP) for <%= service.name %>
-After=<%= service.name %>.service
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/docker compose -f <%= service.compose_file %> kill --signal SIGHUP <%= service.name %>
-RemainAfterExit=no
