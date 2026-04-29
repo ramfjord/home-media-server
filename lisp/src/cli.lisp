@@ -33,8 +33,9 @@
          (template (first (clingon:command-arguments cmd)))
          (cfg (mediaserver:load-config))
          (svc (and service-name
-                   (find service-name (getf cfg :services)
-                         :key (lambda (s) (getf s :name)) :test #'equal)))
+                   (or (find service-name (getf cfg :services)
+                             :key (lambda (s) (getf s :name)) :test #'equal)
+                       (error "service not found: ~A" service-name))))
          (*package* (find-package :mediaserver)))
     (elp:render (probe-file template)
                 (mediaserver::service-render-context svc cfg))))
