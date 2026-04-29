@@ -18,17 +18,6 @@ $(error TARGET must be set (e.g. TARGET=fatlaptop, or via Makefile.local))
 endif
 endif
 
-# Anchor: directory containing this Makefile, after symlink resolution.
-# When invoked via test/Makefile -> ../Makefile, this still points at
-# the repo root — so the targets/debian templates and Lisp sources
-# resolve the same way regardless of cwd. cwd-relative things
-# (services/, globals.yml, config.local.yml, config/, bin/render)
-# resolve to the invocation dir, which is what makes the same Makefile
-# drive both production and goldens: each tree gets its own bin/render
-# with that tree's config baked in.
-REPO_ROOT  := $(patsubst %/,%,$(dir $(realpath $(firstword $(MAKEFILE_LIST)))))
-TARGET_DIR := $(REPO_ROOT)/targets/debian
-
 ALL_SERVICES := $(patsubst services/%/,%,$(sort $(dir $(wildcard services/*/.))))
 
 # services/<svc>/<path>.elp -> config/<svc>/<path>
@@ -47,17 +36,26 @@ NON_TPL_TARGETS := $(addprefix config/,$(NON_TPL_CONFIGS))
 # Manifests live at config/<path-with-__service__-replaced-by-mediaserver>.manifest;
 # the pattern rule swaps `mediaserver` back to `__service__` via $(subst)
 # to find the actual source file.
-SINGLETON_ELPS := $(shell find $(TARGET_DIR) -name '*.elp' -not -path '*__service__*')
-FANOUT_ELPS    := $(shell find $(TARGET_DIR) -name '*.elp' -path '*__service__*')
-TARGET_STATIC  := $(shell find $(TARGET_DIR) -type f -not -name '*.elp' -not -path '*__service__*')
+SINGLETON_ELPS := $(shell find targets/debian -name '*.elp' -not -path '*__service__*')
+FANOUT_ELPS    := $(shell find targets/debian -name '*.elp' -path '*__service__*')
+TARGET_STATIC  := $(shell find targets/debian -type f -not -name '*.elp' -not -path '*__service__*')
 
-TARGET_PREFIX  := $(TARGET_DIR)/
-SINGLETON_OUTPUTS     := $(patsubst $(TARGET_PREFIX)%.elp,config/%,$(SINGLETON_ELPS))
-TARGET_STATIC_OUTPUTS := $(patsubst $(TARGET_PREFIX)%,config/%,$(TARGET_STATIC))
-MANIFEST_TARGETS      := $(patsubst $(TARGET_PREFIX)%.elp,config/%.manifest,$(subst __service__,mediaserver,$(FANOUT_ELPS)))
+SINGLETON_OUTPUTS     := $(patsubst targets/debian/%.elp,config/%,$(SINGLETON_ELPS))
+TARGET_STATIC_OUTPUTS := $(patsubst targets/debian/%,config/%,$(TARGET_STATIC))
+MANIFEST_TARGETS      := $(patsubst targets/debian/%.elp,config/%.manifest,$(subst __service__,mediaserver,$(FANOUT_ELPS)))
+
+# Expand a fan-out path (with __service__ placeholder) to one path per service.
+fanout_paths = $(foreach s,$(ALL_SERVICES),$(subst __service__,$(s),$(1)))
+FANOUT_OUTPUTS := $(patsubst targets/debian/%.elp,config/%,$(call fanout_paths,$(FANOUT_ELPS)))
+
+# Per-manifest output dirs, derived from a manifest stem (e.g. mediaserver/foo).
+# Used by the manifest rule via second-expansion so each manifest only declares
+# the dirs it actually writes to. Reuses fanout_paths after rewriting the
+# `mediaserver` placeholder back to `__service__`.
+manifest_dirs = $(sort $(dir $(call fanout_paths,config/$(subst mediaserver,__service__,$(1)))))
 
 ALL_OUTPUTS := $(SERVICE_OUTPUTS) $(NON_TPL_TARGETS) $(SINGLETON_OUTPUTS) $(TARGET_STATIC_OUTPUTS) $(MANIFEST_TARGETS)
-DIRS := $(sort $(dir $(ALL_OUTPUTS)))
+DIRS := $(sort $(dir $(ALL_OUTPUTS) $(FANOUT_OUTPUTS)))
 
 .PHONY: clean check test users install preview all $(addprefix systemd-,start stop restart enable disable status)
 
@@ -96,33 +94,36 @@ $(DIRS):
 	mkdir -p $@
 
 # --- Render rules ---
-svc_of = $(firstword $(subst /, ,$(1)))
 
 # Per-service ELPs in services/. Service name implicit from path.
 config/%: services/%.elp bin/render services/manifest.yaml | $$(@D)/
-	SERVICE_NAME=$(call svc_of,$*) bin/render $< > $@ && printf .
+	SERVICE_NAME=$(firstword $(subst /, ,$*)) bin/render $< > $@ && printf .
 
 # Non-template service files: copy.
 config/%: services/% | $$(@D)/
 	cp $< $@
 
 # Singleton ELPs under targets/debian/ (no $service in path).
-config/%: $(TARGET_DIR)/%.elp bin/render services/manifest.yaml | $$(@D)/
+config/%: targets/debian/%.elp bin/render services/manifest.yaml | $$(@D)/
 	bin/render $< > $@ && printf .
 
 # Non-template files under targets/debian/: copy.
-config/%: $(TARGET_DIR)/% | $$(@D)/
+config/%: targets/debian/% | $$(@D)/
 	cp $< $@
+
+# Pre-deploy check scripts. checks/<name>.sh.elp -> config/checks/<name>.sh.
+# Rendered on demand by the check/<name> targets below — not part of `all`.
+config/checks/%: checks/%.elp bin/render services/manifest.yaml | $$(@D)/
+	bin/render $< > $@ && printf .
 
 # Per-template fan-out manifest. The recipe iterates ALL_SERVICES;
 # non-empty renders write the unit file and append its path to the
 # manifest. SECONDEXPANSION on the prereq swaps `mediaserver` back
 # to `$service` so the actual source file resolves.
-config/%.manifest: $$(subst mediaserver,__service__,$(TARGET_DIR)/%.elp) bin/render services/manifest.yaml | $$(@D)/
+config/%.manifest: $$(subst mediaserver,__service__,targets/debian/%.elp) bin/render services/manifest.yaml | $$(@D)/ $$(call manifest_dirs,$$*)
 	@> $@
 	@for svc in $(ALL_SERVICES); do \
 	  f=$$(echo "$*" | sed "s|mediaserver|$$svc|"); out="config/$$f"; \
-	  mkdir -p "$$(dirname "$$out")"; \
 	  bin/render --service $$svc $< > "$$out"; \
 	  [ -s "$$out" ] && { echo "$$f" >> $@; printf .; } || rm "$$out"; \
 	done
@@ -131,20 +132,15 @@ PATH_MANIFESTS := config/systemd/mediaserver.path.manifest \
                   config/systemd/mediaserver-compose.path.manifest
 COMPOSE_MANIFEST := config/mediaserver/docker-compose.yml.manifest
 
-check: all
-	# TODO convert these to use the container versions of promtool/amtool
-	promtool check config config/prometheus/prometheus.yml
-	amtool check-config config/alertmanager/alertmanager.yml
-	@for f in $$(cat $(COMPOSE_MANIFEST) 2>/dev/null); do \
-	  docker compose -f "config/$$f" config > /dev/null || (echo "FAIL: $$f" && exit 1); \
-	done
-	docker run --rm \
-		-v $(CURDIR)/config/otelcol:/etc/otelcol \
-		otel/opentelemetry-collector-contrib:latest \
-		validate --config=/etc/otelcol/otelcol-config.yaml
-	@for f in config/systemd/*.service config/systemd/*.path; do \
-	  systemd-analyze verify "$$f" > /dev/null || (echo "FAIL: $$f" && exit 1); \
-	done
+# One `check/<name>` per checks/<name>.sh.elp; the umbrella `check` target
+# depends on all of them so -j runs them in parallel. Not declared .PHONY
+# (which would disable implicit-rule search); the source .elp prereq pins
+# the pattern to stems that actually exist.
+check: $(patsubst checks/%.sh.elp,check/%,$(wildcard checks/*.sh.elp))
+
+check/%: all
+	@echo "=== check: $* ==="
+	@bash $<
 
 install: check
 	rsync -av --rsync-path="sudo rsync" --delete --mkpath \
