@@ -97,7 +97,7 @@ $(DIRS):
 
 # Per-service ELPs in services/. Service name implicit from path.
 config/%: services/%.elp bin/render services/manifest.yaml | $$(@D)/
-	SERVICE_NAME=$(firstword $(subst /, ,$*)) bin/render $< > $@ && printf .
+	bin/render --service $(firstword $(subst /, ,$*)) $< > $@ && printf .
 
 # Non-template service files: copy.
 config/%: services/% | $$(@D)/
