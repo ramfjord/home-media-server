@@ -3,7 +3,7 @@
   :version "0.1.0"
   :author "Thomas Ramfjord"
   :license "MIT"
-  :depends-on ("cl-yaml" "elp" "str" "alexandria" "serapeum")
+  :depends-on ("cl-yaml" "elp" "str" "alexandria" "serapeum" "clingon")
   :pathname "lisp/src/"
   :serial t
   :components
