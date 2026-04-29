@@ -3,7 +3,7 @@
   :version "0.1.0"
   :author "Thomas Ramfjord"
   :license "MIT"
-  :depends-on ("cl-yaml" "elp" "str" "alexandria")
+  :depends-on ("cl-yaml" "elp" "str" "alexandria" "serapeum")
   :pathname "lisp/src/"
   :serial t
   :components
@@ -11,6 +11,7 @@
    (:file "field")
    (:file "derive")
    (:file "config")
+   (:file "hashutils")
    (:file "render")
    (:file "cli"))
   :in-order-to ((test-op (test-op "mediaserver/tests"))))

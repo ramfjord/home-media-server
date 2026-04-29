@@ -1,4 +1,3 @@
-
 ---
 services:
   fx-wireguard:
@@ -11,9 +10,10 @@ services:
     cap_add:
     - NET_ADMIN
     volumes:
-    - "/opt/fx-mediaserver/config/fx-wireguard:/config"
+    - /opt/fx-mediaserver/config/fx-wireguard:/config
     restart: unless-stopped
 networks:
   mediaserver:
     external: true
     name: mediaserver
+...

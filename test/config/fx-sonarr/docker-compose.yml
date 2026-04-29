@@ -1,4 +1,3 @@
-
 ---
 services:
   fx-sonarr:
@@ -9,6 +8,7 @@ services:
     network_mode: container:wireguard
     image: example.invalid/fx-sonarr:latest
     volumes:
-    - "/opt/fx-mediaserver/config/fx-sonarr:/config"
-    - "/data:/data"
+    - /opt/fx-mediaserver/config/fx-sonarr:/config
+    - /data:/data
     restart: unless-stopped
+...

@@ -1,6 +1,7 @@
 ---
 services:
-- config_files: false
+- group_ids: false
+  config_files: false
   has_unit: false
   dockerized: true
   source_dir: services/fx-wireguard
@@ -17,7 +18,8 @@ services:
     - /opt/fx-mediaserver/config/fx-wireguard:/config
     restart: unless-stopped
   order: 0
-- config_files:
+- group_ids: false
+  config_files:
   - Caddyfile
   - certs/README.md
   - certs/fullchain.pem
@@ -43,7 +45,8 @@ services:
     - 19090:19090
     restart: unless-stopped
   order: 5
-- config_files: false
+- group_ids: false
+  config_files: false
   has_unit: false
   dockerized: true
   source_dir: services/fx-sonarr
@@ -61,7 +64,8 @@ services:
     - /data:/data
     restart: unless-stopped
   order: 30
-- config_files: false
+- group_ids: false
+  config_files: false
   has_unit: false
   dockerized: true
   source_dir: services/fx-qbittorrent
@@ -79,7 +83,8 @@ services:
     - /data:/data
     restart: unless-stopped
   order: 50
-- config_files:
+- group_ids: false
+  config_files:
   - prometheus.yml
   has_unit: false
   dockerized: true
