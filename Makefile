@@ -28,7 +28,6 @@ endif
 # with that tree's config baked in.
 REPO_ROOT  := $(patsubst %/,%,$(dir $(realpath $(firstword $(MAKEFILE_LIST)))))
 TARGET_DIR := $(REPO_ROOT)/targets/debian
-LISP_SRCS  := $(wildcard $(REPO_ROOT)/lisp/src/*.lisp) $(REPO_ROOT)/mediaserver.asd
 
 ALL_SERVICES := $(patsubst services/%/,%,$(sort $(dir $(wildcard services/*/.))))
 
@@ -62,22 +61,16 @@ DIRS := $(sort $(dir $(ALL_OUTPUTS)))
 
 .PHONY: clean check test users install preview all $(addprefix systemd-,start stop restart enable disable status)
 
-test: bin/render
+test: $(patsubst lisp/cli/%.lisp,bin/%,$(wildcard lisp/cli/*.lisp))
 	@cd test && $(MAKE) all > /dev/null
 	@git diff --exit-code test/config/ > /dev/null && echo "goldens clean" || \
 	  (echo "GOLDEN DIFF in test/config/. Inspect via 'git diff test/config/'."; exit 1)
 
-# Lisp binaries. Built once at repo root and reused (cwd-relative
-# bin/ is a symlink) — no config is baked in, so a single binary
-# works against any tree.
-$(REPO_ROOT)/bin/render: $(LISP_SRCS) $(REPO_ROOT)/script/build.sh
-	$(REPO_ROOT)/script/build.sh mediaserver mediaserver/cli:main $@
-
-$(REPO_ROOT)/bin/build-service-config: $(LISP_SRCS) $(REPO_ROOT)/script/build.sh
-	$(REPO_ROOT)/script/build.sh mediaserver/build mediaserver/build-cli:main $@
-
-bin/%: $(REPO_ROOT)/bin/%
-	@mkdir -p bin && [ -e $@ ] || ln -s $< $@
+# Lisp binaries. One CLI entry point per file in lisp/cli/; each
+# produces bin/<name>. The test tree's script/build.sh is a symlink
+# shim instead of a real build, so the same rule works in both trees.
+bin/%: lisp/cli/%.lisp lisp/src/* mediaserver.asd script/build.sh
+	script/build.sh lisp/cli/$*.lisp
 
 # The services manifest is the single source of truth at render time.
 # Built from the per-service yamls + override files. Cwd-relative so

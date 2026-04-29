@@ -1,8 +1,8 @@
-(defpackage :mediaserver/cli
+(defpackage :mediaserver/render
   (:use :cl :mediaserver)
   (:export :main))
 
-(in-package :mediaserver/cli)
+(in-package :mediaserver/render)
 
 ;;; CLI entry point:
 ;;;

@@ -4,24 +4,22 @@
   :author "Thomas Ramfjord"
   :license "MIT"
   :depends-on ("cl-yaml" "elp" "str" "alexandria" "serapeum" "clingon")
-  :pathname "lisp/src/"
   :serial t
   :components
-  ((:file "package")
-   (:file "field")
-   (:file "derive")
-   (:file "config")
-   (:file "hashutils")
-   (:file "render")
-   (:file "cli"))
+  ((:module "lib"
+    :pathname "lisp/src/"
+    :serial t
+    :components ((:file "package")
+                 (:file "field")
+                 (:file "derive")
+                 (:file "config")
+                 (:file "hashutils")
+                 (:file "render")))
+   (:module "cli"
+    :pathname "lisp/cli/"
+    :components ((:file "render")
+                 (:file "build-service-config"))))
   :in-order-to ((test-op (test-op "mediaserver/tests"))))
-
-(defsystem "mediaserver/build"
-  :description "Build the services manifest yaml from service.yml inputs."
-  :depends-on ("mediaserver")
-  :pathname "lisp/src/"
-  :serial t
-  :components ((:file "build-cli")))
 
 (defsystem "mediaserver/tests"
   :description "Tests for mediaserver."

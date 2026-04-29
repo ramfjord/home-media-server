@@ -1,8 +1,8 @@
-(defpackage :mediaserver/build-cli
+(defpackage :mediaserver/build-service-config
   (:use :cl :mediaserver)
   (:export :main))
 
-(in-package :mediaserver/build-cli)
+(in-package :mediaserver/build-service-config)
 
 ;;; bin/build-service-config — build the manifest yaml.
 ;;;
