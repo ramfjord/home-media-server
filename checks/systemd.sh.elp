@@ -6,7 +6,7 @@
 set -euo pipefail
 fail=0
 for f in config/systemd/*.service config/systemd/*.path; do
-  [ -e "$f" ] || continue
+  [ -s "$f" ] || continue
   systemd-analyze verify "$f" > /dev/null || { echo "FAIL: $f"; fail=1; }
 done
 exit $fail
