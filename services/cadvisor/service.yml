@@ -3,6 +3,7 @@ name: cadvisor
 partof: monitoring
 desc: Container metrics exporter
 port: 8081
+user_id: false  # needs root to read docker.sock and /dev/kmsg
 scrape_target:
   port: 8080  # cadvisor listens on 8080 inside docker; host-side is 8081 because caddy owns 8080.
   # cadvisor measures containers; a metric's `service` is the container
