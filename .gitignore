@@ -27,3 +27,5 @@ audio-normalizer/examples
 bin/
 test/config-lisp/
 .swank-session
+.qlot/
+.qlot-cache/

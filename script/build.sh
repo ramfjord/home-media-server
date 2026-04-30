@@ -8,13 +8,19 @@ IMAGE=mediaserver-lisp:latest
 docker build -q -t "$IMAGE" "$(dirname "$0")" >/dev/null
 
 mkdir -p bin
-docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/workspace" -w /workspace -e HOME=/tmp "$IMAGE" \
-  sbcl --non-interactive --no-sysinit --no-userinit \
-    --load /opt/quicklisp/setup.lisp \
-    --eval "(push (truename \"/workspace/\") asdf:*central-registry*)" \
-    --eval "(push (truename \"/workspace/elp/\") asdf:*central-registry*)" \
-    --eval "(asdf:load-system :mediaserver)" \
-    --eval "(sb-ext:save-lisp-and-die #p\"/workspace/bin/$(basename "$1" .lisp)\"
-              :toplevel #'mediaserver/$(basename "$1" .lisp):main
-              :executable t
-              :save-runtime-options t)"
+docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/workspace" -w /workspace \
+  -e HOME=/tmp -e XDG_CACHE_HOME=/workspace/.qlot-cache -e XDG_CONFIG_HOME=/tmp/.config "$IMAGE" \
+  bash -c "
+    set -euo pipefail
+    # Populate .qlot/ from qlfile (+ qlfile.lock if present). Idempotent;
+    # cheap on subsequent builds because deps are already cloned.
+    qlot install --no-color
+    sbcl --non-interactive --no-sysinit --no-userinit \
+      --load .qlot/setup.lisp \
+      --eval '(push (truename \"/workspace/\") asdf:*central-registry*)' \
+      --eval '(ql:quickload :mediaserver)' \
+      --eval '(sb-ext:save-lisp-and-die #p\"/workspace/bin/$(basename "$1" .lisp)\"
+                :toplevel #'\''mediaserver/$(basename "$1" .lisp):main
+                :executable t
+                :save-runtime-options t)'
+  "
