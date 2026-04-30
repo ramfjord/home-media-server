@@ -4,12 +4,10 @@ partof: monitoring
 desc: Alert management
 port: 9093
 sighup_reload: true
+scrape_target: true
 docker_config:
   image: prom/alertmanager:latest
   volumes:
   - "<%= install_base %>/config/alertmanager:/etc/alertmanager:ro"
-  labels:
-    prometheus.io/scrape: 'true'
-    prometheus.io/port: '9093'
   restart: unless-stopped
 order: 120

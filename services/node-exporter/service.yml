@@ -2,6 +2,10 @@
 name: node-exporter
 partof: monitoring
 desc: Host metrics exporter
+scrape_target:
+  host: host.docker.internal
+  port: 9100
+  service: operating-system
 docker_config:
   image: prom/node-exporter:latest
   network_mode: host

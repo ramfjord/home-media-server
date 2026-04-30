@@ -3,6 +3,13 @@ name: cadvisor
 partof: monitoring
 desc: Container metrics exporter
 port: 8081
+scrape_target:
+  port: 8080  # cadvisor listens on 8080 inside docker; host-side is 8081 because caddy owns 8080.
+  # cadvisor measures containers; a metric's `service` is the container
+  # being measured, not whatever the cadvisor scrape job's service is.
+  metric_relabel_configs:
+    - source_labels: [name]
+      target_label: service
 docker_config:
   image: gcr.io/cadvisor/cadvisor:latest
   ports:
@@ -16,8 +23,5 @@ docker_config:
   privileged: true
   devices:
   - "/dev/kmsg"
-  labels:
-    prometheus.io/scrape: 'true'
-    prometheus.io/port: '8080'
   restart: unless-stopped
 order: 140

@@ -1,7 +1,10 @@
 ---
 name: exportarr-sonarr
-partof: monitoring
+partof: downloading
 desc: Sonarr metrics exporter
+scrape_target:
+  port: 9145
+  service: sonarr
 docker_config:
   image: ghcr.io/onedr0p/exportarr:latest
   command:
@@ -12,8 +15,5 @@ docker_config:
   - "<%= sonarr_apikey %>"
   - "--port"
   - '9145'
-  labels:
-    prometheus.io/scrape: 'true'
-    prometheus.io/port: '9145'
   restart: unless-stopped
 order: 170
