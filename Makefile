@@ -7,11 +7,6 @@ MAKEFLAGS += --silent
 endif
 MAKEFLAGS += -j$(shell nproc)
 
-# Deploy target — SSH alias of the host receiving rsync + side-effect
-# commands. Required by install/preview/systemd-*/restart-*; unused by
-# all/test/check. Set in Makefile.local or pass on the command line:
-# `make TARGET=fatlaptop install`.
--include Makefile.local
 ifneq (,$(filter install preview restart-% systemd-%,$(MAKECMDGOALS)))
 ifndef TARGET
 $(error TARGET must be set (e.g. TARGET=fatlaptop, or via Makefile.local))
@@ -48,16 +43,10 @@ MANIFEST_TARGETS      := $(patsubst targets/debian/%.elp,config/%.manifest,$(sub
 fanout_paths = $(foreach s,$(ALL_SERVICES),$(subst __service__,$(s),$(1)))
 FANOUT_OUTPUTS := $(patsubst targets/debian/%.elp,config/%,$(call fanout_paths,$(FANOUT_ELPS)))
 
-# Per-manifest output dirs, derived from a manifest stem (e.g. mediaserver/foo).
-# Used by the manifest rule via second-expansion so each manifest only declares
-# the dirs it actually writes to. Reuses fanout_paths after rewriting the
-# `mediaserver` placeholder back to `__service__`.
-manifest_dirs = $(sort $(dir $(call fanout_paths,config/$(subst mediaserver,__service__,$(1)))))
-
 ALL_OUTPUTS := $(SERVICE_OUTPUTS) $(NON_TPL_TARGETS) $(SINGLETON_OUTPUTS) $(TARGET_STATIC_OUTPUTS) $(MANIFEST_TARGETS)
 DIRS := $(sort $(dir $(ALL_OUTPUTS) $(FANOUT_OUTPUTS)))
 
-.PHONY: clean check test users install preview all $(addprefix systemd-,start stop restart enable disable status)
+.PHONY: clean check test install preview all $(addprefix systemd-,start stop restart enable disable status)
 
 test: $(patsubst lisp/cli/%.lisp,bin/%,$(wildcard lisp/cli/*.lisp))
 	@cd test && $(MAKE) all > /dev/null
@@ -82,12 +71,10 @@ services/manifest.yaml: bin/build-service-config $(SERVICE_YMLS) $(OVERRIDE_YMLS
 	  $(SERVICE_YMLS) > $@
 
 all: $(ALL_OUTPUTS)
+	echo ""
 
 clean:
 	rm -rf config/ services/manifest.yaml
-
-users:
-	script/make_users.sh
 
 # Order-only directory creation. One mkdir per dir, never repeated.
 $(DIRS):
@@ -111,15 +98,11 @@ config/%: targets/debian/%.elp bin/render services/manifest.yaml | $$(@D)/
 config/%: targets/debian/% | $$(@D)/
 	cp $< $@
 
-# Pre-deploy check scripts. checks/<name>.sh.elp -> config/checks/<name>.sh.
-# Rendered on demand by the check/<name> targets below — not part of `all`.
-config/checks/%: checks/%.elp bin/render services/manifest.yaml | $$(@D)/
-	bin/render $< > $@ && printf .
-
 # Per-template fan-out manifest. The recipe iterates ALL_SERVICES;
 # non-empty renders write the unit file and append its path to the
 # manifest. SECONDEXPANSION on the prereq swaps `mediaserver` back
 # to `$service` so the actual source file resolves.
+manifest_dirs = $(sort $(dir $(call fanout_paths,config/$(subst mediaserver,__service__,$(1)))))
 config/%.manifest: $$(subst mediaserver,__service__,targets/debian/%.elp) bin/render services/manifest.yaml | $$(@D)/ $$(call manifest_dirs,$$*)
 	@> $@
 	@for svc in $(ALL_SERVICES); do \
@@ -128,28 +111,17 @@ config/%.manifest: $$(subst mediaserver,__service__,targets/debian/%.elp) bin/re
 	  [ -s "$$out" ] && { echo "$$f" >> $@; printf .; } || rm "$$out"; \
 	done
 
-PATH_MANIFESTS := config/systemd/mediaserver.path.manifest \
-                  config/systemd/mediaserver-compose.path.manifest
-COMPOSE_MANIFEST := config/mediaserver/docker-compose.yml.manifest
+check/%: checks/%.sh.elp all
+	bin/render $< | /bin/bash
 
-# One `check/<name>` per checks/<name>.sh.elp; the umbrella `check` target
-# depends on all of them so -j runs them in parallel. Not declared .PHONY
-# (which would disable implicit-rule search); the source .elp prereq pins
-# the pattern to stems that actually exist.
 check: $(patsubst checks/%.sh.elp,check/%,$(wildcard checks/*.sh.elp))
-
-check/%: all
-	@echo "=== check: $* ==="
-	@bash $<
 
 install: check
 	rsync -av --rsync-path="sudo rsync" --delete --mkpath \
 	  config/ $(TARGET):/opt/mediaserver/staging/
 	ssh $(TARGET) sudo bash /opt/mediaserver/staging/deploy.sh
 
-# Stage the bundle on the target like install:, but invoke deploy.sh in
-# preview mode (rsync --dry-run --itemize-changes; no chown -R, no
-# daemon-reload). Shows per-file changes that `make install` would apply.
+# Stage the bundle on the target like install:, but invoke deploy.sh in preview mode
 preview: check
 	rsync -av --rsync-path="sudo rsync" --delete --mkpath \
 	  config/ $(TARGET):/opt/mediaserver/staging/
@@ -166,13 +138,11 @@ systemd-status:
 systemd-enable:
 	ssh $(TARGET) sudo systemctl enable --now mediaserver-network.service
 	ssh $(TARGET) sudo systemctl enable mediaserver.target
-	@units=$$(cat $(PATH_MANIFESTS) 2>/dev/null | xargs -n1 basename | tr '\n' ' '); \
-	  ssh $(TARGET) sudo systemctl enable --now $$units
+	ssh $(TARGET) sudo systemctl enable --now $(basename -a config/systemd/*.path)
 
 systemd-disable:
 	ssh $(TARGET) sudo systemctl disable mediaserver.target
-	@units=$$(cat $(PATH_MANIFESTS) 2>/dev/null | xargs -n1 basename | tr '\n' ' '); \
-	  ssh $(TARGET) sudo systemctl disable $$units
+	ssh $(TARGET) sudo systemctl disable $(basename -a config/systemd/*.path)
 
 # Force-restart a single service. Path units already redeploy on
 # `make install`; use this when you want to bounce a service without
