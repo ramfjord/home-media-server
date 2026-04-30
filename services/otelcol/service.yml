@@ -2,8 +2,7 @@
 name: otelcol
 partof: monitoring
 desc: OpenTelemetry metrics collector
-groups:
-- docker
+group: docker
 docker_config:
   image: otel/opentelemetry-collector-contrib:latest
   command:

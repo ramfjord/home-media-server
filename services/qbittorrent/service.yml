@@ -4,8 +4,7 @@ partof: downloading
 desc: torrent client
 port: 8080
 use_vpn: true
-groups:
-- mediaserver
+group: mediaserver
 docker_config:
   image: lscr.io/linuxserver/qbittorrent:latest
   volumes:

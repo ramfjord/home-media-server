@@ -4,8 +4,7 @@ partof: downloading
 desc: find movies
 port: 7878
 use_vpn: true
-groups:
-- mediaserver
+group: mediaserver
 docker_config:
   image: lscr.io/linuxserver/radarr:latest
   volumes:

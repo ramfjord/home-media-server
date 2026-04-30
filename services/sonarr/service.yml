@@ -4,8 +4,7 @@ partof: downloading
 desc: find new shows
 port: 8989
 use_vpn: true
-groups:
-- mediaserver
+group: mediaserver
 docker_config:
   image: lscr.io/linuxserver/sonarr:latest
   volumes:

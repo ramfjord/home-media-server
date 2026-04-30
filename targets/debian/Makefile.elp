@@ -5,9 +5,13 @@ INSTALL_BASE := <%= install_base %>
 
 chownall:
 <%- (loopservices (services :where dockerized) -%>
-<%- (let ((owner (or user name))) -%>
-	@chown -R <%= owner %>:mediaserver <%= name %>/
-	@printf 'SVC_UID=%s\n' "$$(id -u <%= owner %>)" > <%= name %>/.env
+<%- (let* ((owner (or user name))
+           (grp   (or group (format nil "$$(id -gn ~A)" owner)))
+           (gid   (if group
+                      (format nil "$$(getent group ~A | cut -d: -f3)" group)
+                      (format nil "$$(id -g ~A)" owner)))) -%>
+	@chown -R <%= owner %>:<%= grp %> <%= name %>/
+	@printf 'SVC_UID=%s\nSVC_GID=%s\n' "$$(id -u <%= owner %>)" "<%= gid %>" > <%= name %>/.env
 <%- )) -%>
 
 preview: DRY := --dry-run --itemize-changes

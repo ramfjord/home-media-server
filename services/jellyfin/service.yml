@@ -3,8 +3,7 @@ name: jellyfin
 partof: streaming
 desc: Alternative media streaming server
 port: 8096
-groups:
-- mediaserver
+group: mediaserver
 healthz: "/health"
 docker_config:
   image: jellyfin/jellyfin:latest

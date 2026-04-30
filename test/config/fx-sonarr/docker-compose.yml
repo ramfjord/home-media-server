@@ -4,7 +4,7 @@ services:
     container_name: fx-sonarr
     environment:
     - TZ=Etc/UTC
-    user: ${SVC_UID}
+    user: ${SVC_UID}:${SVC_GID}
     network_mode: container:wireguard
     image: example.invalid/fx-sonarr:latest
     volumes:

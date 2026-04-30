@@ -10,17 +10,6 @@
 ;;; Adding a derived field = adding a SETF line. Order entries by
 ;;; data dependency (later ones can reference earlier ones via getf).
 
-(defun resolve-group-ids (group-names)
-  "Resolve each name via `getent group <name>` to a numeric GID. Names
-   not found drop out — matches the prior Ruby group_ids behavior."
-  (loop for g in group-names
-        for line = (uiop:run-program (list "getent" "group" g)
-                                     :output :string
-                                     :ignore-error-status t)
-        for trimmed = (str:trim line)
-        when (and trimmed (> (length trimmed) 0))
-          collect (parse-integer (third (str:split ":" trimmed)))))
-
 (defun config-files-for (name)
   "Files under services/<NAME>/ that get deployed verbatim. Skips
    service.yml (data). Strips .elp so the listed name matches the
@@ -46,6 +35,5 @@
     (setf (getf s :dockerized)    (and (getf s :docker_config) t))
     (setf (getf s :has_unit)      (and (getf s :unit) t))
     (setf (getf s :config_files)  (config-files-for name))
-    (setf (getf s :group_ids)
-          (and (getf s :groups) (resolve-group-ids (getf s :groups))))
+    (setf (getf s :group)         (getf s :group))
     s))
