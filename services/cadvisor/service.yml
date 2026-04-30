@@ -3,7 +3,6 @@ name: cadvisor
 partof: monitoring
 desc: Container metrics exporter
 port: 8081
-healthz: "/api/v1/machine"
 docker_config:
   image: gcr.io/cadvisor/cadvisor:latest
   ports:

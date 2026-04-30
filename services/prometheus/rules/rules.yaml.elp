@@ -1,5 +1,16 @@
 # See https://samber.github.io/awesome-prometheus-alerts/rules#prometheus-self-monitoring
 groups:
+- name: Targets
+  rules:
+  - alert: TargetDown
+    expr: up == 0
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Scrape target down: {{ $labels.job }}"
+      description: "{{ $labels.job }} at {{ $labels.instance }} has failed scrapes for 5m."
+
 - name: Prometheus
   rules:
   - alert: PrometheusTooManyRestarts

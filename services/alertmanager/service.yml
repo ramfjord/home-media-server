@@ -3,7 +3,6 @@ name: alertmanager
 partof: monitoring
 desc: Alert management
 port: 9093
-healthz: "/-/healthy"
 sighup_reload: true
 docker_config:
   image: prom/alertmanager:latest

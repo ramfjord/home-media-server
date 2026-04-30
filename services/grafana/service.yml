@@ -3,7 +3,6 @@ name: grafana
 partof: monitoring
 desc: Dashboards and visualization
 port: 3000
-healthz: "/api/health"
 sighup_reload: true
 docker_config:
   image: grafana/grafana:latest
