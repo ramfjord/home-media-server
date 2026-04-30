@@ -1,0 +1,19 @@
+.PHONY: chownall deploy preview
+
+chownall: <% (loopservices (services :where (and dockerized user_id)) %>.<%= name %>.chowned <% ) %>
+<%- (loopservices (services :where (and dockerized user_id)) -%>
+.<%= name %>.chowned: $(shell find <%= name %> -type f 2>/dev/null)
+	chown -R <%= name %>:mediaserver <%= name %>/
+	touch $@
+<%- ) -%>
+
+STAGING := <%= install_base %>/staging
+INSTALL_BASE := <%= install_base %>
+
+preview: DRY := --dry-run --itemize-changes
+preview: deploy
+
+deploy: chownall
+	@rsync -ac --no-times $(DRY) --exclude=systemd --exclude='.*.chowned' "$(STAGING)/" "$(INSTALL_BASE)/config/"
+	@rsync -ac --no-times $(DRY) "$(STAGING)/systemd/" /etc/systemd/system/
+	@[ -n "$(DRY)" ] || systemctl daemon-reload

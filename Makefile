@@ -22,13 +22,13 @@ FANOUT_OUTPUTS := $(patsubst targets/debian/%.elp,config/%,$(call fanout_paths,$
 ALL_OUTPUTS := $(SERVICE_OUTPUTS) $(SINGLETON_OUTPUTS) $(FANOUT_OUTPUTS)
 DIRS := $(sort $(dir $(ALL_OUTPUTS)))
 
-.PHONY: clean check test install preview all $(addprefix systemctl-,start stop restart enable disable status)
+.PHONY: clean check test sync install preview all $(addprefix systemctl-,start stop restart enable disable status)
 
 # Lisp binaries. One CLI entry point per file in lisp/cli/; each
 # produces bin/<name>. The test tree's script/build.sh is a symlink
 # shim instead of a real build, so the same rule works in both trees.
 bin/%: lisp/cli/%.lisp lisp/src/* mediaserver.asd script/build.sh
-	script/build.sh lisp/cli/$*.lisp
+	@script/build.sh lisp/cli/$*.lisp
 
 # The services manifest is the single source of truth at render time.
 # Built from the per-service yamls + override files. Cwd-relative so
@@ -51,8 +51,8 @@ $(DIRS):
 
 all: $(ALL_OUTPUTS)
 	@echo ""
-	@rsync -a --exclude='*.elp' --exclude='service.yml' --exclude='/manifest.yaml' services/ config/
-	@rsync -a --exclude='*.elp' --exclude='*__service__*' targets/debian/ config/
+	@rsync -ac --exclude='*.elp' --exclude='service.yml' --exclude='/manifest.yaml' services/ config/
+	@rsync -ac --exclude='*.elp' --exclude='*__service__*' targets/debian/ config/
 
 # Per-service ELPs in services/. Service name implicit from path.
 config/%: services/%.elp bin/render services/manifest.yaml | $$(@D)/
@@ -75,12 +75,6 @@ check/%: checks/%.sh.elp all
 
 check: $(patsubst checks/%.sh.elp,check/%,$(wildcard checks/*.sh.elp))
 
-# Stage the bundle on the target like install:, but invoke deploy.sh in preview mode
-preview: check
-	rsync -av --rsync-path="sudo rsync" --delete --mkpath \
-	  config/ $(TARGET):/opt/mediaserver/staging/
-	ssh $(TARGET) sudo bash /opt/mediaserver/staging/deploy.sh preview
-
 # Run tests against "golden" config - validate changes to render code mostly
 test: $(patsubst lisp/cli/%.lisp,bin/%,$(wildcard lisp/cli/*.lisp))
 	@cd test && $(MAKE) all > /dev/null
@@ -89,16 +83,24 @@ test: $(patsubst lisp/cli/%.lisp,bin/%,$(wildcard lisp/cli/*.lisp))
 
 # --- Deployment and systemctl-helpers
 
-ifneq (,$(filter install preview restart-% systemctl-%,$(MAKECMDGOALS)))
+ifneq (,$(filter sync install preview restart-% systemctl-%,$(MAKECMDGOALS)))
 ifndef TARGET
 $(error TARGET must be set (e.g. TARGET=fatlaptop, or via Makefile.local))
 endif
 endif
 
-install: check
-	rsync -av --rsync-path="sudo rsync" --delete --mkpath \
+# Push the rendered bundle to the target's staging dir.
+sync: all
+	@rsync -acv --rsync-path="sudo rsync" --mkpath \
 	  config/ $(TARGET):/opt/mediaserver/staging/
-	ssh $(TARGET) sudo bash /opt/mediaserver/staging/deploy.sh
+	@ssh $(TARGET) "cd /opt/mediaserver/staging ; sudo make chownall"
+
+# Stage the bundle on the target like install:, but invoke deploy.sh in preview mode
+preview: sync
+	@ssh $(TARGET) "cd /opt/mediaserver/staging ; sudo make preview"
+
+install: sync
+	@ssh $(TARGET) "cd /opt/mediaserver/staging ; sudo make deploy"
 
 systemctl-start systemctl-stop systemctl-restart:
 	@ssh $(TARGET) sudo systemctl $(patsubst systemd-%,%,$@) mediaserver.target
@@ -109,13 +111,13 @@ systemctl-status:
 	@ssh $(TARGET) "for svc in $(ALL_SERVICES); do printf '%-22s %s\n' \"\$$svc\" \"\$$(systemctl is-active \$$svc.service 2>/dev/null)\"; done"
 
 systemctl-enable:
-	ssh $(TARGET) sudo systemctl enable --now mediaserver-network.service
-	ssh $(TARGET) sudo systemctl enable mediaserver.target
-	ssh $(TARGET) sudo systemctl enable --now $(basename -a config/systemd/*.path)
+	@ssh $(TARGET) sudo systemctl enable --now mediaserver-network.service
+	@ssh $(TARGET) sudo systemctl enable mediaserver.target
+	@ssh $(TARGET) sudo systemctl enable --now $(basename -a config/systemd/*.path)
 
 systemctl-disable:
-	ssh $(TARGET) sudo systemctl disable mediaserver.target
-	ssh $(TARGET) sudo systemctl disable $(basename -a config/systemd/*.path)
+	@ssh $(TARGET) sudo systemctl disable mediaserver.target
+	@ssh $(TARGET) sudo systemctl disable $(basename -a config/systemd/*.path)
 
 # Force-restart a single service. Path units already redeploy on
 # `make install`; use this when you want to bounce a service without
