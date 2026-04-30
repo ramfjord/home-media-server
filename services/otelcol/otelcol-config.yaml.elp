@@ -70,9 +70,7 @@ receivers:
         #       replacement: "snmp-exporter:9116"
 
         # HTTP probes via blackbox exporter for dockerized services
-<%- (loopservices (services :where (and port dockerized
-                                       (not (member name '("grafana" "homer" "cadvisor")
-                                                    :test #'equal)))) -%>
+<%- (loopservices (services :where (and dockerized healthz)) -%>
         - job_name: 'http_probe_<%= name %>'
           metrics_path: /probe
           params:
@@ -81,7 +79,7 @@ receivers:
             # VPN services share wireguard's netns and have no DNS name
             # on the mediaserver network — probe via wireguard.
             - targets:
-              - http://<%= (if use_vpn "wireguard" name) %>:<%= port %><%= (or healthz "") %>
+              - http://<%= (if use_vpn "wireguard" name) %>:<%= port %><%= healthz %>
               labels:
                 service: <%= name %>
                 partof: <%= partof %>

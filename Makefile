@@ -91,7 +91,7 @@ endif
 
 # Push the rendered bundle to the target's staging dir.
 sync: all
-	@rsync -acv --rsync-path="sudo rsync" --mkpath \
+	@rsync -acv --rsync-path="sudo rsync" --mkpath --no-owner --no-group \
 	  config/ $(TARGET):/opt/mediaserver/staging/
 	@ssh $(TARGET) "cd /opt/mediaserver/staging ; sudo make chownall"
 
