@@ -3,7 +3,6 @@ name: fx-caddy
 partof: dashboard
 desc: Fixture reverse proxy
 sighup_reload: true
-user_id: 99001
 docker_config:
   image: example.invalid/fx-caddy:latest
   volumes:

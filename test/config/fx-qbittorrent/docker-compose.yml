@@ -4,7 +4,7 @@ services:
     container_name: fx-qbittorrent
     environment:
     - TZ=Etc/UTC
-    user: '99003'
+    user: ${SVC_UID}
     network_mode: container:wireguard
     image: example.invalid/fx-qbittorrent:latest
     volumes:

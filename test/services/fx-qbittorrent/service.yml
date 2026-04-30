@@ -4,7 +4,6 @@ partof: downloading
 desc: Fixture torrent client
 port: 18080
 use_vpn: true
-user_id: 99003
 docker_config:
   image: example.invalid/fx-qbittorrent:latest
   volumes:

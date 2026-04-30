@@ -5,8 +5,10 @@ INSTALL_BASE := <%= install_base %>
 
 chownall:
 <%- (loopservices (services :where dockerized) -%>
-	@chown -R <%= (if user_id name "root") %>:mediaserver <%= name %>/
-<%- ) -%>
+<%- (let ((owner (or user name))) -%>
+	@chown -R <%= owner %>:mediaserver <%= name %>/
+	@printf 'SVC_UID=%s\n' "$$(id -u <%= owner %>)" > <%= name %>/.env
+<%- )) -%>
 
 preview: DRY := --dry-run --itemize-changes
 preview: deploy

@@ -4,7 +4,7 @@ partof: security
 desc: Password manager
 port: 80
 healthz: "/alive"
-user_id: false  # no dedicated host user; image runs as its own internal user
+user: root  # no dedicated host user; image runs as its own internal user
 docker_config:
   image: vaultwarden/server:latest
   volumes:

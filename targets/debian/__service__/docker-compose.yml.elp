@@ -5,7 +5,7 @@
               (append
                 (list "container_name" name
                       "environment" (list "TZ=Etc/UTC"))
-                (when user_id (list "user" (princ-to-string user_id)))
+                (list "user" "${SVC_UID}")
                 (when use_vpn (list "network_mode" "container:wireguard"))
                 (when mediaserver-net (list "networks" (list "mediaserver")))
                 (when (and port mediaserver-net

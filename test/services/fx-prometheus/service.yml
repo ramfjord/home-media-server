@@ -5,7 +5,6 @@ desc: Fixture metrics
 port: 19090
 healthz: "/-/healthy"
 sighup_reload: true
-user_id: 99002
 docker_config:
   image: example.invalid/fx-prometheus:latest
   command:

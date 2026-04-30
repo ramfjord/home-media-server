@@ -4,7 +4,6 @@ partof: downloading
 desc: Fixture TV indexer
 port: 18989
 use_vpn: true
-user_id: 99004
 docker_config:
   image: example.invalid/fx-sonarr:latest
   volumes:

@@ -2,6 +2,7 @@
 name: node-exporter
 partof: monitoring
 desc: Host metrics exporter
+user: root  # reads /proc and /sys from the host, runs in host network namespace
 scrape_target:
   host: host.docker.internal
   port: 9100

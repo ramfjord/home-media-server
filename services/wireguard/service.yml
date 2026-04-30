@@ -2,7 +2,7 @@
 name: wireguard
 partof: vpn
 desc: VPN container
-user_id: false  # runs as root inside the container; needs NET_ADMIN cap
+user: root  # needs NET_ADMIN cap and to manage routing; image runs as root
 docker_config:
   image: lscr.io/linuxserver/wireguard:latest
   cap_add:
