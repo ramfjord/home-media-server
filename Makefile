@@ -1,5 +1,7 @@
 .SECONDEXPANSION:
 
+include Makefile.local
+
 MAKEFLAGS += -j$(shell nproc)
 
 ALL_SERVICES := $(patsubst services/%/,%,$(sort $(dir $(wildcard services/*/.))))
