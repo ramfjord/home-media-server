@@ -1,68 +1,22 @@
 # CLAUDE.md
 
-Personal media server using Docker containers and dynamic config generation.
+@README.md
+@CONTRIBUTING.md
 
-The renderer is a Common Lisp binary (`bin/render`, built from `lisp/src/`) that consumes ELP templates — an ERB-style Lisp template engine vendored at `elp/`.
+## Doc split
 
-## Network Architecture
+- **README.md** — facts about the project (what it is, services, networking, getting-started, deploy target). Front door for humans evaluating the repo.
+- **CONTRIBUTING.md** — conventions for *changing* the project (template style, field access, debugging shortcuts, make targets).
+- **CLAUDE.md** (this file) — agent-behavior signals only. Instructions about how to act, not facts about the codebase.
 
-Two separate VPN networks:
-- **WireGuard/AirVPN** ("The VPN"): Traditional VPN for internet privacy/anonymity
-- **Tailscale** ("the tailnet"): Mesh VPN connecting personal devices/servers (fatlaptop, etc.)
+Both README.md and CONTRIBUTING.md are imported above and load into every session, so be stingy with what goes in them — verbose-but-rarely-relevant material belongs under `docs/` and should be linked, not imported.
 
-Services run on Tailscale. Caddy bridges both networks when needed, exposing ingress from WireGuard to Tailscale services.
+## Keeping docs current
 
-## Overview
+When a change affects content owned by one of these docs, update that doc in the same commit:
 
-Services defined per-service in `services/<name>/service.yml`: downloading (Radarr, Sonarr, Prowlarr, qBittorrent), streaming (Plex), monitoring (Prometheus, Alertmanager, Grafana), and dashboard (Homer). All configs are generated from `.elp` templates via `bin/render` and placed in `config/` (git-ignored).
+- New/removed/renamed service, port shift, setup-step change, deploy mechanic → **README.md**
+- New template convention, field-access change, debugging shortcut, make-target change → **CONTRIBUTING.md**
+- New agent-behavior expectation, or a change to the split rule itself → **CLAUDE.md**
 
-## Configuration
-
-**`services.yml`**: Service definitions with properties:
-- `name`, `partof` (objective), `desc`, `port`, `docker_config` (image, volumes, etc.)
-- `unit` (systemd unit for non-Docker services like Plex)
-- `healthz` (HTTP healthcheck path)
-
-**`config.local.yml`**: Optional overrides for `install_base` (/opt/mediaserver), `media_path` (/data), `hostname`, etc.
-
-## Commands
-
-```bash
-make all               # Render all .elp templates → config/
-make clean             # Remove config/
-make check             # Validate prometheus, alertmanager, docker-compose syntax
-make test              # Run unit tests + golden renderer tests (test/golden_test.rb)
-make install           # check + render + rsync config/ and certs/ to $install_base; path units pick up changes
-make install-systemd   # rsync unit files + daemon-reload (does NOT enable/start)
-make systemd-enable    # enable mediaserver-network, mediaserver.target, and all path units
-make systemd-{start,stop,restart,status,disable}
-make restart-<service> # force-restart one service (no install)
-```
-
-**Note:** `make install` automatically runs `make check` and `make all`. With path units enabled, `make install` is the deploy verb — file changes trigger reload automatically.
-
-### Remote target
-
-`TARGET=local` (default) deploys to this host. `TARGET=<ssh-host>` deploys over ssh — rsync goes to the host, side-effecting commands (`systemctl`, `chown`) run remotely. Persist with a git-ignored `Makefile.local`:
-
-```make
-TARGET := fatlaptop
-```
-
-## ELP template style
-
-Stack adjacent close-paren-only tags onto a single tag, Lisp-style: prefer `<%- )) -%>` over two consecutive `<%- ) -%>` lines (and `))) ` for three, etc.). The trim semantics are the same and the rendered output is byte-identical, but it reads as the Lisp form it actually is rather than as HTML-like standalone tags.
-
-## Field access in templates
-
-Templates render with every service field bound as a bare symbol (`name`, `port`, `use_vpn`, `compose_file`, ...). Hyphens in field keys become underscores, matching Ruby convention. Inside per-service templates and inside `loopservices`, write `<%= name %>` rather than `(field :name service)`.
-
-For higher-order use, `field` is curried: `(field :name)` returns a lookup function — `(mapcar (field :name) services)` and `(remove-if-not (field :dockerized) services)`. Two-arg form `(field :key svc)` is the explicit lookup; key always comes first.
-
-`loopservices` iterates with field-scope: `(loopservices (services :where (and port use_vpn)) ...)` exposes each service's fields as bare symbols inside body and `:where`. New service fields (declared or computed) are added via `define-service-field` in `lisp/src/field.lisp`.
-
-## Workflow
-
-1. Edit `services/<name>/service.yml`, templates, and/or `config.local.yml`
-2. `make install` - Validate, render, deploy; affected services hot-reload via path units
-3. `make restart-<service>` - Force-restart if needed (e.g. wedged service)
+If a fact is load-bearing for both audiences (humans and agents), keep it in README.md or CONTRIBUTING.md — don't restate it here. CLAUDE.md should not duplicate facts that the imported docs already cover.

@@ -21,14 +21,14 @@ Detailed setup notes for individual services live in their own folders under `se
 | [Sonarr](services/sonarr/) | downloading | 8989 | TV show discovery and management |
 | [Prowlarr](services/prowlarr/) | downloading | 9696 | Indexer manager feeding Radarr/Sonarr |
 | [qBittorrent](services/qbittorrent/) | downloading | 8080 | Torrent client (shares WireGuard's netns) |
-| [Plex](services/plex/) | streaming | 32400 | Media streaming (native systemd, not Docker) |
-| [Jellyfin](services/jellyfin/) | streaming | 8096 | Alternative media server with optional GPU transcoding |
+| [Jellyfin](services/jellyfin/) | streaming | 8096 | Media server with optional GPU transcoding |
 | [Vaultwarden](services/vaultwarden/) | security | 8000 | Self-hosted Bitwarden-compatible password manager |
 | [Prometheus](services/prometheus/) | monitoring | 9090 | Metrics storage and alerting |
 | [OpenTelemetry Collector](services/otelcol/) | monitoring | 8888 | Metrics aggregation hub |
 | [Grafana](services/grafana/) | monitoring | 3000 | Dashboards and visualization |
 | [Alertmanager](services/alertmanager/) | monitoring | 9093 | Alert routing |
 | [cAdvisor](services/cadvisor/) | monitoring | 8081 | Container metrics |
+| [node-exporter](services/node-exporter/) | monitoring | 9100 | Host (OS-level) metrics |
 | [Blackbox Exporter](services/blackbox-exporter/) | monitoring | 9115 | HTTP/TCP endpoint probes |
 | [exportarr-radarr](services/exportarr-radarr/) | monitoring | — | Radarr metrics exporter |
 | [exportarr-sonarr](services/exportarr-sonarr/) | monitoring | — | Sonarr metrics exporter |
@@ -59,7 +59,7 @@ Caddy bridges the two and terminates HTTPS for the few services that require it 
 
 1. Copy `config.local.yml.example` → `config.local.yml` and set at least `hostname`, `media_path`, and `install_base`.
 2. Override any service field via `service_overrides:` (deep-merged into that service's `service.yml`).
-3. See `services/wireguard/README.md` and `services/plex/README.md` for one-time manual setup, and `services/radarr/README.md` for the API-key bootstrap.
+3. See `services/wireguard/README.md` for one-time VPN setup, and `services/radarr/README.md` for the API-key bootstrap.
 
 ### Commands
 
@@ -81,19 +81,19 @@ Editing files under `$install_base/config/<service>/` triggers a reload via that
 
 ### Deploy target
 
-By default `make install` and the systemd targets act on the local host. To deploy to a remote host (over ssh, e.g. across Tailscale):
+`TARGET` is mandatory — `make install` and the systemd targets always act on a remote host over ssh (typically across Tailscale). Set it inline:
 
 ```bash
-TARGET=fatlaptop make install
+TARGET=myhost make install
 ```
 
 Or persist it in a git-ignored `Makefile.local`:
 
 ```make
-TARGET := fatlaptop
+TARGET := myhost
 ```
 
-The remote host needs passwordless sudo for `rsync` and `systemctl`, and `script/make_users.sh` must have been run there.
+The target host needs passwordless sudo for `rsync` and `systemctl`, and `script/install-host-config.sh <target>` must have been run against it to lay down `/etc/sysctl.d/` and `/etc/docker/daemon.json`.
 
 ### Day-to-day workflow
 
@@ -101,22 +101,16 @@ The remote host needs passwordless sudo for `rsync` and `systemctl`, and `script
 2. `make install`
 3. Affected services hot-reload via path units; use `make restart-<service>` to force a bounce.
 
-## vs. docker-compose-nas
-
-| Aspect | This Project | docker-compose-nas |
-|---|---|---|
-| Service management | Per-service systemd units + Docker | Pure Docker Compose |
-| Remote access | Tailscale (private) | Internet-facing (Traefik + Let's Encrypt) |
-| Reverse proxy | Caddy (internal + HTTPS where required) | Traefik (internet ingress) |
-| Monitoring | Prometheus + Grafana + Alertmanager + OTel | Live dashboard only |
-| Config | Per-service YAML + ELP (Lisp) templates | Individual compose files |
-| Compose layout | One compose file per service on shared `mediaserver-network` | Single monolithic compose file |
-
 ## Storage
 
 - **Hardlinks**: arr apps configured for hardlink moves to avoid duplicate storage.
 - **GPU**: Jellyfin can use NVIDIA via `service_overrides` (see `services/jellyfin/README.md`).
 - **Persistent data**: lives under `$install_base/config/` (git-ignored).
+
+## More
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) — template conventions, debugging, full make-target list.
+- [docs/vs-docker-compose-nas.md](docs/vs-docker-compose-nas.md) — comparison with [docker-compose-nas](https://github.com/AdrienPoupa/docker-compose-nas).
 
 ## License
 

@@ -1,0 +1,39 @@
+# Contributing
+
+Conventions for editing this repo. Pairs with [README.md](README.md), which covers what the project is and how to deploy it.
+
+## ELP template style
+
+Stack adjacent close-paren-only tags onto a single tag, Lisp-style: prefer `<%- )) -%>` over two consecutive `<%- ) -%>` lines (and `))) ` for three, etc.). The trim semantics are the same and the rendered output is byte-identical, but it reads as the Lisp form it actually is rather than as HTML-like standalone tags.
+
+## Field access in templates
+
+Templates render with every service field bound as a bare symbol (`name`, `port`, `use_vpn`, `compose_file`, ...). Hyphens in field keys become underscores, matching Ruby convention. Inside per-service templates and inside `loopservices`, write `<%= name %>` rather than `(field :name service)`.
+
+For higher-order use, `field` is curried: `(field :name)` returns a lookup function — `(mapcar (field :name) services)` and `(remove-if-not (field :dockerized) services)`. The two-arg form `(field :key svc)` is the explicit lookup; key always comes first.
+
+`loopservices` iterates with field-scope: `(loopservices (services :where (and port use_vpn)) ...)` exposes each service's fields as bare symbols inside body and `:where`. New service fields (declared or computed) are added via `define-service-field` in `lisp/src/field.lisp`.
+
+## Inspecting rendered output
+
+`config/` is git-ignored but almost always populated — `make all` (a few seconds) refreshes it without deploying. When reasoning about how a template expands, what ends up in a generated `docker-compose.yml`, prometheus config, systemd unit, etc., reading `config/<path>` directly is usually faster and more reliable than tracing the template by hand. Re-run `make all` after edits to keep it in sync, then read the rendered file to confirm the change looks right before `make install`.
+
+## Debugging a running stack
+
+Prometheus runs on the deploy host (the `TARGET`) and is reachable directly over the tailnet — `curl http://$TARGET:9090/api/v1/query?query=...` from any tailnet-connected machine, no port-forwarding needed. Same goes for the other monitoring services on their documented ports. When something looks wrong, querying prometheus directly is usually faster than ssh-ing in to read logs.
+
+## Make targets
+
+```bash
+make all               # Render all .elp templates → config/
+make clean             # Remove config/
+make check             # Validate prometheus, alertmanager, docker-compose syntax
+make test              # Run unit tests + golden renderer tests
+make install           # check + render + rsync to $TARGET; path units pick up changes
+make install-systemd   # rsync unit files + daemon-reload (does NOT enable/start)
+make systemd-enable    # enable mediaserver-network, mediaserver.target, and all path units
+make systemd-{start,stop,restart,status,disable}
+make restart-<service> # force-restart one service (no install)
+```
+
+`make install` automatically runs `make check` and `make all`. With path units enabled, it's the deploy verb — file changes trigger reload automatically.
