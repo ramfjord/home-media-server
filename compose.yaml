@@ -28,8 +28,9 @@
 # no-op — NTFS doesn't track Linux UIDs.)
 services:
   dev:
+    image: ghcr.io/ramfjord/home-media-server-dev:latest
     build: .
-    image: mediaserver-lisp:latest
+    pull_policy: missing
     user: "${UID:-1000}:${GID:-1000}"
     environment:
       HOME: /home/mediaserver
