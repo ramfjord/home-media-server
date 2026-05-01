@@ -1,25 +1,5 @@
 (in-package :mediaserver)
 
-;;; YAML -> plist conversion at the load boundary.
-;;;
-;;; cl-yaml returns hash-tables (EQUALP, string keys), nested maps as
-;;; more hash-tables, sequences as conses, atoms as native Lisp types
-;;; (booleans -> T/NIL, integers, strings).
-;;;
-;;; We flatten to plists with keyword keys; YAML keys carry through
-;;; verbatim (so "use_vpn" -> :USE_VPN). Underscores match the YAML
-;;; convention; the codebase uses :foo_bar uniformly.
-
-(defun yaml->plist (x)
-  "Recursively convert cl-yaml output to keyword-keyed plists.
-   Hash-tables become plists; conses are mapcar'd; atoms pass through."
-  (etypecase x
-    (hash-table (loop for k being the hash-keys of x using (hash-value v)
-                      collect (alexandria:make-keyword (string-upcase k))
-                      collect (yaml->plist v)))
-    (cons       (mapcar #'yaml->plist x))
-    (t          x)))
-
 ;;; Deep-merge for plists.
 ;;;
 ;;; Mirrors Ruby's Mediaserver.deep_merge!:
@@ -28,12 +8,6 @@
 ;;;   else          -> override wins
 ;;; Used to apply config.local.yml service_overrides onto loaded
 ;;; service plists.
-
-(defun plistp (x)
-  "True for proper plists with keyword keys (cheap structural check)."
-  (and (consp x)
-       (evenp (length x))
-       (loop for k in x by #'cddr always (keywordp k))))
 
 (defun deep-merge (base overrides)
   "Return a new plist that is BASE deep-merged with OVERRIDES."
@@ -113,35 +87,6 @@
     :media_path   "/data"
     :hostname     "localhost")
   "Fallback values for globals not set in any config file.")
-
-(defun read-yaml-file (path)
-  "Read PATH as plain YAML, returning a plist (or NIL for missing file
-   or empty contents)."
-  (let ((p (probe-file path)))
-    (when p
-      (let ((parsed (cl-yaml:parse p)))
-        (and parsed (yaml->plist parsed))))))
-
-(defun plist->cl-yaml (x)
-  "Convert plists/lists/atoms to the hash-table+cons shape cl-yaml's
-   emitter expects. Plists become hash-tables (string keys), lists
-   recurse, atoms pass through."
-  (cond
-    ((plistp x)
-     (let ((h (make-hash-table :test 'equal)))
-       (loop for (k v) on x by #'cddr
-             do (setf (gethash (str:downcase (symbol-name k)) h)
-                      (plist->cl-yaml v)))
-       h))
-    ((listp x) (mapcar #'plist->cl-yaml x))
-    (t x)))
-
-(defun emit-manifest (cfg stream)
-  "Emit CFG (a plist with :globals and :services) as block-style YAML
-   to STREAM. The output round-trips back to an equivalent CFG via
-   cl-yaml:parse + yaml->plist."
-  (yaml:with-emitter-to-stream (em stream)
-    (yaml:emit-pretty-as-document em (plist->cl-yaml cfg))))
 
 (defun load-config-from-args (service-paths override-paths)
   "Build a config plist from explicit paths. SERVICE-PATHS is a list

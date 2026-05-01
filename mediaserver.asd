@@ -12,8 +12,8 @@
     :components ((:file "package")
                  (:file "field")
                  (:file "derive")
+                 (:file "yaml")
                  (:file "config")
-                 (:file "hashutils")
                  (:file "render")))
    (:module "cli"
     :pathname "lisp/cli/"
