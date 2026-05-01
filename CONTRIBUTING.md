@@ -14,6 +14,10 @@ For higher-order use, `field` is curried: `(field :name)` returns a lookup funct
 
 `loopservices` iterates with field-scope: `(loopservices (services :where (and port use_vpn)) ...)` exposes each service's fields as bare symbols inside body and `:where`. New service fields (declared or computed) are added via `define-service-field` in `lisp/src/field.lisp`.
 
+## Native vs. dev container
+
+You can work either natively (with the tooling listed in the root `Dockerfile` installed on your host) or inside the dev container (`docker compose run --rm dev`, see README). The `Makefile` and `script/build.sh` don't care which — they just call `sbcl` and `qlot`, expecting them on `PATH`. Native is faster for tight inner loops; the container is the friction-free path for anyone who'd rather not set up SBCL.
+
 ## Inspecting rendered output
 
 `config/` is git-ignored but almost always populated — `make all` (a few seconds) refreshes it without deploying. When reasoning about how a template expands, what ends up in a generated `docker-compose.yml`, prometheus config, systemd unit, etc., reading `config/<path>` directly is usually faster and more reliable than tracing the template by hand. Re-run `make all` after edits to keep it in sync, then read the rendered file to confirm the change looks right before `make install`.

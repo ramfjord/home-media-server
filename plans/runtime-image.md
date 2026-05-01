@@ -22,9 +22,9 @@ After this branch ships:
 3. The build is reproducible — same source tree → same image
    contents (modulo timestamps), with layer caching that does the
    right thing on dep changes vs source changes.
-4. The existing build sandbox (`script/Dockerfile`,
-   `script/build.sh`) is unchanged. The runtime-image build is a
-   *parallel* path, not a rewrite of the development workflow.
+4. The existing build sandbox (root `Dockerfile`, `script/build.sh`)
+   is unchanged. The runtime-image build is a *parallel* path, not
+   a rewrite of the development workflow.
 
 ## Context
 
@@ -51,10 +51,9 @@ this plan is structured to avoid.
   the SBCL build infra. This plan strictly depends on that.
 - `plans/target-dirs.md` — **shipped**. Renderer's input/output
   layout. Unaffected here.
-- The "switch build to docker" change (uncommitted as of
-  2026-04-30) is a *precondition*: it adds `script/Dockerfile` +
-  `script/build.sh` that this plan extends. Not yet a plan of its
-  own — just in flight. This plan should land after that commit.
+- The "switch build to docker" change (shipped) added the dev
+  Dockerfile (now at repo root) + `script/build.sh` that this plan
+  extends.
 
 Not related (cross-checked 2026-04-30 to save the next drafter
 the same thought):
@@ -75,19 +74,22 @@ build` that COPYs source into the image and produces a packaged
 artifact. Don't fold them together — they optimise for different
 things (iteration speed vs reproducible artifact).
 
-**Why a second Dockerfile vs a multi-stage script/Dockerfile.**
-Tempting to multi-stage `script/Dockerfile` with `--target deps`
-for the existing build sandbox and `--target runtime` for the
-shippable image. The problem: the build sandbox uses
-`docker build` context = `script/`, which contains nothing but
-the Dockerfile. The runtime stage needs to COPY `lisp/`, `elp/`,
-`mediaserver.asd` into the image, which requires context =
-repo root + a `.dockerignore`. The two contexts are
-incompatible in one Dockerfile. Cleaner to have:
-- `script/Dockerfile` — current build sandbox, context `script/`,
-  unchanged.
+**Why a second Dockerfile vs a multi-stage root `Dockerfile`.**
+Tempting to multi-stage the root `Dockerfile` with `--target deps`
+for the existing dev sandbox and `--target runtime` for the
+shippable image. Both now use root as build context, so the old
+"contexts incompatible" objection is gone. The remaining tension
+is `.dockerignore` semantics: the dev image wants empty context
+(its `.dockerignore` is `*`), the runtime image needs `lisp/`,
+`elp/`, `mediaserver.asd` to land in context. BuildKit supports
+per-Dockerfile ignore files (`Dockerfile.runtime.dockerignore`),
+so this is solvable in one file — but two files keep each
+Dockerfile's purpose obvious. Going with:
+- Root `Dockerfile` — current dev sandbox / dev shell, empty
+  context, unchanged.
 - `script/Dockerfile.runtime` — multi-stage runtime image,
-  context = repo root, with a `.dockerignore` to keep it sane.
+  context = repo root, with `script/Dockerfile.runtime.dockerignore`
+  scoping what lands.
 
 **Why static Dockerfile.runtime, not templated via ELP.** The
 substitution surface is small and not loop-shaped. If we templated
@@ -133,18 +135,18 @@ no wrapper script needed for v1.
 
 ## Commits
 
-1. **Add `.dockerignore` at repo root.** Excludes `config/`,
-   `bin/`, `lib/`, `tmp/`, `worktrees/`, `.git/`, `test/config/`,
-   anything else big and irrelevant. Keeps `docker build` context
-   small (currently the repo would send GBs without this).
-   *Verify:* `tar -czh -X <(grep -v '^#' .dockerignore) | wc -c`
-   under ~1MB, or just `du -sh` the source files we expect to
-   land in the build context (lisp/, elp/, services/, targets/,
-   mediaserver.asd).
+1. **Add `script/Dockerfile.runtime.dockerignore`.** Inverse of
+   the root `.dockerignore` (which excludes everything for the
+   dev image): include `lisp/`, `elp/`, `services/`, `targets/`,
+   `mediaserver.asd`, `qlfile`, `qlfile.lock`. Exclude `config/`,
+   `bin/`, `tmp/`, `worktrees/`, `.git/`, `test/config/`,
+   `.devhome/`. Keeps the runtime build context small.
+   *Verify:* `du -sh` the files matched by the include list is
+   under ~5MB.
 
 2. **Add `script/Dockerfile.runtime`.** Three stages:
    `deps` (FROM debian:bookworm-slim + apt + sbcl + quicklisp +
-   dep prefetch — same content as current script/Dockerfile,
+   dep prefetch — same content as the root `Dockerfile`,
    factored out so the runtime build doesn't redo it), `build`
    (FROM deps, COPY `mediaserver.asd lisp/ elp/`, run sbcl
    `save-lisp-and-die` to produce `/build/render`), `runtime`
@@ -211,7 +213,7 @@ no wrapper script needed for v1.
   Dockerfile bakes in `libyaml-0-2`, `apt`, etc. — explicitly
   Debian-flavored, by design.
 - **No changes to the existing build path.** `make all` /
-  `script/build.sh` / `script/Dockerfile` keep doing exactly
+  `script/build.sh` / root `Dockerfile` keep doing exactly
   what they do today.
 - **No ELP templating of the Dockerfile.** Static text only.
   Revisit only if the dep lists become loop-shaped.

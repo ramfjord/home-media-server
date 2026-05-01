@@ -50,10 +50,37 @@ Caddy bridges the two and terminates HTTPS for the few services that require it 
 
 ### Prerequisites
 
-- Docker + Docker Compose V2
-- Linux host with `make` and SBCL (Common Lisp). Quicklisp is required to load `cl-yaml`; on Arch, `pacman -S sbcl libyaml` plus a Quicklisp install.
+The **deploy target** (the box that actually hosts the media stack) must be a Linux host with Docker + Docker Compose V2.
+
+The **control machine** (where you run `make install` from — can be the same box, or a laptop/desktop on the same tailnet) needs one of:
+
+- **Docker only** (recommended for Windows/macOS, or any Linux user who'd rather not install SBCL): a `compose.yaml` at the repo root provides a dev shell with all build tooling baked in. See [Run via the dev container](#run-via-the-dev-container) below.
+- **Native**: install the same tools the dev image installs — see the root `Dockerfile` for the canonical list (SBCL, libyaml, qlot, plus rsync/ssh for `make install`). Faster inner loop, no container indirection.
+
+Other:
+
 - A WireGuard VPN subscription (Mullvad, ProtonVPN, etc.)
-- Optional: Tailscale
+- Optional: Tailscale (for remote access to the deploy target)
+
+### Run via the dev container
+
+Lets you do everything from a Windows or macOS machine with only Docker installed, deploying to your Linux server over SSH.
+
+```bash
+docker compose run --rm dev
+```
+
+First run builds the image (~2 min); subsequent runs are instant. You're dropped into a bash shell inside the container with the repo bind-mounted at `/workspace`. From there, the standard workflow works as documented below — `make install`, `make restart-<service>`, etc.
+
+**SSH keys.** The container needs to reach your `TARGET` over SSH. By default it bind-mounts your host's `~/.ssh` read-only.
+
+- **Linux/macOS**: works out of the box.
+- **Windows (WSL2 shell)**: works out of the box if your repo and SSH keys live inside WSL.
+- **Windows (PowerShell)**: set `SSH_DIR` in a `.env` file at the repo root, e.g. `SSH_DIR=C:\Users\<you>\.ssh`.
+
+**File ownership.** The container runs as UID/GID `1000:1000` by default. If your host UID differs (`id -u`), create a `.env` file at the repo root with `UID=...` / `GID=...` so files written to the workspace stay owned by you. (No-op on Windows.)
+
+`./.devhome/` (gitignored) holds in-container shell history, vim state, qlot caches, etc., and persists across `docker compose run` invocations.
 
 ### Configure
 

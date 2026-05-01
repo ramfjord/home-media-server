@@ -1,0 +1,43 @@
+# Dev shell. Build (or pull) the mediaserver dev image and drop into
+# bash with the workspace bind-mounted, so you can run `make install`
+# without installing SBCL/Quicklisp/qlot on the host.
+#
+#   docker compose run --rm dev
+#
+# Inside the shell: `make install` (after Makefile.local sets TARGET).
+#
+# Mounts:
+#   /workspace               — your repo
+#   /home/mediaserver        — preferences, shell history, .qlot/, .cache
+#                              (gitignored .devhome/ on the host; persists
+#                              across container runs)
+#   /run/host-ssh            — your SSH keys (read-only), used by rsync/ssh
+#                              from inside the container to reach $TARGET.
+#                              Mounted outside HOME to avoid docker auto-
+#                              creating a root-owned .ssh subdir inside
+#                              .devhome/. The image's ssh_config points
+#                              IdentityFile at this path. On Windows with
+#                              Docker Desktop + WSL2 this resolves to
+#                              %USERPROFILE%\.ssh automatically when invoked
+#                              from a WSL shell; from PowerShell, set the
+#                              SSH_DIR env var or .env file.
+#
+# UID/GID default to 1000:1000. If your host UID differs, create a .env
+# file in this directory with `UID=...` and `GID=...` so files written
+# to the workspace are owned by you on the host. (On Windows this is a
+# no-op — NTFS doesn't track Linux UIDs.)
+services:
+  dev:
+    build: .
+    image: mediaserver-lisp:latest
+    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      HOME: /home/mediaserver
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - ./.devhome:/home/mediaserver
+      - ${SSH_DIR:-~/.ssh}:/run/host-ssh:ro
+    command: bash
+    stdin_open: true
+    tty: true

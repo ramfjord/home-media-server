@@ -62,7 +62,7 @@ done
 1. In Sonarr settings: **Settings → Connect → Custom Scripts**
 2. Add new script:
    - **Name**: Audio Normalizer
-   - **Path**: `/home/thomas/mediaserver/audio-normalizer/normalize.sh`
+   - **Path**: `<install_base>/audio-normalizer/normalize.sh`
    - **Triggers**: On Import, On Upgrade
 
 Sonarr will pass the file path automatically via environment variables.

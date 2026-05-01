@@ -1,0 +1,4 @@
+# The dev image doesn't COPY anything from the workspace — context can
+# be empty. Keeps `docker compose build` from sending ~100MB of binaries
+# and caches to the daemon for no reason.
+*
