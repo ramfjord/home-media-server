@@ -27,10 +27,19 @@ DIRS := $(sort $(dir $(ALL_OUTPUTS)))
 .PHONY: clean check test sync install preview all $(addprefix systemctl-,start stop restart enable disable status)
 
 # Lisp binaries. One CLI entry point per file in lisp/cli/; each
-# produces bin/<name>. The test tree's script/build.sh is a symlink
-# shim instead of a real build, so the same rule works in both trees.
-bin/%: lisp/cli/%.lisp lisp/src/* mediaserver.asd script/build.sh
+# produces bin/<name>. All Lisp sources, the .asd, and qlot's state
+# live under lisp/ so qlot's project root is lisp/ — keeps stray
+# .asd files elsewhere in the tree (elp/, etc.) out of qlot's
+# scanning path. The test tree's script/build.sh is a symlink shim
+# instead of a real build, so the same rule works in both trees;
+# test/lisp -> ../lisp gives test/'s Makefile-symlink-resolved view
+# the same lisp/* paths as the parent.
+bin/%: lisp/cli/%.lisp lisp/src/* lisp/mediaserver.asd script/build.sh lisp/.qlot/installed.stamp
 	@script/build.sh lisp/cli/$*.lisp
+
+lisp/.qlot/installed.stamp: lisp/qlfile.lock
+	cd lisp && qlot install --no-color
+	@mkdir -p lisp/.qlot && touch $@
 
 # The services manifest is the single source of truth at render time.
 # Built from the per-service yamls + override files. Cwd-relative so

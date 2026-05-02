@@ -37,8 +37,8 @@
                              :key (lambda (s) (getf s :name)) :test #'equal)
                        (error "service not found: ~A" service-name))))
          (*package* (find-package :mediaserver)))
-    (elp:render (probe-file template)
-                (mediaserver::service-render-context svc cfg))))
+    (apply #'elp:render (probe-file template) *standard-output*
+           (mediaserver::service-render-context svc cfg))))
 
 (defun command ()
   (clingon:make-command

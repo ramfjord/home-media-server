@@ -1,5 +1,0 @@
-systemd/fx-caddy.service
-systemd/fx-prometheus.service
-systemd/fx-qbittorrent.service
-systemd/fx-sonarr.service
-systemd/fx-wireguard.service

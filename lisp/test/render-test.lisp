@@ -90,12 +90,13 @@
       (write-string "<%- (dolist (f service_files) -%>
 P=<%= f %>
 <%- ) -%>" s))
-    ;; Augment the context with a SERVICE_FILES binding (mirrors what
-    ;; the CLI does when --files is given).
+    ;; Augment the context with a :service_files binding (mirrors
+    ;; what the CLI does when --files is given). LIST* prepends one
+    ;; (key value) pair to the plist returned by service-render-context.
     (let* ((base (mediaserver::service-render-context svc cfg))
-           (ctx  (cons (cons (intern "SERVICE_FILES" :mediaserver)
-                             '("Caddyfile" "extra/policy.json"))
-                       base)))
+           (ctx  (list* :service_files
+                        '("Caddyfile" "extra/policy.json")
+                        base)))
       (is (equal "P=Caddyfile
 P=extra/policy.json
 "

@@ -7,7 +7,7 @@
   :serial t
   :components
   ((:module "lib"
-    :pathname "lisp/src/"
+    :pathname "src/"
     :serial t
     :components ((:file "package")
                  (:file "field")
@@ -16,7 +16,7 @@
                  (:file "config")
                  (:file "render")))
    (:module "cli"
-    :pathname "lisp/cli/"
+    :pathname "cli/"
     :components ((:file "render")
                  (:file "build-service-config"))))
   :in-order-to ((test-op (test-op "mediaserver/tests"))))
@@ -24,7 +24,7 @@
 (defsystem "mediaserver/tests"
   :description "Tests for mediaserver."
   :depends-on ("mediaserver" "fiveam")
-  :pathname "lisp/test/"
+  :pathname "test/"
   :serial t
   :components
   ((:file "package")

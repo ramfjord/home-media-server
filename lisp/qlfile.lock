@@ -5,4 +5,4 @@
 ("elp" .
  (:class qlot/source/git:source-git
   :initargs (:remote-url "https://github.com/ramfjord/elp.git")
-  :version "git-6a14145144d743efbf40ddee24657e2f3744140c"))
+  :version "git-7ea6bf415f9b40f838efc61ffee92872a040646b"))

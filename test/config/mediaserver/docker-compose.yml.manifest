@@ -1,5 +1,0 @@
-fx-caddy/docker-compose.yml
-fx-prometheus/docker-compose.yml
-fx-qbittorrent/docker-compose.yml
-fx-sonarr/docker-compose.yml
-fx-wireguard/docker-compose.yml

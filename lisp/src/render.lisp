@@ -9,31 +9,34 @@
 ;;; primitives for command-line use; tests call them directly.
 
 (defun render-template-to-string (path context)
-  "ELP-render PATH with CONTEXT (alist), return the rendered string."
+  "ELP-render PATH with CONTEXT (a plist of keyword->value), return
+   the rendered string."
   (with-output-to-string (s)
     (let ((*package* (find-package :mediaserver)))
-      (elp:render (probe-file path) context s))))
+      (apply #'elp:render (probe-file path) s context))))
 
 (defun %field-binding-symbol (key)
-  "Convert :install_base -> install_base (a symbol in :mediaserver)."
+  "Convert :install_base -> install_base (a symbol in :mediaserver).
+   Used by WITH-SERVICE-SCOPE's symbol-macrolet, which exposes each
+   field as a bare symbol in template bodies — distinct from the
+   keyword keys used at the kwarg-dispatch boundary."
   (alexandria:ensure-symbol key :mediaserver))
 
-(defun service-field-bindings (service globals)
-  "Return an alist binding every key in *known-fields* (direct or
-   derived) to its value on SERVICE, using Ruby-style underscored
-   symbol names. Direct fields the service doesn't carry resolve
-   to NIL via FIELD's default. Returns NIL when SERVICE is NIL.
+(defun service-field-plist (service globals)
+  "Plist binding every key in *KNOWN-FIELDS* (direct or derived) to
+   its value on SERVICE, keyed by the field keywords. Direct fields
+   the service doesn't carry resolve to NIL via FIELD's default.
+   Returns NIL when SERVICE is NIL.
 
-   Templates can write <%= name %> / <%= compose_file %> /
-   <%- (when use_vpn -%> instead of (field :name service) etc.
-
-   A service field shadows a like-named global when both bind the
-   same symbol; in practice this hasn't happened on real fixtures."
+   This is the kwarg-shape that ELP:RENDER consumes — each pair
+   becomes one keyword argument to the compiled template lambda.
+   Templates write <%= name %> / <%= compose_file %> / <%- (when
+   use_vpn -%>; the walker resolves the bare symbols against the
+   matching :name / :compose_file / :use_vpn kwargs."
   (when service
-    (mapcar (lambda (k)
-              (cons (%field-binding-symbol k)
-                    (field k service globals)))
-            *known-fields*)))
+    (loop for k in *known-fields*
+          collect k
+          collect (field k service globals))))
 
 (defmacro with-service-scope (svc &body body)
   "Bind every key in *KNOWN-FIELDS* as a symbol-macro that looks up
@@ -71,28 +74,28 @@
            ,@body)))))
 
 (defun service-render-context (service config)
-  "Build the ELP context-alist for a render.
+  "Build the plist of ELP keyword arguments for a render call.
 
    Priority order (highest wins on duplicates):
    - Per-service field bindings (only when SERVICE is non-nil) —
-     every key in *known-fields*, named with underscores
-     (e.g. install_base, compose_file, sighup_reload).
-   - Underscored globals (install_base, media_path, hostname, plus
-     any custom keys from config files).
-   - SERVICE / SERVICES / GLOBALS, for templates that need raw plists
-     (most commonly inside iteration loops over SERVICES).
+     every key in *known-fields* (e.g. :install_base, :compose_file,
+     :sighup_reload).
+   - Globals (already a plist with keyword keys: :install_base,
+     :media_path, :hostname, plus any custom keys from config files).
+   - :service / :services / :globals, for templates that need the
+     raw plists (most commonly inside iteration loops over services).
 
    Duplicates are resolved via a hash: lower-priority sources are
-   inserted first and overwritten by higher-priority sources."
+   inserted first and overwritten by higher-priority sources, then
+   the result is flattened back into a plist for APPLY to RENDER."
   (let ((globals  (getf config :globals))
         (services (getf config :services))
         (h (make-hash-table)))
-    (flet ((merge-in (entries)
-             (dolist (entry entries)
-               (setf (gethash (car entry) h) (cdr entry)))))
-      (merge-in (list (cons (alexandria:ensure-symbol "SERVICE"  :mediaserver) service)
-                      (cons (alexandria:ensure-symbol "SERVICES" :mediaserver) services)
-                      (cons (alexandria:ensure-symbol "GLOBALS"  :mediaserver) globals)))
-      (merge-in (globals->elp-context globals))
-      (merge-in (service-field-bindings service globals)))
-    (alexandria:hash-table-alist h)))
+    (flet ((merge-in (plist)
+             (loop for (k v) on plist by #'cddr
+                   do (setf (gethash k h) v))))
+      (merge-in (list :service service :services services :globals globals))
+      (merge-in globals)
+      (merge-in (service-field-plist service globals)))
+    (loop for k being the hash-keys of h using (hash-value v)
+          collect k collect v)))

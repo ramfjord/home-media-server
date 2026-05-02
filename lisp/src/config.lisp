@@ -33,18 +33,13 @@
 ;;; The context-alist binds the same names the YAML files use
 ;;; (underscored: install_base, media_path, hostname).
 
-(defun globals->elp-context (globals-plist)
-  "Build the ELP context-alist from GLOBALS-PLIST: each keyword key
-   becomes a same-named symbol in :mediaserver."
-  (loop for (k v) on globals-plist by #'cddr
-        collect (cons (alexandria:ensure-symbol k :mediaserver) v)))
-
 (defun render-service-yaml (path globals)
   "ELP-render the file at PATH with GLOBALS bound, return the rendered
-   YAML string."
+   YAML string. GLOBALS is already a plist with keyword keys, which
+   is exactly the kwarg shape ELP:RENDER consumes — apply directly."
   (with-output-to-string (s)
     (let ((*package* (find-package :mediaserver)))
-      (elp:render (pathname path) (globals->elp-context globals) s))))
+      (apply #'elp:render (pathname path) s globals))))
 
 ;;; Validation
 ;;;
