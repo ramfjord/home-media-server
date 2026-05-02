@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Run a command in the dev container with --rm so it doesn't pile up
+# stopped containers. `script/dev` with no args drops you in bash.
+#   script/dev make all
+#   script/dev bash
+exec docker compose run --rm dev "$@"

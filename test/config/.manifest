@@ -1,0 +1,11 @@
+fx-caddy/Caddyfile
+fx-caddy/certs/fullchain.pem
+fx-caddy/certs/privkey.pem
+fx-caddy/certs/README.md
+fx-caddy/docker-compose.yml
+fx-prometheus/docker-compose.yml
+fx-prometheus/prometheus.yml
+fx-qbittorrent/docker-compose.yml
+fx-sonarr/docker-compose.yml
+fx-wireguard/docker-compose.yml
+Makefile

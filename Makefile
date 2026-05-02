@@ -16,7 +16,7 @@ SINGLETON_ELPS := $(shell find targets/debian -name '*.elp' -not -path '*__servi
 SINGLETON_OUTPUTS := $(patsubst targets/debian/%.elp,config/%,$(SINGLETON_ELPS))
 
 # Create one file per service by naming it __service__.yaml.elp - it will be templated for
-# each service foo with bin/render --service <foo> __service__.yaml.elp 
+# each service foo with bin/render --service <foo> __service__.yaml.elp
 fanout_paths = $(foreach s,$(ALL_SERVICES),$(subst __service__,$(s),$(1)))
 FANOUT_ELPS    := $(shell find targets/debian -name '*.elp' -path '*__service__*')
 FANOUT_OUTPUTS := $(patsubst targets/debian/%.elp,config/%,$(call fanout_paths,$(FANOUT_ELPS)))
@@ -24,7 +24,7 @@ FANOUT_OUTPUTS := $(patsubst targets/debian/%.elp,config/%,$(call fanout_paths,$
 ALL_OUTPUTS := $(SERVICE_OUTPUTS) $(SINGLETON_OUTPUTS) $(FANOUT_OUTPUTS)
 DIRS := $(sort $(dir $(ALL_OUTPUTS)))
 
-.PHONY: clean check test sync install preview all $(addprefix systemctl-,start stop restart enable disable status)
+.PHONY: clean distclean check test sync install preview all $(addprefix systemctl-,start stop restart enable disable status)
 
 # Lisp binaries. One CLI entry point per file in lisp/cli/; each
 # produces bin/<name>. All Lisp sources, the .asd, and qlot's state
@@ -54,6 +54,12 @@ services/manifest.yaml: bin/build-service-config $(SERVICE_YMLS) $(OVERRIDE_YMLS
 clean:
 	rm -rf config/ services/manifest.yaml
 
+# Wipe everything regenerable, including built binaries and the qlot
+# dist. Use before validating a from-scratch dev-container build (e.g.
+# `script/dev make all`).
+distclean: clean
+	rm -rf bin/ lisp/.qlot/
+
 # Order-only directory creation. One mkdir per dir, never repeated.
 $(DIRS):
 	mkdir -p $@
@@ -64,6 +70,8 @@ all: $(ALL_OUTPUTS)
 	@echo ""
 	@rsync -ac --exclude='*.elp' --exclude='service.yml' --exclude='/manifest.yaml' services/ config/
 	@rsync -ac --exclude='*.elp' --exclude='*__service__*' targets/debian/ config/
+	@find config -type f -not -path 'config/systemd/*' -not -name .manifest -printf '%P\n' | sort > config/.manifest
+	@cd config/systemd && find . -type f -not -name .mediaserver.manifest -printf '%P\n' | sort > .mediaserver.manifest
 
 # Per-service ELPs in services/. Service name implicit from path.
 config/%: services/%.elp bin/render services/manifest.yaml | $$(@D)/
@@ -100,9 +108,10 @@ $(error TARGET must be set (e.g. TARGET=fatlaptop, or via Makefile.local))
 endif
 endif
 
-# Push the rendered bundle to the target's staging dir.
+# Push the rendered bundle to the target's staging dir. --delete is safe here:
+# /opt/mediaserver/staging/ is fully owned by us and rebuilt every deploy.
 sync: all
-	@rsync -acv --rsync-path="sudo rsync" --mkpath --no-owner --no-group \
+	@rsync -acv --delete --rsync-path="sudo rsync" --mkpath --no-owner --no-group \
 	  config/ $(TARGET):/opt/mediaserver/staging/
 	@ssh $(TARGET) "cd /opt/mediaserver/staging ; sudo make chownall"
 

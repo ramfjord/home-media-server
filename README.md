@@ -11,6 +11,22 @@ Yet another self-hosted media server, with a focus on **observability, flexibili
 - **Systemd-native**: every service is a systemd unit on a shared `mediaserver-network`. A `.path` watcher hot-reloads each service when its config changes; `mediaserver.target` brings the whole stack up or down.
 - **Vendor-agnostic monitoring**: OpenTelemetry Collector sits in front of Prometheus/Grafana so the backend can be swapped without restructuring.
 
+## Architecture: render → stage → deploy
+
+A change goes through four stages, and **what each stage can see** is the constraint that determines what kind of fact belongs where:
+
+1. **Build the service manifest.** `bin/build-service-config` reads every `services/*/service.yml`, layers `globals.yml` and `config.local.yml` on top, and computes derived fields (`compose_file`, `dockerized`, `config_files`, …) into `services/manifest.yaml`. Each `service.yml` is read in isolation — at this stage a service can't reference another service's fields.
+2. **Render templates → `config/`.** `make all` runs `bin/render` against `services/manifest.yaml` for every `.elp` under `services/` (per-service templates) and `targets/debian/` (singletons + `__service__` fanout templates). Static files in `services/` and `targets/debian/` are rsynced through unchanged. The full manifest is in scope here, so templates *can* see other services — this is where cross-service config (Caddy routes, Prometheus scrape configs, Homer entries) gets assembled. Two manifest files are emitted alongside the output: `config/.manifest` and `config/systemd/.mediaserver.manifest`, listing every shipped file.
+3. **Sync local → target staging.** `make sync` rsyncs `config/` to `$TARGET:/opt/mediaserver/staging/` with `--delete`. Staging is fully owned by the deploy and rebuilt every time, so deleting is safe. Nothing user-facing has moved yet.
+4. **Stage → prod on the target.** `make install` runs `make deploy` on the target: it diffs the freshly-shipped `.manifest` against the previously-installed one to compute exactly which files this deploy removes, rsyncs staging into the live install dirs (`/opt/mediaserver/config/` and `/etc/systemd/system/`) **without** `--delete`, then explicitly `rm`s the diffed-out files and runs `daemon-reload`. Path units pick up the changed files and reload affected services.
+
+Two consequences worth keeping in mind:
+
+- **Where a fact can live** follows from stage 1 vs. stage 2. Anything that needs to know about other services has to be computed in a template (stage 2) or as a derived field in `lisp/src/derive.lisp` (stage 1, but with the full set in scope) — not in raw `service.yml`.
+- **Removal requires `make clean`** before deploy. Stages 1–2 are incremental; if you delete a service or template, stale rendered files still sit in `config/` until you clean. They'd then ship to staging (good — the new manifest wouldn't list them), but only stage 4's manifest diff actually removes them from prod, and the diff is only correct if `config/` was regenerated from scratch. (See [CONTRIBUTING.md](CONTRIBUTING.md#removing-a-service-or-template).)
+
+Derived fields and the manifest are also useful debugging surface: when a value looks wrong in a rendered file, `services/manifest.yaml` is the single place to confirm what the renderer actually saw.
+
 ## Services
 
 The table below is a map of what's in the repo. Day-to-day, you don't need it — once the stack is up, the **Homer dashboard** at `http://<host>/` is the entry point: it lists every running service, its URL, and its health, so that's where you go to actually use the thing.
