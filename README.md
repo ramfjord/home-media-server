@@ -50,17 +50,12 @@ Caddy bridges the two and terminates HTTPS for the few services that require it 
 
 ### Prerequisites
 
-The **deploy target** (the box that actually hosts the media stack) must be a Linux host with Docker + Docker Compose V2.
+- **An old gaming laptop** (or any spare machine) to run your media server on, with Linux installed. Once it's set up, you won't interact with it much — it can live in your closet plugged into ethernet. Needs Docker + Docker Compose V2 installed.
+- **A WireGuard VPN subscription** (Mullvad, ProtonVPN, etc.) so the downloading stack tunnels through it. See [services/wireguard/README.md](services/wireguard/) for setup.
+- **Docker on a control machine** — the laptop/desktop you'll use to deploy from. Windows, macOS, or Linux all work; the rest of the build tooling (SBCL, qlot, etc.) runs inside a dev container, so Docker is the only thing you install on this machine. See [Run via the dev container](#run-via-the-dev-container) below.
+- **Recommended: [Tailscale](https://tailscale.com/)** on the server and on any device you want to reach it from. See [Remote access](#remote-access) below.
 
-The **control machine** (where you run `make install` from — can be the same box, or a laptop/desktop on the same tailnet) needs one of:
-
-- **Docker only** (recommended for Windows/macOS, or any Linux user who'd rather not install SBCL): a `compose.yaml` at the repo root provides a dev shell with all build tooling baked in. See [Run via the dev container](#run-via-the-dev-container) below.
-- **Native**: install the same tools the dev image installs — see the root `Dockerfile` for the canonical list (SBCL, libyaml, qlot, plus rsync/ssh for `make install`). Faster inner loop, no container indirection.
-
-Other:
-
-- A WireGuard VPN subscription (Mullvad, ProtonVPN, etc.)
-- Optional: Tailscale (for remote access to the deploy target)
+If you'd rather skip the dev container and install the build tools natively on your control machine, the root `Dockerfile` is the canonical list of what to install (SBCL, libyaml, qlot, plus rsync/ssh for `make install`). Faster inner loop; one more thing to maintain.
 
 ### Run via the dev container
 
@@ -70,7 +65,7 @@ Lets you do everything from a Windows or macOS machine with only Docker installe
 docker compose run --rm dev
 ```
 
-First run builds the image (~2 min); subsequent runs are instant. You're dropped into a bash shell inside the container with the repo bind-mounted at `/workspace`. From there, the standard workflow works as documented below — `make install`, `make restart-<service>`, etc.
+First run pulls the prebuilt image from `ghcr.io/ramfjord/home-media-server-dev` (~30 seconds); subsequent runs are instant. You're dropped into a bash shell inside the container with the repo bind-mounted at `/workspace`. From there, the standard workflow works as documented below — `make install`, `make restart-<service>`, etc.
 
 **SSH keys.** The container needs to reach your `TARGET` over SSH. By default it bind-mounts your host's `~/.ssh` read-only.
 
@@ -127,6 +122,14 @@ The target host needs passwordless sudo for `rsync` and `systemctl`, and `script
 1. Edit `services/<name>/service.yml`, its templates, or `config.local.yml`
 2. `make install`
 3. Affected services hot-reload via path units; use `make restart-<service>` to force a bounce.
+
+## Remote access
+
+The deploy target has no internet-facing ports — by design. To reach it from outside your home network (or even from the couch without thinking about local IPs), install [Tailscale](https://tailscale.com/) on the server and on every device you want to connect from — phone, laptop, work computer. Each device gets a stable hostname on a private encrypted network; once installed, your server is reachable at that hostname from any of them, anywhere, with no port forwarding or DNS setup.
+
+The free plan covers up to 100 devices, which is plenty for personal use.
+
+The same tailnet is what your control machine uses to reach the deploy target via `make install` — set `TARGET=<your-server-tailscale-name>` in `Makefile.local` and SSH/rsync just work.
 
 ## Storage
 
