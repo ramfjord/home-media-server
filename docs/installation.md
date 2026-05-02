@@ -21,7 +21,7 @@ cd home-media-server
 docker compose run --rm dev
 ```
 
-First run pulls the prebuilt image from `ghcr.io/ramfjord/home-media-server-dev` (~30 seconds); subsequent runs are instant. You're dropped into a bash shell inside the container with the repo bind-mounted at `/workspace`. From there, the standard workflow works as documented below — `make install`, `make restart-<service>`, etc.
+First run pulls the prebuilt image from `ghcr.io/ramfjord/home-media-server-dev` (~30 seconds); subsequent runs are instant. You're dropped into a bash shell inside the container with the repo bind-mounted at the same absolute path it has on the host — so `pwd` reads identically on both sides, and paths in error messages and tooling line up. From there, the standard workflow works as documented below — `make install`, `make restart-<service>`, etc.
 
 For subsequent shells while the container is up, Docker Desktop's GUI has an "Exec" button on each running container that opens a terminal directly — no need to retype the compose command.
 

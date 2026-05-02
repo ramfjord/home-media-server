@@ -3,4 +3,10 @@
 # stopped containers. `script/dev` with no args drops you in bash.
 #   script/dev make all
 #   script/dev bash
+#
+# cd to the workspace root so compose's ${PWD} substitution resolves to
+# the repo path (compose mounts ${PWD}:${PWD} so container paths match
+# host paths — see compose.yaml). Without this, invoking from elsewhere
+# would bind that elsewhere into the container instead of the repo.
+cd "$(dirname "$0")/.."
 exec docker compose run --rm dev "$@"

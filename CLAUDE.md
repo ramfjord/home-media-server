@@ -33,6 +33,24 @@ That re-fetches the source, rewrites `lisp/qlfile.lock`, and reinstalls. The Mak
 
 Why `lisp/` matters: qlot's default install scans the project root for `.asd` files and walks each system's transitive deps. With everything Lisp confined to `lisp/`, the walk only sees `lisp/mediaserver.asd` — fast (~2s steady-state, ~10s cold). Before the move, sibling `.asd` files (e.g. `elp/elp.asd` from a checkout) pulled in `hu.dwim.walker`'s chain and pegged multiple SBCL processes for minutes. Do not edit `qlfile.lock` by hand — let qlot manage it.
 
+## Swank image: bootstrap from `lisp/`, symlink state to root
+
+The `ramfjord:swank-image` skill expects a `*.asd` at the directory it bootstraps; this project's only `.asd` is `lisp/mediaserver.asd` (see the qlot-scan note above for *why*). So the image is bootstrapped from `lisp/`, and the state files are symlinked up to the worktree root so MCP and vlime pick them up when launched here:
+
+```sh
+/home/tramfjord/projects/claude-skills/skills/swank-image/bootstrap-swank.sh "$PWD/lisp"
+ln -sf lisp/.swank-port    .swank-port
+ln -sf lisp/.swank-session .swank-session
+ln -sf lisp/.mcp.json      .mcp.json
+[ -f lisp/.vlime-port ] && ln -sf lisp/.vlime-port .vlime-port  # vlime auto-connect
+```
+
+The bootstrap auto-detects `lisp/.qlot/setup.lisp` and loads it first, so `:elp` (and any other qlot-managed dep) resolves through qlot's dist rather than `~/quicklisp/`.
+
+The image loads `:mediaserver` (which transitively loads `:elp`), so .elp templates can be parsed/compiled from the running image regardless of cwd — call into ELP with absolute paths.
+
+Footgun: `cleanup-swank.sh "$PWD"` from the root will `rm` the symlinks but leave the real files in `lisp/`. Run cleanup against `"$PWD/lisp"` (or remove both sides manually).
+
 ## Run make targets host-native
 
-The dev container (`docker compose run --rm dev`) exists for users who don't want to install SBCL/qlot on their machine. Thomas works host-native — `sbcl`, `qlot`, `make` all on `PATH` — so run targets directly: `make all`, `make test`, `qlot install`, etc. Do not invoke `docker compose run --rm dev` to run a make target on Thomas's behalf; it adds latency, fights with mounted-path semantics, and (critically) running `qlot install` inside the container leaves `/workspace`-prefixed symlinks under `.qlot/dists/` that break subsequent host builds.
+The dev container (`docker compose run --rm dev`) exists for users who don't want to install SBCL/qlot on their machine. Thomas works host-native — `sbcl`, `qlot`, `make` all on `PATH` — so run targets directly: `make all`, `make test`, `qlot install`, etc. Don't invoke `docker compose run --rm dev` to run a make target on Thomas's behalf; it adds container-start latency for no benefit when the host already has the toolchain.

@@ -5,15 +5,33 @@
 #   1. Build sandbox for `script/build.sh` (produces bin/<name> binaries).
 #   2. Dev shell for users who don't want to install SBCL on their host —
 #      `docker compose run --rm dev` drops them at a bash prompt with the
-#      workspace bind-mounted at /workspace.
+#      workspace bind-mounted at the same path the host sees it at
+#      (compose substitutes ${PWD}). working_dir comes from compose too.
 FROM debian:bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      sbcl curl ca-certificates git libyaml-0-2 \
+
+# One RUN, one rm. The docker-ce repo needs the keyring set up before
+# `apt-get update` can see it, and the keyring needs curl+gnupg, so we
+# do an early bootstrap install, drop the docker repo, then a second
+# update + the full install. The second update mostly no-ops on the
+# already-fetched debian indexes — only docker's index is new.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
+ && install -m 0755 -d /etc/apt/keyrings \
+ && curl -fsSL https://download.docker.com/linux/debian/gpg \
+      | gpg --dearmor -o /etc/apt/keyrings/docker.gpg \
+ && chmod a+r /etc/apt/keyrings/docker.gpg \
+ && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable" \
+      > /etc/apt/sources.list.d/docker.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends \
+      sbcl git libyaml-0-2 \
       make rsync openssh-client \
       vim nano less \
-    && rm -rf /var/lib/apt/lists/*
+      docker-ce-cli docker-compose-plugin \
+      systemd \
+ && rm -rf /var/lib/apt/lists/*
 
 # Named user at UID 1000 so the dev shell shows a real prompt instead
 # of "I have no name!". Compose can override UID/GID via .env for hosts
@@ -67,5 +85,3 @@ RUN printf '%s\n' \
 # image — they'd just be ignored at build time. .qlot/ lives in the
 # mounted workspace and persists across builds, so the first build is
 # slow but subsequent ones are fast.
-
-WORKDIR /workspace

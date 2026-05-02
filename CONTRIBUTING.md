@@ -20,6 +20,8 @@ You can work either natively (with the tooling listed in the root `Dockerfile` i
 
 To validate the dev container end-to-end from a clean slate: `make distclean && script/dev make all`. Note the host/container glibc skew — binaries built on one usually can't run on the other; `distclean` wipes `bin/` so they get rebuilt against whichever you're using next.
 
+`script/dev make check` works too, but on Linux you need to tell compose what gid owns the host's docker socket so the in-container user can read it. Look it up with `stat -c %g /var/run/docker.sock` and put `DOCKER_GID=<that>` in `.env` (gitignored). Docker Desktop on Windows/macOS doesn't gate the socket by Unix gid, so this is Linux-only.
+
 ## Inspecting rendered output
 
 `config/` is git-ignored but almost always populated — `make all` (a few seconds) refreshes it without deploying. When reasoning about how a template expands, what ends up in a generated `docker-compose.yml`, prometheus config, systemd unit, etc., reading `config/<path>` directly is usually faster and more reliable than tracing the template by hand. Re-run `make all` after edits to keep it in sync, then read the rendered file to confirm the change looks right before `make install`.

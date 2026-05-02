@@ -4,9 +4,14 @@
 # Host-side: systemd-analyze on the dev box. Won't catch target-version
 # drift, but that's the deal — see the conversation in the relevant PR.
 set -euo pipefail
+# --recursive-errors=no: don't fail when a dependency unit (e.g.
+# docker.service) isn't installed in the verification environment. The
+# dev container has docker-ce-cli but not the daemon's unit file, so the
+# default recursive verify trips on every Requires=docker.service. We
+# only want to verify the unit's own correctness here.
 fail=0
 for f in config/systemd/*.service config/systemd/*.path; do
   [ -s "$f" ] || continue
-  systemd-analyze verify "$f" > /dev/null || { echo "FAIL: $f"; fail=1; }
+  systemd-analyze verify --recursive-errors=no "$f" > /dev/null || { echo "FAIL: $f"; fail=1; }
 done
 exit $fail

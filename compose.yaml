@@ -7,7 +7,14 @@
 # Inside the shell: `make install` (after Makefile.local sets TARGET).
 #
 # Mounts:
-#   /workspace               — your repo
+#   $PWD                     — your repo, mounted at the *same* path the
+#                              host sees it at. Container path == host path
+#                              means scripts that shell out to `docker run
+#                              -v "$PWD/...:..."` work transparently (the
+#                              host daemon resolves the same absolute path
+#                              regardless of which side calls it), and qlot
+#                              symlinks under .qlot/dists/ resolve from
+#                              both host and container builds.
 #   /home/mediaserver        — preferences, shell history, .qlot/, .cache
 #                              (gitignored .devhome/ on the host; persists
 #                              across container runs)
@@ -21,11 +28,21 @@
 #                              %USERPROFILE%\.ssh automatically when invoked
 #                              from a WSL shell; from PowerShell, set the
 #                              SSH_DIR env var or .env file.
+#   /var/run/docker.sock     — host Docker daemon socket, so `make check`
+#                              can run `docker compose config`. On Docker
+#                              Desktop (Windows/macOS) this same path is
+#                              auto-proxied to the host's named pipe.
 #
 # UID/GID default to 1000:1000. If your host UID differs, create a .env
 # file in this directory with `UID=...` and `GID=...` so files written
 # to the workspace are owned by you on the host. (On Windows this is a
 # no-op — NTFS doesn't track Linux UIDs.)
+#
+# DOCKER_GID is the gid that owns /var/run/docker.sock on the host (Linux
+# only — varies per distro: Debian/Ubuntu commonly 999, Arch 955, others
+# 998). Set it in .env so the container user has read/write on the socket.
+# Look it up with `stat -c %g /var/run/docker.sock`. Ignored on Docker
+# Desktop, where socket access isn't gated by Unix gid.
 services:
   dev:
     image: ghcr.io/ramfjord/home-media-server-dev:latest
@@ -34,11 +51,14 @@ services:
     user: "${UID:-1000}:${GID:-1000}"
     environment:
       HOME: /home/mediaserver
-    working_dir: /workspace
+    working_dir: ${PWD}
     volumes:
-      - .:/workspace
-      - ./.devhome:/home/mediaserver
+      - ${PWD}:${PWD}
+      - ${PWD}/.devhome:/home/mediaserver
       - ${SSH_DIR:-~/.ssh}:/run/host-ssh:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "${DOCKER_GID:-999}"
     command: bash
     stdin_open: true
     tty: true
