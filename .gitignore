@@ -19,6 +19,8 @@ services/caddy/certs/
 Makefile.local
 audio-normalizer/examples
 .swank-port
+.swank-lsp-port
+.vlime-port
 .mcp.json
 .claude
 

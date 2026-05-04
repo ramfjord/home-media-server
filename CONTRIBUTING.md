@@ -24,6 +24,10 @@ Three template-scope macros, each expanding through the primitive `with-service-
 
 For predicates reused across several call sites in one template, use `macrolet` at the top of the template to define a named field-scope macro — see `services/homer/config.yml.elp` for an example. New service fields are picked up automatically from any key appearing in service yaml; no per-field declaration step today.
 
+## Dev REPL
+
+`script/start-image.sh` boots an SBCL image with `:mediaserver` loaded and the manifest read, so `for-service`/`loop-services` macros work and editor LSPs can attach. See [docs/dev-environment.md](docs/dev-environment.md) for editor wiring (Emacs SLIME via `.dir-locals.el`, vim/vlime, nvim+swank-lsp, container/nix overrides).
+
 ## Native vs. dev container
 
 You can work either natively (with the tooling listed in the root `Dockerfile` installed on your host) or inside the dev container (`script/dev` wraps `docker compose run --rm dev`; pass a command or get a bash shell). The `Makefile` and `script/build.sh` don't care which — they just call `sbcl` and `qlot`, expecting them on `PATH`. Native is faster for tight inner loops; the container is the friction-free path for anyone who'd rather not set up SBCL.
