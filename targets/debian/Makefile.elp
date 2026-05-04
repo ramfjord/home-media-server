@@ -4,7 +4,7 @@ STAGING := <%= install_base %>/staging
 INSTALL_BASE := <%= install_base %>
 
 chownall:
-<%- (loopservices (services :where dockerized) -%>
+<%- (loop-services (service-where dockerized) -%>
 <%- (let* ((owner (or user name))
            (grp   (or group (format nil "$$(id -gn ~A)" owner)))
            (gid   (if group

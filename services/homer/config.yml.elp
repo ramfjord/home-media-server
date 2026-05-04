@@ -5,35 +5,34 @@ logo: logo.png
 icon: fas fa-server
 
 <%-
-(let* ((displayable
-        (remove-if (lambda (s)
-                     (or (string= (field :name s) "homer")
-                         (string= (field :partof s) "dashboard")
-                         (not (field :port s))))
-                   services))
-       (categories
-        (sort (remove-duplicates (mapcar (field :partof) displayable)
-                                 :test #'equal)
-              #'string<))
-       (icons '(("downloading" . "fas fa-cloud-download-alt")
-                ("streaming"   . "fas fa-play-circle")
-                ("vpn"         . "fas fa-shield-alt")
-                ("security"    . "fas fa-lock")
-                ("monitoring"  . "fas fa-chart-line"))))
-  (loopservices (displayable)
-    (let ((icon-path (format nil "services/homer/assets/tools/~A.png" name)))
-      (unless (probe-file icon-path)
-        (error "Missing icon for ~A: ~A" name icon-path))))
+(macrolet ((displayable? ()
+             '(and (not (string= name "homer"))
+                   (not (string= partof "dashboard"))
+                   port)))
+  (let ((categories
+         (sort (remove-duplicates
+                (mapcar (field :partof) (service-where (displayable?)))
+                :test #'equal)
+               #'string<))
+        (icons '(("downloading" . "fas fa-cloud-download-alt")
+                 ("streaming"   . "fas fa-play-circle")
+                 ("vpn"         . "fas fa-shield-alt")
+                 ("security"    . "fas fa-lock")
+                 ("monitoring"  . "fas fa-chart-line"))))
+    (loop-services (service-where (displayable?))
+      (let ((icon-path (format nil "services/homer/assets/tools/~A.png" name)))
+        (unless (probe-file icon-path)
+          (error "Missing icon for ~A: ~A" name icon-path))))
 -%>
 services:
 <%- (dolist (category categories) -%>
   - name: "<%= (str:capitalize category) %>"
     icon: "<%= (or (cdr (assoc category icons :test #'equal)) "fas fa-folder") %>"
     items:
-<%-   (loopservices (displayable :where (equal partof category)) -%>
+<%-   (loop-services (service-where (and (displayable?) (equal partof category))) -%>
       - name: "<%= (str:capitalize name) %>"
         subtitle: "<%= desc %>"
         logo: "assets/tools/<%= name %>.png"
         url: "<%= (or public_url (format nil "http://~A:~A" hostname port)) %>"
         target: "_blank"
-<%- ))) -%>
+<%- )))) -%>

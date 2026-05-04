@@ -5,7 +5,7 @@ global:
     host: <%= hostname %>
 
 scrape_configs:
-<%- (loopservices (services :where (and port healthz)) -%>
+<%- (loop-services (service-where (and port healthz)) -%>
   - job_name: "<%= name %>"
     metrics_path: <%= healthz %>
     static_configs:

@@ -2,7 +2,7 @@ receivers:
   prometheus:
     config:
       scrape_configs:
-<%- (loopservices (services :where scrape_target) -%>
+<%- (loop-services (service-where scrape_target) -%>
 <%-   (let ((st (and (listp scrape_target) scrape_target))) -%>
         - job_name: '<%= name %>'
           static_configs:
@@ -41,7 +41,7 @@ receivers:
         #       replacement: "snmp-exporter:9116"
 
         # HTTP probes via blackbox exporter for dockerized services
-<%- (loopservices (services :where (and dockerized healthz)) -%>
+<%- (loop-services (service-where (and dockerized healthz)) -%>
         - job_name: 'http_probe_<%= name %>'
           metrics_path: /probe
           params:

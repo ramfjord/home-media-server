@@ -1,4 +1,4 @@
-<%- (loopservices (services :where (and use_vpn port)) -%>
+<%- (loop-services (service-where (and use_vpn port)) -%>
 :<%= port %> {
   reverse_proxy fx-wireguard:<%= port %>
   tls /etc/caddy/certs/fullchain.pem /etc/caddy/certs/privkey.pem

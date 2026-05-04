@@ -3,7 +3,7 @@
 ;;; The single public accessor for service plists.
 ;;;
 ;;; Templates write (field :name svc) / (field :use_vpn svc) / etc.
-;;; (or `name` / `use_vpn` when in a with-service-scope or loopservices
+;;; (or `name` / `use_vpn` when in a for-service or loop-services
 ;;; body). There is no service class. Missing keys return NIL so
 ;;; template conditionals stay clean.
 ;;;

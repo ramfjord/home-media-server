@@ -22,6 +22,15 @@
    keyword keys used at the kwarg-dispatch boundary."
   (alexandria:ensure-symbol key :mediaserver))
 
+(defun find-service-by-name (key services-list)
+  "Look up the service named KEY (a keyword like :radarr) in
+   SERVICES-LIST by case-insensitive string match against :name.
+   Errors when no match — typo guard for FOR-SERVICE."
+  (or (find (symbol-name key) services-list
+            :key (lambda (s) (field :name s))
+            :test #'string-equal)
+      (error "no service named ~S" key)))
+
 (defun service-field-plist (service globals)
   "Plist binding every key in *KNOWN-FIELDS* (direct or derived) to
    its value on SERVICE, keyed by the field keywords. Direct fields
@@ -40,8 +49,11 @@
 
 (defmacro with-service-scope (svc &body body)
   "Bind every key in *KNOWN-FIELDS* as a symbol-macro that looks up
-   that field on SVC. Lets template bodies write `name` instead of
+   that field on SVC. Lets BODY write `name` instead of
    (field :name svc).
+
+   The primitive binder. FOR-SERVICE, SERVICE-WHERE, and LOOP-SERVICES
+   all expand through this — the LSP behavior is uniform across them.
 
    FIELD's globals fallback comes from the GLOBALS symbol in the ELP
    context. Expanded at template-compile time, so *KNOWN-FIELDS* must
@@ -59,19 +71,47 @@
                     *known-fields*)
          ,@body))))
 
-(defmacro loopservices ((source-form &key (where t)) &body body)
-  "Iterate over services from SOURCE-FORM, exposing each service's
-   fields as bare symbols (`name`, `port`, `public_url`, ...) within
-   BODY and any :where clause.
+(defmacro for-service (key &body body)
+  "Resolve KEY (a keyword like :radarr) to a service plist by name
+   lookup against the SERVICES binding from the render context, then
+   bind every field for BODY's scope via WITH-SERVICE-SCOPE.
 
-   SOURCE-FORM is evaluated once in the enclosing scope. :WHERE, when
-   given, is evaluated in field-scope per candidate; services for
-   which it returns NIL are skipped."
+   The file-top wrap for per-service .elp templates:
+
+     <%- (for-service :radarr -%>
+     ...template body referring to `name`, `port`, `group`, etc...
+     <%- ) -%>"
   (let ((s (gensym "SVC")))
-    `(dolist (,s ,source-form)
+    `(let ((,s (find-service-by-name ,key services)))
+       (with-service-scope ,s ,@body))))
+
+(defmacro service-where (predicate)
+  "Return the subset of SERVICES for which PREDICATE (evaluated in
+   field-scope per service) returns non-nil. Compose with plain CL:
+
+     (service-where (and dockerized port))
+     (service-where (and (not (string= partof \"dashboard\")) port))
+
+   Pass the result to LOOP-SERVICES, MAPCAR, etc. — it's just a list."
+  (let ((s (gensym "SVC")))
+    `(remove-if-not (lambda (,s) (with-service-scope ,s ,predicate))
+                    services)))
+
+(defmacro loop-services (source &body body)
+  "Iterate SOURCE (a list of service plists), exposing each service's
+   fields as bare symbols (`name`, `port`, `public_url`, ...) within
+   BODY.
+
+   To iterate every service: pass SERVICES directly. To iterate a
+   filtered subset: build SOURCE with SERVICE-WHERE, e.g.
+
+     (loop-services (service-where dockerized) ...)
+     (loop-services (service-where (and use_vpn port)) ...)
+     (loop-services services ...)   ; all services, no filter"
+  (let ((s (gensym "SVC")))
+    `(dolist (,s ,source)
        (with-service-scope ,s
-         (when ,where
-           ,@body)))))
+         ,@body))))
 
 (defun service-render-context (service config)
   "Build the plist of ELP keyword arguments for a render call.

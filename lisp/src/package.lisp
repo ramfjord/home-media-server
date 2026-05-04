@@ -12,4 +12,9 @@
    :derive-fields
    :emit-manifest
    ;; Render primitive
-   :render-template-to-string))
+   :render-template-to-string
+   ;; Template-scope macros (used inside .elp files)
+   :with-service-scope
+   :for-service
+   :service-where
+   :loop-services))

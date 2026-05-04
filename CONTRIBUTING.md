@@ -2,17 +2,27 @@
 
 Conventions for editing this repo. Pairs with [README.md](README.md), which covers what the project is and how to deploy it.
 
+## Predicate naming
+
+Boolean-returning Lisp helpers in this project use a Ruby-style `?` suffix (`displayable?`, `dockerized?`) rather than CL's standard `-p`/`p` (`displayable-p`, `dockerizedp`). `?` is a valid CL symbol character with no reader significance, so it works everywhere — the choice is for readability.
+
 ## ELP template style
 
 Stack adjacent close-paren-only tags onto a single tag, Lisp-style: prefer `<%- )) -%>` over two consecutive `<%- ) -%>` lines (and `))) ` for three, etc.). The trim semantics are the same and the rendered output is byte-identical, but it reads as the Lisp form it actually is rather than as HTML-like standalone tags.
 
 ## Field access in templates
 
-Templates render with every service field bound as a bare symbol (`name`, `port`, `use_vpn`, `compose_file`, ...). Hyphens in field keys become underscores, matching Ruby convention. Inside per-service templates and inside `loopservices`, write `<%= name %>` rather than `(field :name service)`.
+Templates render with every service field bound as a bare symbol (`name`, `port`, `use_vpn`, `compose_file`, ...). Hyphens in field keys become underscores, matching Ruby convention. Inside per-service templates and inside `loop-services`, write `<%= name %>` rather than `(field :name service)`.
 
 For higher-order use, `field` is curried: `(field :name)` returns a lookup function — `(mapcar (field :name) services)` and `(remove-if-not (field :dockerized) services)`. The two-arg form `(field :key svc)` is the explicit lookup; key always comes first.
 
-`loopservices` iterates with field-scope: `(loopservices (services :where (and port use_vpn)) ...)` exposes each service's fields as bare symbols inside body and `:where`. New service fields (declared or computed) are added via `define-service-field` in `lisp/src/field.lisp`.
+Three template-scope macros, each expanding through the primitive `with-service-scope`:
+
+- `(loop-services SOURCE ...)` iterates a list of service plists, exposing each service's fields as bare symbols inside the body. Pass `services` to iterate everything, or build a filtered list with `service-where`.
+- `(service-where PRED)` evaluates PRED in field-scope per service, returns the matching subset as a list. Compose with plain CL: `(service-where (and dockerized port))`. Common pairing: `(loop-services (service-where ...) ...)`.
+- `(for-service :name ...)` resolves `:name` against `services`, then binds fields for the body. The file-top wrap for per-service `.elp` templates: write it once at the top and the rest of the file can use `<%= name %>`, `<%= group %>`, etc.
+
+For predicates reused across several call sites in one template, use `macrolet` at the top of the template to define a named field-scope macro — see `services/homer/config.yml.elp` for an example. New service fields are picked up automatically from any key appearing in service yaml; no per-field declaration step today.
 
 ## Native vs. dev container
 
