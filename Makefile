@@ -73,9 +73,14 @@ all: $(ALL_OUTPUTS)
 	@find config -type f -not -path 'config/systemd/*' -not -name .manifest -printf '%P\n' | sort > config/.manifest
 	@cd config/systemd && find . -type f -not -name .mediaserver.manifest -printf '%P\n' | sort > .mediaserver.manifest
 
-# Per-service ELPs in services/. Service name implicit from path.
+# Per-service ELPs in services/. Today no per-service template references
+# its own service's fields at file-scope — bare-symbol fields in these
+# templates appear inside loop-services bodies, which establish their own
+# per-iteration scope. So no --service kwarg is needed here. If a future
+# template wants its file-top fields bound, add `<%- (for-service :NAME -%>`
+# at the top and `<%- ) -%>` at the bottom; no Makefile change required.
 config/%: services/%.elp bin/render services/manifest.yaml | $$(@D)/
-	@bin/render --service $(firstword $(subst /, ,$*)) $< > $@ && printf .
+	@bin/render $< > $@ && printf .
 
 # Singleton ELPs under targets/debian/ (no service in path).
 config/%: targets/debian/%.elp bin/render services/manifest.yaml | $$(@D)/
