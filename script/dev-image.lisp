@@ -25,6 +25,31 @@
 
 (in-package :cl-user)
 
+(defun overlay-in-package (canvas pkg)
+  "Overlay `(in-package :PKG)` on the first all-whitespace line of
+   CANVAS that's wide enough to hold it. Mutates and returns CANVAS.
+   Used so swank-lsp's PARSE-IN-PACKAGE picks up the project's
+   package on extracted .elp content. Doing this in dev-image.lisp
+   (not in ELP) keeps the elp library project-agnostic — the project
+   knows its own package name."
+  (let* ((form (format nil "(in-package :~A)" pkg))
+         (form-len (length form))
+         (canvas-len (length canvas))
+         (line-start 0))
+    (loop while (< line-start canvas-len) do
+      (let* ((next-newline (or (position #\Newline canvas :start line-start)
+                               canvas-len))
+             (line-len (- next-newline line-start))
+             (all-whitespace
+               (loop for i from line-start below next-newline
+                     always (char= (schar canvas i) #\Space))))
+        (when (and all-whitespace (>= line-len form-len))
+          (replace canvas form
+                   :start1 line-start :end1 (+ line-start form-len))
+          (return-from overlay-in-package canvas))
+        (setf line-start (1+ next-newline)))))
+  canvas)
+
 ;; Project root is two levels up from this file (script/dev-image.lisp).
 ;; Computed at load time, so the script can be invoked from any cwd.
 (defparameter *project-root*
@@ -104,11 +129,23 @@
      (handler-case
          (progn
            (asdf:load-system :swank-lsp)
-           ;; ELP's self-registration runs at :elp load time, but
-           ;; mediaserver loads :elp before swank-lsp exists, so the
-           ;; first attempt no-ops. Now that swank-lsp is in, retry.
-           (when (find-package :elp)
-             (funcall (read-from-string "elp:enable-lsp-integration")))
+           ;; Wire ELP into swank-lsp's byte-stream-translator
+           ;; registry so .elp files get parsed as the embedded Lisp
+           ;; only. ELP and swank-lsp don't know about each other —
+           ;; the project that uses both is the one that connects
+           ;; them, here. Mediaserver renders templates in :mediaserver,
+           ;; so we overlay (in-package :mediaserver) on the extracted
+           ;; text to give swank-lsp the right package context.
+           (when (and (find-package :elp) (find-package :swank-lsp))
+             (let ((registry
+                     (symbol-value (find-symbol "*BYTE-STREAM-TRANSLATORS*"
+                                                :swank-lsp)))
+                   (extract (find-symbol "EXTRACT-CODE-TEXT" :elp)))
+               (setf (gethash "elp" registry)
+                     (lambda (uri text)
+                       (declare (ignore uri))
+                       (let ((extracted (funcall extract text)))
+                         (overlay-in-package extracted "mediaserver"))))))
            (let ((*default-pathname-defaults* *project-root*))
              (funcall (read-from-string "swank-lsp:start-and-publish") :port 0))
            ;; Clean up the published port file on exit so a stale path
