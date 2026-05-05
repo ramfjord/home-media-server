@@ -42,6 +42,23 @@
 (pushnew (merge-pathnames "lisp/" *project-root*) asdf:*central-registry*
          :test #'equal)
 
+;; Opportunistic local-override for :elp. mediaserver depends on :elp
+;; via qlot (pinned to a published version), but during dev we usually
+;; want the working tree at $ELP_DIR (default ~/projects/elp/) so
+;; in-progress changes (e.g. embed.lisp / extract-code-text) are
+;; visible in the image. Pushing onto *central-registry* first makes
+;; ASDF pick our copy over qlot's. Skipped silently if no local copy
+;; exists — qlot's version takes over.
+(let* ((env-elp (uiop:getenv "ELP_DIR"))
+       (default-elp (merge-pathnames "projects/elp/" (user-homedir-pathname)))
+       (candidate (cond ((and env-elp (probe-file (merge-pathnames "elp.asd" env-elp)))
+                         (truename env-elp))
+                        ((probe-file (merge-pathnames "elp.asd" default-elp))
+                         (truename default-elp)))))
+  (when candidate
+    (pushnew candidate asdf:*central-registry* :test #'equal)
+    (format t ";; dev-image: using local elp at ~A~%" candidate)))
+
 (format t "~&;; dev-image: loading :mediaserver~%")
 (asdf:load-system :mediaserver)
 
@@ -87,6 +104,11 @@
      (handler-case
          (progn
            (asdf:load-system :swank-lsp)
+           ;; ELP's self-registration runs at :elp load time, but
+           ;; mediaserver loads :elp before swank-lsp exists, so the
+           ;; first attempt no-ops. Now that swank-lsp is in, retry.
+           (when (find-package :elp)
+             (funcall (read-from-string "elp:enable-lsp-integration")))
            (let ((*default-pathname-defaults* *project-root*))
              (funcall (read-from-string "swank-lsp:start-and-publish") :port 0))
            ;; Clean up the published port file on exit so a stale path
