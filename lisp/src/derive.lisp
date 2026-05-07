@@ -36,4 +36,14 @@
     (setf (getf s :has_unit)      (and (getf s :unit) t))
     (setf (getf s :config_files)  (config-files-for name))
     (setf (getf s :group)         (getf s :group))
+    ;; A service is "displayable" when it has a web UI worth surfacing
+    ;; on the homer dashboard and fronting via caddy. Excludes homer
+    ;; itself (it's the dashboard, not a card on it) and anything in
+    ;; the dashboard partof (caddy). Requires a `port` so there's
+    ;; something for caddy to reverse-proxy to.
+    (setf (getf s :displayable)
+          (and (not (string= name "homer"))
+               (not (string= (getf s :partof) "dashboard"))
+               (getf s :port)
+               t))
     s))

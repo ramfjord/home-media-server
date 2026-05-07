@@ -54,18 +54,12 @@
   (dolist (s services)
     (unless (getf s :name)
       (error "service missing :name: ~S" s)))
-  ;; Host-port conflict check: only services that auto-publish their
-  ;; :port to the host can collide. Services with :public_url are
-  ;; reached through a proxy and don't bind a host port (see
-  ;; emit-compose), so exclude them.
-  (let ((ports (remove nil
-                       (mapcar (lambda (s)
-                                 (and (not (getf s :public_url))
-                                      (getf s :port)))
-                               services))))
-    (dolist (p (remove-duplicates ports))
-      (when (> (count p ports) 1)
-        (error "duplicate port across services: ~A" p))))
+  ;; No host-port collision check: caddy is the only host-facing
+  ;; service (publishes 80/443) and the docker-compose template no
+  ;; longer auto-publishes :port. :port is now strictly the in-
+  ;; container port for caddy upstream lookup. Multiple services
+  ;; can share a :port value without conflict (e.g. several services
+  ;; whose container listens on 8080).
   services)
 
 ;;; Top-level load entry point.

@@ -5,6 +5,9 @@ receivers:
 <%- (loop-services (service-where scrape_target) -%>
 <%-   (let ((st (and (listp scrape_target) scrape_target))) -%>
         - job_name: '<%= name %>'
+<%-     (let ((mpath (getf st :metrics_path))) (when mpath -%>
+          metrics_path: <%= mpath %>
+<%-     )) -%>
           static_configs:
             - targets:
               - <%= (or (getf st :host) name) %>:<%= (or (getf st :port) port) %><%= (or (getf st :path) "") %>

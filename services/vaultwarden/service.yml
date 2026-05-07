@@ -11,7 +11,7 @@ docker_config:
   - "<%= install_base %>/config/vaultwarden:/data"
   environment:
   - LOG_LEVEL=info
-  - DOMAIN=<%= (for-service :vaultwarden public_url) %>
+  - DOMAIN=https://<%= hostname %>/vaultwarden
   - SMTP_HOST=smtp
   - SMTP_PORT=25
   - SMTP_SECURITY=off

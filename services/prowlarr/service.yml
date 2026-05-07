@@ -6,6 +6,8 @@ port: 9696
 use_vpn: true
 docker_config:
   image: lscr.io/linuxserver/prowlarr:latest
+  environment:
+  - PROWLARR__SERVER__URLBASE=/prowlarr
   volumes:
   - "<%= install_base %>/config/prowlarr:/config"
   restart: unless-stopped

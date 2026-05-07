@@ -26,8 +26,6 @@ service_overrides:
     # Postfix gates outbound mail by envelope-sender domain to prevent
     # the relay from being used as an open relay.
     allowed_sender_domains: "gmail.com"
-  vaultwarden:
-    public_url: "https://vaultwarden.example.com"
   # Each *arr app exposes an API key in its own settings UI; copy the
   # generated value here. Their exporters and Prowlarr consume it via
   # for-service.

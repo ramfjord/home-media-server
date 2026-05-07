@@ -283,62 +283,41 @@ small systemd units + a Makefile target + docs.
      host-port publishing. Path-routing changes don't affect
      scraping.
 
-4. **Path-routing: *arr stack on subpaths.** radarr, sonarr,
-   prowlarr, qbittorrent — currently caddy reverse-proxies them
-   per-port (`:7878 { reverse_proxy wireguard:7878 }`). Convert
-   to subpath under the tailnet FQDN.
-   - **Caddyfile.elp** — drop the `loop-services (service-where
-     (and use_vpn port))` per-port block; replace with subpath
-     handlers under the main FQDN site. Upstream stays
-     `wireguard:<port>` since these share its netns.
-   - **radarr/sonarr/prowlarr** — add
-     `<APP>__SERVER__URLBASE=/<svc>` env var. *arr v4+ honors
-     this and emits prefixed asset URLs.
-   - **qbittorrent** — set the WebUI path via env / config.
-     qBittorrent's URL-base support is fragile under reverse
-     proxies (WebSocket and dynamic asset URLs sometimes break);
-     verify with the user during live testing. Fallback if it
-     doesn't behave: keep qbit on a host port, leave the others
-     subpath-routed.
-   *Verify:* `make all` + `make check` clean; rendered Caddyfile
-   has subpath handles for all four; *arr docker-compose env
-   blocks show `URLBASE`. Live-functional verification deferred.
+4. ✅ **Lift `:displayable` to derived field; loop in Caddyfile;
+   cover every UI service.** Single commit collapsing the
+   originally-planned commits 4–6. Adds `:displayable` to
+   `lisp/src/derive.lisp` (named after the homer macrolet
+   predicate). Caddyfile.elp is rewritten as a `loop-services
+   (service-where displayable)` emitting `handle /<name>/* {
+   reverse_proxy <upstream>:<port> }` per service, where upstream
+   is `wireguard` for `use_vpn` services else `<name>`. Homer at
+   `/` via a trailing `handle { reverse_proxy homer:8080 }`.
+   Per-app URLBase / external-URL settings for each newly-routed
+   service: *arrs (`<APP>__SERVER__URLBASE`), jellyfin
+   (`JELLYFIN_BaseUrl` + updated `PublishedServerUrl`),
+   vaultwarden (`DOMAIN` derived directly from `<%= hostname %>`,
+   replacing the old `for-service :vaultwarden public_url`
+   indirection), cadvisor (`--url_base_prefix=/cadvisor`).
+   Otelcol scrape template (`services/otelcol/otelcol-config.yaml.elp`)
+   extended to honor `:metrics_path` in `scrape_target`; cadvisor
+   declares `metrics_path: /cadvisor/metrics` to match its prefix.
+   Homer card URLs become `https://<%= hostname %>/<%= name %>`
+   (was `http://hostname:port`); `public_url` removed from
+   vaultwarden's `config.local.yml.example` block. Caddy's `ports:`
+   pruned to just `80:80` and `443:443`; cadvisor and homer drop
+   their `ports:` mappings (auto-publish would have re-published
+   them otherwise). Auto-publish branch in
+   `targets/debian/__service__/docker-compose.yml.elp` removed
+   (caddy is the sole host-facing service); the corresponding
+   port-uniqueness validator in `lisp/src/config.lisp` removed
+   along with it. Homer's `port:` corrected from 80 (host-side
+   wart) to 8080 (container port).
+   *Verify:* `make all` clean; `make check` clean (caddy adapt +
+   compose + prometheus + alertmanager); `make test` clean after
+   refreshing the fx-prometheus golden (auto-publish removal
+   strips the `ports: - 19090:19090` line).
 
-5. **Path-routing: jellyfin, vaultwarden, homer.** The
-   user-facing web apps. All on `https://<%= hostname %>`.
-   - **jellyfin** — at `/jellyfin`. Set `JELLYFIN_BaseUrl=/jellyfin`
-     (or jellyfin's network-config equivalent). Update
-     `JELLYFIN_PublishedServerUrl=https://<%= hostname %>/jellyfin`.
-     Add Caddyfile handler.
-   - **vaultwarden** — at `/vaultwarden` (canonical service name —
-     consistent with the `services/vaultwarden/` directory).
-     Update vaultwarden env
-     `DOMAIN=https://<%= hostname %>/vaultwarden`. Caddyfile
-     `handle_path /vaultwarden/* { reverse_proxy vaultwarden:80 }`
-     replaces the previous `:8000` site block. The dedicated TLS
-     directives (`tls /etc/caddy/certs/...`) move to the parent
-     site block so they cover all subpaths uniformly.
-   - **homer** — fronted at `/`; trailing `handle { reverse_proxy
-     homer:80 }` (matches everything not caught by a `/<name>/*`
-     handler). Drop homer's host port from `services/homer/service.yml`.
-   *Verify:* `make all` + `make check` clean; rendered Caddyfile
-   shows the unified `https://<%= hostname %>` site with subpath
-   handlers for every UI service and a trailing root handler for
-   homer.
-
-6. **Update homer card URLs to use subpath form.** Edit
-   `services/homer/config.yml.elp` so the card-URL template
-   becomes `https://<%= hostname %>/<%= name %>` (or honor
-   `public_url` if set — but `public_url` overrides for vaultwarden
-   etc. should also be removed from `config.local.yml.example`
-   since the canonical URL is now derivable from `name`). Drop
-   the `:port` form since published ports are gone post-commit-5.
-   Keep services without UIs (the exporters) out of homer as today.
-   *Verify:* `make all` clean; rendered `config/homer/config.yml`
-   shows HTTPS subpath URLs for every service that's a homer
-   card; `make check` clean.
-
-7. **Render `tailscale-cert.{service,timer}` under `targets/debian/`.**
+5. **Render `tailscale-cert.{service,timer}` under `targets/debian/`.**
    New `targets/debian/systemd/tailscale-cert.service.elp` and
    `tailscale-cert.timer.elp` (singletons, no `__service__`
    placeholder). Service runs `tailscale cert --cert-file=...
@@ -357,7 +336,7 @@ small systemd units + a Makefile target + docs.
    TARGET creates `<install_base>/certs/<host>.{crt,key}` with
    correct perms.
 
-8. **Switch caddy to mount `<install_base>/certs`; drop the
+6. **Switch caddy to mount `<install_base>/certs`; drop the
    per-service cert rsync.** Update `services/caddy/service.yml`
    volume from `<%= install_base %>/config/caddy/certs:/etc/caddy/certs:ro`
    to `<%= install_base %>/certs:/certs:ro`. Update Caddyfile
@@ -365,14 +344,14 @@ small systemd units + a Makefile target + docs.
    `services/caddy/certs/` from the laptop working tree (drop
    the gitignore entry) and from the deploy. **Bootstrap
    prerequisite:** the operator must have run the new cert
-   service once (commit 7's manual verify) so the cert exists at
+   service once (commit 5's manual verify) so the cert exists at
    the new path before caddy restarts.
    *Verify:* `make all` + `make check` clean; `make test`
    passes; `docker exec caddy ls /certs` (post-deploy) shows
    the tailnet-hostname files; HTTPS still works for every
    subpath-routed service.
 
-9. **Add `make cert` target + bootstrap docs.** New phony target
+7. **Add `make cert` target + bootstrap docs.** New phony target
    in the root Makefile: `cert: ; $(REMOTE) sudo systemctl start
    tailscale-cert.service` (one-shot manual seed/renewal). Enable
    the timer by default in `systemd-enable` so a fresh box gets

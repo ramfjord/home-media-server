@@ -7,8 +7,6 @@ services:
     user: ${SVC_UID}:${SVC_GID}
     networks:
     - mediaserver
-    ports:
-    - 19090:19090
     image: example.invalid/fx-prometheus:latest
     command:
     - --config.file=/etc/prometheus/prometheus.yml

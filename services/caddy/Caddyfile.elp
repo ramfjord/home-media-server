@@ -1,41 +1,18 @@
-<%- (loop-services (service-where (and use_vpn port)) -%>
-:<%= port %> {
-  reverse_proxy wireguard:<%= port %>
-}
-<%- ) -%>
-
-# Unified HTTPS site — every web UI under one cert. caddy listens on
-# 443 and auto-redirects 80 → 443 when a hostname is given.
+# Unified HTTPS site — every displayable service path-routed under
+# its name; homer at root. caddy listens on 443 and auto-redirects
+# 80 → 443 because the site is declared with a hostname.
 <%= hostname %> {
   tls /etc/caddy/certs/<%= hostname %>.crt /etc/caddy/certs/<%= hostname %>.key
+<%- (loop-services (service-where displayable) %>
 
-  handle /prometheus/* {
-    reverse_proxy prometheus:9090
+  handle /<%= name %>/* {
+    reverse_proxy <%= (if use_vpn "wireguard" name) %>:<%= port %>
   }
+<%- ) %>
 
-  handle /alertmanager/* {
-    reverse_proxy alertmanager:9093
-  }
-
-  handle /grafana/* {
-    reverse_proxy grafana:3000
-  }
-
-  handle /blackbox-exporter/* {
-    reverse_proxy blackbox-exporter:9115
-  }
-}
-
-# Vaultwarden reverse proxy with HTTPS (legacy: still on :8000 until
-# commit 5 moves it under /vaultwarden on the unified site).
-<%= hostname %>:8000 {
-  tls /etc/caddy/certs/<%= hostname %>.crt /etc/caddy/certs/<%= hostname %>.key
-
-  # Main API and web vault
-  reverse_proxy vaultwarden:80 {
-    header_up X-Real-IP {remote_host}
-    header_up X-Forwarded-For {remote_host}
-    header_up X-Forwarded-Proto https
-    header_up X-Forwarded-Host {host}
+  # Homer dashboard at root. Hand-written: it's excluded from
+  # `displayable` and its container listens on 8080 (not :port).
+  handle {
+    reverse_proxy homer:8080
   }
 }

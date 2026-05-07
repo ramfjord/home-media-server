@@ -2,10 +2,13 @@
 name: cadvisor
 partof: monitoring
 desc: Container metrics exporter
-port: 8081
+port: 8080
 user: root  # needs root to read docker.sock and /dev/kmsg
 scrape_target:
-  port: 8080  # cadvisor listens on 8080 inside docker; host-side is 8081 because caddy owns 8080.
+  port: 8080
+  # `--url_base_prefix=/cadvisor` mounts cadvisor's UI and /metrics
+  # under /cadvisor; otelcol must scrape the prefixed path.
+  metrics_path: /cadvisor/metrics
   # cadvisor measures containers; a metric's `service` is the container
   # being measured, not whatever the cadvisor scrape job's service is.
   metric_relabel_configs:
@@ -13,8 +16,8 @@ scrape_target:
       target_label: service
 docker_config:
   image: gcr.io/cadvisor/cadvisor:latest
-  ports:
-  - 8081:8080
+  command:
+  - "--url_base_prefix=/cadvisor"
   volumes:
   - "/:/rootfs:ro"
   - "/var/run:/var/run:ro"

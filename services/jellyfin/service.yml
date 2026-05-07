@@ -17,6 +17,7 @@ docker_config:
   - "<%= media_path %>/Movies:/media/Movies:ro"
   - "/tmp:/tmp"
   environment:
-  - JELLYFIN_PublishedServerUrl=http://<%= hostname %>:8096
+  - JELLYFIN_PublishedServerUrl=https://<%= hostname %>/jellyfin
+  - JELLYFIN_BaseUrl=/jellyfin
   restart: unless-stopped
 order: 70

@@ -7,6 +7,8 @@ use_vpn: true
 group: mediaserver
 docker_config:
   image: lscr.io/linuxserver/sonarr:latest
+  environment:
+  - SONARR__SERVER__URLBASE=/sonarr
   volumes:
   - "<%= install_base %>/config/sonarr:/config"
   - "<%= media_path %>:/data"
