@@ -9,7 +9,14 @@ FileLogger\Path=/config/qBittorrent/logs
 
 [BitTorrent]
 Session\AddTorrentStopped=false
+Session\DefaultSavePath=/data/torrents
 Session\ExcludedFileNames=
+Session\GlobalDLSpeedLimit=0
+Session\GlobalUPSpeedLimit=5000000
+Session\IgnoreSlowTorrentsForQueueing=true
+Session\MaxActiveDownloads=5
+Session\MaxActiveTorrents=30
+Session\MaxActiveUploads=20
 Session\Port=59732
 Session\QueueingSystemEnabled=true
 Session\SSL\Port=31137
@@ -28,6 +35,7 @@ Proxy\Profiles\Misc=true
 Proxy\Profiles\RSS=true
 
 [Preferences]
+Downloads\SavePath=/data/torrents
 General\Locale=en
 MailNotification\req_auth=true
 WebUI\AuthSubnetWhitelist=0.0.0.0/0
