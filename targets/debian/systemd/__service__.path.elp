@@ -6,7 +6,12 @@ Description=Config watcher for <%= name %>
 <%- (dolist (f config_files) -%>
 PathChanged=<%= install_base %>/config/<%= name %>/<%= f %>
 <% ) -%>
-Unit=<%= (if sighup_reload (format nil "~A-reload.service" name) (format nil "~A.service" name)) %>
+<%# sighup_reload=true → SIGHUP the container (graceful, no restart). -%>
+<%# unset → trigger compose-reload, which `systemctl restart`s the .service. -%>
+<%# Previously fell back to <name>.service directly, but `systemctl start` -%>
+<%# on an already-active unit is a no-op, so config-file changes silently -%>
+<%# didn't take effect on services without sighup_reload. -%>
+Unit=<%= name %>-<%= (if sighup_reload "reload" "compose-reload") %>.service
 
 [Install]
 WantedBy=<%= name %>.service

@@ -38,7 +38,7 @@ config.manifest.removed systemd.manifest.removed:
 	@grep -Fxv -f $< $(word 2,$^) | sed 's|^|$(dir $(word 2,$^))|' > $@
 
 preview: chownall config.manifest.removed systemd.manifest.removed
-	@rsync -ac --no-times --dry-run --itemize-changes --exclude=systemd --exclude='*.manifest.removed' "$(STAGING)/" "$(INSTALL_BASE)/config/"
+	@rsync -ac --no-times --inplace --dry-run --itemize-changes --exclude=systemd --exclude='*.manifest.removed' "$(STAGING)/" "$(INSTALL_BASE)/config/"
 	@rsync -ac --no-times --dry-run --itemize-changes "$(STAGING)/systemd/" /etc/systemd/system/
 	@echo "=== files that would be removed from $(INSTALL_BASE)/config/ ==="
 	@cat config.manifest.removed
@@ -46,7 +46,7 @@ preview: chownall config.manifest.removed systemd.manifest.removed
 	@cat systemd.manifest.removed
 
 deploy-files: chownall config.manifest.removed systemd.manifest.removed
-	@rsync -ac --no-times --exclude=systemd --exclude='*.manifest.removed' "$(STAGING)/" "$(INSTALL_BASE)/config/"
+	@rsync -ac --no-times --inplace --exclude=systemd --exclude='*.manifest.removed' "$(STAGING)/" "$(INSTALL_BASE)/config/"
 	@rsync -ac --no-times "$(STAGING)/systemd/" /etc/systemd/system/
 	@xargs -r rm -f < config.manifest.removed
 	@xargs -r rm -f < systemd.manifest.removed
