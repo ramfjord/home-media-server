@@ -14,7 +14,8 @@
                  (:file "derive")
                  (:file "yaml")
                  (:file "config")
-                 (:file "render")))
+                 (:file "render")
+                 (:file "manifest-render")))
    (:module "cli"
     :pathname "cli/"
     :components ((:file "render")

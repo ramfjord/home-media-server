@@ -2,6 +2,7 @@ tmp
 config.local.yml
 config/
 **/services/manifest.yaml
+**/services/manifest.yaml.elp
 elp
 .claude
 

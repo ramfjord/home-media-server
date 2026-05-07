@@ -74,9 +74,12 @@
 
 (defun yaml-ambiguous-string-p (s)
   "True for strings that, emitted as a plain YAML scalar, would parse
-   back as a different type (int, bool, null)."
+   back as a different type (int, bool, null), or that carry ELP
+   template tags we want to preserve verbatim through the round-trip."
   (or (member s '("true" "false" "yes" "no" "null" "~") :test #'equal)
-      (and (> (length s) 0) (every #'digit-char-p s))))
+      (and (> (length s) 0) (every #'digit-char-p s))
+      (search "<%" s)
+      (search "%>" s)))
 
 (defmethod yaml.emitter:emit-object (em (obj string))
   (yaml.emitter:emit-scalar em obj

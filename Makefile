@@ -46,13 +46,17 @@ lisp/.qlot/installed.stamp: lisp/qlfile.lock
 # test/ builds its own manifest from test/services/.
 SERVICE_YMLS := $(wildcard services/*/service.yml)
 OVERRIDE_YMLS := $(wildcard globals.yml) $(wildcard config.local.yml)
-services/manifest.yaml: bin/build-service-config $(SERVICE_YMLS) $(OVERRIDE_YMLS)
+# build-service-config writes both files in one run: manifest.yaml.elp is
+# the merged-but-unrendered intermediate (cross-service tags still live);
+# manifest.yaml is the ELP-rendered final form templates consume.
+services/manifest.yaml services/manifest.yaml.elp &: bin/build-service-config $(SERVICE_YMLS) $(OVERRIDE_YMLS)
 	@bin/build-service-config \
 	  $(addprefix --override=,$(OVERRIDE_YMLS)) \
-	  $(SERVICE_YMLS) > $@
+	  -o services/manifest.yaml.elp \
+	  $(SERVICE_YMLS)
 
 clean:
-	rm -rf config/ services/manifest.yaml
+	rm -rf config/ services/manifest.yaml services/manifest.yaml.elp
 
 # Wipe everything regenerable, including built binaries and the qlot
 # dist. Use before validating a from-scratch dev-container build (e.g.

@@ -26,20 +26,13 @@
     ;; Otherwise overrides wins.
     (t overrides)))
 
-;;; ELP preprocessing of service.yml.
+;;; service.yml is parsed as pure YAML — no ELP preprocessing.
 ;;;
-;;; Each service.yml is rendered through ELP before YAML parsing:
-;;; templates write <%= install_base %> instead of literal paths.
-;;; The context-alist binds the same names the YAML files use
-;;; (underscored: install_base, media_path, hostname).
-
-(defun render-service-yaml (path globals)
-  "ELP-render the file at PATH with GLOBALS bound, return the rendered
-   YAML string. GLOBALS is already a plist with keyword keys, which
-   is exactly the kwarg shape ELP:RENDER consumes — apply directly."
-  (with-output-to-string (s)
-    (let ((*package* (find-package :mediaserver)))
-      (apply #'elp:render (pathname path) s globals))))
+;;; Any <%= ... %> tags inside service.yml string values flow through to
+;;; the merged manifest verbatim. They get resolved later by the manifest
+;;; render pass (see manifest-render.lisp), which has globals + the full
+;;; service set in scope and can therefore handle cross-service refs that
+;;; a per-file pre-pass cannot.
 
 ;;; Validation
 ;;;
@@ -110,21 +103,13 @@
                                           :service_overrides)))
                   override-paths
                   :initial-value nil))
-         ;; Render + parse each service.yml. The per-service override (if
-         ;; any) is merged into elp-globals for that file's render so
-         ;; templates can reference override keys (e.g. public_url) as
-         ;; bare symbols, just like they reference globals.
+         ;; Parse each service.yml as pure YAML. <%= ... %> tags inside
+         ;; string values are preserved as text and resolved by the later
+         ;; manifest render pass.
          (services
           (remove nil
                   (mapcar (lambda (path)
-                            (let* ((svc-name (car (last (pathname-directory path))))
-                                   (ovr (and overrides
-                                             (getf overrides
-                                                   (alexandria:make-keyword
-                                                    (string-upcase svc-name)))))
-                                   (scope (if ovr (deep-merge elp-globals ovr) elp-globals))
-                                   (parsed (cl-yaml:parse
-                                            (render-service-yaml path scope))))
+                            (let ((parsed (cl-yaml:parse (probe-file path))))
                               (and parsed (yaml->plist parsed))))
                           service-paths)))
          ;; Stable sort by :order; missing -> end.
