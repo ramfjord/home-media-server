@@ -181,7 +181,7 @@ small systemd units + a Makefile target + docs.
      commits' text refers to the same `hostname` field — no new
      global will be introduced.
 
-2. **Add Caddyfile validation to `make check`.** New
+2. ✅ **Add Caddyfile validation to `make check`.** New
    `checks/caddy.sh.elp` rendering to a script that runs
    `docker run --rm -v $PWD/config/caddy:/etc/caddy:ro caddy:latest
    caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile`.
@@ -195,6 +195,26 @@ small systemd units + a Makefile target + docs.
    commit 1's rendered Caddyfile; intentionally break the
    Caddyfile (e.g. unmatched brace) → `make check` fails with a
    readable parse error; restore.
+   **Decisions:**
+   - `caddy adapt` chosen over `caddy validate --config` —
+     validate triggers TLS-app provisioning which tries to open
+     the cert file; that file isn't present in CI/dev contexts
+     (and won't be at all post-commit-7 until the timer runs).
+     adapt is parse-only and catches structural Caddyfile errors.
+   - Stdout discarded with `> /dev/null` — caddy adapt prints
+     the JSON-converted config on success which is noisy. Errors
+     still surface via stderr + non-zero exit; `set -euo pipefail`
+     preserves the failure mode.
+   - Pre-existing caddy-side warnings ("Unnecessary header_up
+     X-Forwarded-For", "Caddyfile input is not formatted") are
+     non-fatal stderr warnings and don't fail the check. Worth
+     a follow-up `caddy fmt`/header cleanup, but out of scope
+     here.
+   - Negative test: appended `GARBAGE_TOKEN_NOT_VALID }` to a
+     rendered Caddyfile, `make check/caddy` failed with `Error:
+     subject does not qualify for certificate: '}'` and `make:
+     *** [Makefile:104: check/caddy] Error 1`. After re-render,
+     check passes.
 
 3. **Path-routing: monitoring stack on subpaths.** Switch
    prometheus, alertmanager, grafana, cadvisor, blackbox-exporter
