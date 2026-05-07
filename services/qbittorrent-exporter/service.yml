@@ -10,7 +10,7 @@ docker_config:
   environment:
   - QBITTORRENT_HOST=qbittorrent
   - QBITTORRENT_PORT=8080
-  - QBITTORRENT_USERNAME=<%= qbittorrent_username %>
-  - QBITTORRENT_PASSWORD=<%= qbittorrent_password %>
+  - QBITTORRENT_USERNAME=<%= (for-service :qbittorrent username) %>
+  - QBITTORRENT_PASSWORD=<%= (for-service :qbittorrent password) %>
   restart: unless-stopped
 order: 180

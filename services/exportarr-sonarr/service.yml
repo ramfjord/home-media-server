@@ -12,7 +12,7 @@ docker_config:
   - "--url"
   - http://caddy:8989
   - "--api-key"
-  - "<%= sonarr_apikey %>"
+  - "<%= (for-service :sonarr apikey) %>"
   - "--port"
   - '9145'
   restart: unless-stopped
