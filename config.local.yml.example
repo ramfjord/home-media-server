@@ -4,6 +4,12 @@
 install_base: /opt/mediaserver
 media_path: /data
 
+# FQDN the deploy host is reached at — used in service URLs (jellyfin
+# PublishedServerUrl, prometheus external_url, homer card links) and as
+# the tailscale-cert subject for caddy's HTTPS site. Use the tailnet
+# (MagicDNS) name so links work over tailscale and the cert SAN matches.
+hostname: your-host.your-tailnet.ts.net
+
 # Per-service public URLs (used in emails, dashboards, etc.) live in
 # service_overrides as `public_url` — see Vaultwarden below.
 service_overrides:

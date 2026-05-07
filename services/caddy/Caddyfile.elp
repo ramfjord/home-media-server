@@ -5,8 +5,8 @@
 <%- ) -%>
 
 # Vaultwarden reverse proxy with HTTPS
-fatlaptop.hippogriff-stonecat.ts.net:8000 {
-  tls /etc/caddy/certs/fatlaptop.hippogriff-stonecat.ts.net.crt /etc/caddy/certs/fatlaptop.hippogriff-stonecat.ts.net.key
+<%= hostname %>:8000 {
+  tls /etc/caddy/certs/<%= hostname %>.crt /etc/caddy/certs/<%= hostname %>.key
 
   # Main API and web vault
   reverse_proxy vaultwarden:80 {
