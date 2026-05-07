@@ -4,6 +4,7 @@ services:
     container_name: fx-sonarr
     environment:
     - TZ=Etc/UTC
+    - PEER_PORT=18080
     user: ${SVC_UID}:${SVC_GID}
     network_mode: container:wireguard
     image: example.invalid/fx-sonarr:latest

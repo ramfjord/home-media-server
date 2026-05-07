@@ -4,10 +4,18 @@ partof: downloading
 desc: Fixture TV indexer
 port: 18989
 use_vpn: true
+# Computed-column demo: peer_port is itself a template referencing
+# another service. The env var below references this field, so two
+# iterations of the manifest renderer are required to converge — one
+# resolves peer_port, the next resolves the env var that points at it.
+peer_port: "<%= (for-service :fx-qbittorrent port) %>"
 docker_config:
   image: example.invalid/fx-sonarr:latest
   volumes:
   - "<%= install_base %>/config/fx-sonarr:/config"
   - "<%= media_path %>:/data"
+  environment:
+  - TZ=Etc/UTC
+  - "PEER_PORT=<%= (for-service :fx-sonarr peer_port) %>"
   restart: unless-stopped
 order: 30
