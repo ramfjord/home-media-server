@@ -9,6 +9,8 @@ docker_config:
   - "<%= install_base %>/config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro"
   - "<%= install_base %>/config/caddy/certs:/etc/caddy/certs:ro"
   ports:
+  - 80:80
+  - 443:443
   - 8080:8080
   - 7878:7878
   - 8989:8989

@@ -10,6 +10,8 @@ docker_config:
   environment:
   - GF_SECURITY_ADMIN_USER=admin
   - GF_SECURITY_ADMIN_PASSWORD=admin
+  - GF_SERVER_ROOT_URL=https://<%= hostname %>/grafana
+  - GF_SERVER_SERVE_FROM_SUB_PATH=true
   volumes:
   - "<%= install_base %>/config/grafana:/var/lib/grafana"
   - "<%= install_base %>/config/grafana/grafana.ini:/etc/grafana/grafana.ini:ro"

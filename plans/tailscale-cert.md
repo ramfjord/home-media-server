@@ -216,11 +216,15 @@ small systemd units + a Makefile target + docs.
      *** [Makefile:104: check/caddy] Error 1`. After re-render,
      check passes.
 
-3. **Path-routing: monitoring stack on subpaths.** Switch
-   prometheus, alertmanager, grafana, cadvisor, blackbox-exporter
+3. ✅ **Path-routing: monitoring stack on subpaths (cadvisor deferred).**
+   Switch prometheus, alertmanager, grafana, blackbox-exporter
    from host-port-publishing to caddy subpath routing under
    `https://<%= hostname %>` (no explicit port — caddy listens on
-   443). Per-service changes:
+   443). Cadvisor deferred: its `--url_base_prefix` moves
+   `/metrics` to `/cadvisor/metrics`, which requires extending
+   `services/otelcol/otelcol-config.yaml.elp` to honor a
+   `:metrics_path` field in `scrape_target`. Pulling that into a
+   later commit keeps this one focused. Per-service changes:
    - **Caddyfile.elp** — replace the existing structure with a
      single `https://<%= hostname %>` site block containing
      `handle_path /<name>/* { reverse_proxy <name>:<port> }` per
@@ -249,6 +253,35 @@ small systemd units + a Makefile target + docs.
    app's compose validate); the rendered docker-compose for each
    shows the new env/args and no host port; goldens refreshed if
    any fixture exercises these.
+   **Decisions:**
+   - **`handle` not `handle_path`.** Each app's `--web.route-prefix`
+     (or grafana's `serve_from_sub_path`) wants to *see* the prefix
+     in the upstream request — preserving it is the correct
+     pattern. `handle_path` would strip and would force every app
+     to think it's at `/`, which would then re-emit links without
+     prefix and break the chain.
+   - **Cadvisor deferred** (see commit body). Untouched here;
+     still on host port 8081 until a follow-up commit extends
+     otelcol's scrape template to support `:metrics_path`.
+   - **Existing caddy ports kept, new ones added.** Caddy now
+     publishes 80/443 (for the unified site) *and* the legacy
+     7878/8989/9696/8080/8000. Pruning the legacy ports happens
+     in commits 4 (VPN-arr per-port blocks) and 5 (vault on
+     :8000). Doing it incrementally lets each commit's deploy
+     stay testable.
+   - **No `http://<%= hostname %>` redirect block needed.** Caddy
+     auto-issues an HTTP→HTTPS redirect for any site declared
+     with a hostname; no explicit `:80` block required. Once
+     port 80 is published (this commit), the redirect kicks in
+     for free.
+   - **prometheus alerting** updated to `path_prefix:
+     /alertmanager` so prometheus pushes alerts to the prefixed
+     alertmanager endpoint.
+   - **`scrape_target: true` for these services unchanged.**
+     otelcol scrapes them via docker DNS at the in-container
+     port (`prometheus:9090`, etc.) — independent of caddy's
+     host-port publishing. Path-routing changes don't affect
+     scraping.
 
 4. **Path-routing: *arr stack on subpaths.** radarr, sonarr,
    prowlarr, qbittorrent — currently caddy reverse-proxies them

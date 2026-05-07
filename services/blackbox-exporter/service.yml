@@ -8,6 +8,8 @@ docker_config:
   image: prom/blackbox-exporter:latest
   command:
   - "--config.file=/etc/blackbox-exporter/blackbox.yml"
+  - "--web.external-url=https://<%= hostname %>/blackbox-exporter"
+  - "--web.route-prefix=/blackbox-exporter"
   volumes:
   - "<%= install_base %>/config/prometheus/blackbox.yml:/etc/blackbox-exporter/blackbox.yml:ro"
   restart: unless-stopped
