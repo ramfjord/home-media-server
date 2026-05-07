@@ -7,7 +7,9 @@ MAKEFLAGS += -j$(shell nproc)
 ALL_SERVICES := $(patsubst services/%/,%,$(sort $(dir $(wildcard services/*/.))))
 
 # services/<svc>/<path>.elp -> config/<svc>/<path>
-SERVICE_ELPS := $(shell find services -name '*.elp' 2>/dev/null)
+# mindepth 2 skips services/manifest.yaml.elp (the manifest intermediate
+# is a build output, not a per-service template).
+SERVICE_ELPS := $(shell find services -mindepth 2 -name '*.elp' 2>/dev/null)
 SERVICE_OUTPUTS := $(patsubst services/%.elp,config/%,$(SERVICE_ELPS))
 
 # Most .elp files are rendered directly into the config directoy

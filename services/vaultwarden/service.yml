@@ -15,7 +15,7 @@ docker_config:
   - SMTP_HOST=smtp
   - SMTP_PORT=25
   - SMTP_SECURITY=off
-  - SMTP_FROM=<%= smtp_from %>
+  - SMTP_FROM=<%= (for-service :smtp from) %>
   - SMTP_FROM_NAME=Vaultwarden
   restart: unless-stopped
 order: 90
