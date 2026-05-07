@@ -1,0 +1,16 @@
+---
+name: smtp
+partof: infra
+desc: SMTP relay (forwards mail from any service to upstream provider)
+user: root  # postfix manages its own internal users
+docker_config:
+  image: boky/postfix:latest
+  environment:
+  - ALLOWED_SENDER_DOMAINS=<%= allowed_sender_domains %>
+  - RELAYHOST=[<%= relay_host %>]:<%= relay_port %>
+  - RELAYHOST_USERNAME=<%= relay_username %>
+  - RELAYHOST_PASSWORD=<%= relay_password %>
+  - RELAYHOST_TLS_LEVEL=encrypt
+  - HOSTNAME=smtp.mediaserver.local
+  restart: unless-stopped
+order: 5

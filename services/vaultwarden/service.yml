@@ -11,5 +11,11 @@ docker_config:
   - "<%= install_base %>/config/vaultwarden:/data"
   environment:
   - LOG_LEVEL=info
+  - DOMAIN=<%= public_url %>
+  - SMTP_HOST=smtp
+  - SMTP_PORT=25
+  - SMTP_SECURITY=off
+  - SMTP_FROM=<%= smtp_from %>
+  - SMTP_FROM_NAME=Vaultwarden
   restart: unless-stopped
 order: 90

@@ -110,12 +110,21 @@
                                           :service_overrides)))
                   override-paths
                   :initial-value nil))
-         ;; Render + parse each service.yml.
+         ;; Render + parse each service.yml. The per-service override (if
+         ;; any) is merged into elp-globals for that file's render so
+         ;; templates can reference override keys (e.g. public_url) as
+         ;; bare symbols, just like they reference globals.
          (services
           (remove nil
                   (mapcar (lambda (path)
-                            (let ((parsed (cl-yaml:parse
-                                           (render-service-yaml path elp-globals))))
+                            (let* ((svc-name (car (last (pathname-directory path))))
+                                   (ovr (and overrides
+                                             (getf overrides
+                                                   (alexandria:make-keyword
+                                                    (string-upcase svc-name)))))
+                                   (scope (if ovr (deep-merge elp-globals ovr) elp-globals))
+                                   (parsed (cl-yaml:parse
+                                            (render-service-yaml path scope))))
                               (and parsed (yaml->plist parsed))))
                           service-paths)))
          ;; Stable sort by :order; missing -> end.
