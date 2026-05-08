@@ -33,3 +33,9 @@ test/config-lisp/
 .devhome/
 .env
 tools/api-config/.image-built
+
+# Legacy cert location — pre tailscale-cert migration certs may still
+# sit here on dev machines that haven't cleaned up. Real certs now
+# live under <install_base>/certs/ on the deploy target. Hard-block
+# to keep keys out of commits.
+services/caddy/certs/

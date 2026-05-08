@@ -3,6 +3,12 @@ name: qbittorrent
 partof: downloading
 desc: torrent client
 port: 8080
+# qBittorrent has no URL-base preference — it serves at / and assumes
+# root. Give it its own caddy site on 8443 instead of fighting that.
+# When changing this, update services/caddy/service.yml `ports:` so
+# caddy publishes the matching host port.
+public_port: 8443
+public_path: /
 use_vpn: true
 group: mediaserver
 docker_config:

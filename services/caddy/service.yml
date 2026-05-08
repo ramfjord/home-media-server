@@ -15,8 +15,14 @@ docker_config:
   volumes:
   - "<%= install_base %>/config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro"
   - "<%= install_base %>/certs:/certs:ro"
+  # 80/443 carry the main path-routed FQDN site. Each dedicated-port
+  # site emitted from Caddyfile.elp (services with `public_port` !=
+  # 443) needs its host port published here too — caddy can't bind
+  # what the container doesn't expose. Keep this list in sync with
+  # the `public_port:` values across services/*/service.yml.
   ports:
   - 80:80
   - 443:443
+  - 8443:8443  # qbittorrent (public_port: 8443)
   restart: unless-stopped
 order: 10

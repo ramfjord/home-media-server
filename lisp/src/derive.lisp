@@ -46,4 +46,27 @@
                (not (string= (getf s :partof) "dashboard"))
                (getf s :port)
                t))
+    ;; How a displayable service is reached from outside. Defaults
+    ;; route every service through caddy's main FQDN site on 443 at
+    ;; /<name>. Override either to reshape:
+    ;;   public_port: 8443    (own caddy site on a dedicated host port,
+    ;;                         e.g. for apps like qBittorrent that
+    ;;                         can't be served under a path prefix)
+    ;;   public_path: "/"     (skip the /<name> path component)
+    ;; A service that opts into a non-default public_port must also
+    ;; have that port published on caddy's container — see
+    ;; services/caddy/service.yml `ports:`. Kept manual so the set of
+    ;; ports caddy binds is visible at one glance in one file.
+    (setf (getf s :public_port) (or (getf s :public_port) 443))
+    (setf (getf s :public_path) (or (getf s :public_path)
+                                    (format nil "/~A" name)))
+    (setf (getf s :public_url)
+          (or (getf s :public_url)
+              (when (getf s :displayable)
+                (let ((host (getf globals :hostname))
+                      (port (getf s :public_port))
+                      (path (getf s :public_path)))
+                  (if (= port 443)
+                      (format nil "https://~A~A" host path)
+                      (format nil "https://~A:~A~A" host port path))))))
     s))
