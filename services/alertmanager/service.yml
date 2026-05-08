@@ -10,7 +10,7 @@ docker_config:
   command:
   - "--config.file=/etc/alertmanager/alertmanager.yml"
   - "--web.external-url=https://<%= hostname %>/alertmanager"
-  - "--route-prefix=/alertmanager"
+  - "--web.route-prefix=/alertmanager"
   volumes:
   - "<%= install_base %>/config/alertmanager:/etc/alertmanager:ro"
   restart: unless-stopped
