@@ -46,17 +46,30 @@
                (not (string= (getf s :partof) "dashboard"))
                (getf s :port)
                t))
-    ;; How a displayable service is reached from outside. Defaults
-    ;; route every service through caddy's main FQDN site on 443 at
-    ;; /<name>. Override either to reshape:
-    ;;   public_port: 8443    (own caddy site on a dedicated host port,
-    ;;                         e.g. for apps like qBittorrent that
-    ;;                         can't be served under a path prefix)
-    ;;   public_path: "/"     (skip the /<name> path component)
-    ;; A service that opts into a non-default public_port must also
-    ;; have that port published on caddy's container — see
-    ;; services/caddy/service.yml `ports:`. Kept manual so the set of
-    ;; ports caddy binds is visible at one glance in one file.
+    ;; How a displayable service is reached from outside. Three modes,
+    ;; controlled by two fields:
+    ;;
+    ;;   via_caddy: true (default)   — fronted by caddy. public_port
+    ;;     defaults to 443 (path-routed under <hostname>/<public_path>
+    ;;     in caddy's main site). Set public_port to a non-443 value
+    ;;     to get a dedicated caddy site on that host port (for apps
+    ;;     like qBittorrent that don't tolerate a path prefix).
+    ;;   public_path: "/foo" (default /<name>) — the path slot on the
+    ;;     main site, only consulted when public_port=443.
+    ;;
+    ;;   via_caddy: false             — caddy doesn't know about it.
+    ;;     Container reaches the LAN/tailnet directly via its own
+    ;;     :port. Typically paired with `network_mode: host` in
+    ;;     docker_config so things like SSDP/DLNA discovery work
+    ;;     (Jellyfin → Roku). public_url is plain http because there's
+    ;;     no caddy doing TLS termination.
+    ;;
+    ;; A non-default public_port also needs the matching `<p>:<p>`
+    ;; entry in services/caddy/service.yml `ports:` so caddy publishes
+    ;; the port on the host. Kept manual so the set of ports caddy
+    ;; binds is visible in one place.
+    (setf (getf s :via_caddy)
+          (if (member :via_caddy s) (getf s :via_caddy) t))
     (setf (getf s :public_port) (or (getf s :public_port) 443))
     (setf (getf s :public_path) (or (getf s :public_path)
                                     (format nil "/~A" name)))
@@ -66,7 +79,11 @@
                 (let ((host (getf globals :hostname))
                       (port (getf s :public_port))
                       (path (getf s :public_path)))
-                  (if (= port 443)
-                      (format nil "https://~A~A" host path)
-                      (format nil "https://~A:~A~A" host port path))))))
+                  (cond
+                    ((not (getf s :via_caddy))
+                     (format nil "http://~A:~A/" host (getf s :port)))
+                    ((= port 443)
+                     (format nil "https://~A~A" host path))
+                    (t
+                     (format nil "https://~A:~A~A" host port path)))))))
     s))

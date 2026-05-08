@@ -4,7 +4,7 @@
 # the site is declared with a hostname.
 <%= hostname %> {
   tls /certs/<%= hostname %>.crt /certs/<%= hostname %>.key
-<%- (loop-services (service-where (and displayable (= public_port 443))) %>
+<%- (loop-services (service-where (and displayable via_caddy (= public_port 443))) %>
 
   handle <%= public_path %>/* {
     reverse_proxy <%= (if use_vpn "wireguard" name) %>:<%= port %>
@@ -24,7 +24,7 @@
 # typically "/" for these because the upstream doesn't know about a
 # prefix. Caddy's container must publish each of these ports; see
 # services/caddy/service.yml.
-<%- (loop-services (service-where (and displayable (/= public_port 443))) %>
+<%- (loop-services (service-where (and displayable via_caddy (/= public_port 443))) %>
 <%= hostname %>:<%= public_port %> {
   tls /certs/<%= hostname %>.crt /certs/<%= hostname %>.key
   reverse_proxy <%= (if use_vpn "wireguard" name) %>:<%= port %>

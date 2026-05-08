@@ -5,8 +5,14 @@ desc: Alternative media streaming server
 port: 8096
 group: mediaserver
 healthz: "/health"
+# Off-caddy: Jellyfin runs on host networking so SSDP/DLNA broadcasts
+# reach LAN clients (Roku, smart TVs). Reachable directly at
+# http://<hostname>:8096/ from tailnet, and at the host's LAN IP:8096
+# from local network. No TLS — caddy isn't in the path.
+via_caddy: false
 docker_config:
   image: jellyfin/jellyfin:latest
+  network_mode: host
   volumes:
   - "<%= install_base %>/config/jellyfin:/config"
   # Bind /cache (transcodes, fontconfig, thumbnails) so the deploy chown
@@ -17,7 +23,6 @@ docker_config:
   - "<%= media_path %>/Movies:/media/Movies:ro"
   - "/tmp:/tmp"
   environment:
-  - JELLYFIN_PublishedServerUrl=https://<%= hostname %>/jellyfin
-  - JELLYFIN_BaseUrl=/jellyfin
+  - JELLYFIN_PublishedServerUrl=http://<%= hostname %>:8096
   restart: unless-stopped
 order: 70
