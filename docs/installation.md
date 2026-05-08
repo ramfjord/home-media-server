@@ -67,7 +67,7 @@ Or persist it in a git-ignored `Makefile.local`:
 TARGET := myhost
 ```
 
-Three things need to be true on the target before the first `make install`:
+Four things need to be true on the target before the first `make install`:
 
 **Your SSH key is authorized.** From your control machine (or inside the dev container — your `~/.ssh` is already mounted):
 
@@ -89,14 +89,25 @@ ssh-copy-id <user>@<target>
 script/install-host-config.sh <target>
 ```
 
+**Tailscale is installed and authenticated on the target.** Caddy serves HTTPS for everything at `https://<tailnet-fqdn>/<service>` and gets its cert from `tailscale cert`. Without an authenticated tailscaled, the first `make install` will fail at the cert-bootstrap step.
+
+```bash
+ssh <target> "curl -fsSL https://tailscale.com/install.sh | sh"
+ssh <target> sudo tailscale up
+```
+
+`config.local.yml`'s `hostname:` must be the tailnet FQDN of the target (e.g. `<target>.<tailnet>.ts.net`) so the cert subject and the URLs caddy serves line up.
+
 ## First install
 
 Once everything above is in place — Linux + Docker on the server, SSH key authorized, passwordless sudo set up, `TARGET` set in `Makefile.local`, `config.local.yml` filled in — bring the stack up:
 
-1. `make install` — renders configs and rsyncs them to the target.
-2. `make systemctl-enable` — enables the mediaserver systemd network and target plus the per-service path watchers, and starts the network.
+1. `make install` — renders configs, rsyncs them to the target, and bootstraps the tailscale cert if it's not already on disk (`<install_base>/certs/<hostname>.{crt,key}`).
+2. `make systemctl-enable` — enables the mediaserver systemd network and target plus the per-service path watchers, starts the network, and enables the daily `tailscale-cert.timer` for ongoing cert renewal.
 3. `make systemctl-start` — brings the whole stack up.
-4. Open `http://<target>/` in a browser (use the Tailscale hostname if you set Tailscale up). The Homer dashboard lists every running service — click into Jellyfin, Radarr, etc. to start configuring them via their own UIs.
+4. Open `https://<tailnet-fqdn>/` in a browser. The Homer dashboard lists every running service — click into Jellyfin, Radarr, etc. (each at `/<service>` under the same FQDN) to start configuring them via their own UIs.
+
+If you ever need to force a cert re-issuance outside the normal renewal cycle: `make cert` runs the `tailscale-cert.service` unit on demand.
 
 If a service doesn't show up or shows red on Homer, `make systemctl-status` gives a per-service active/inactive table.
 

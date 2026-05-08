@@ -26,7 +26,7 @@ FANOUT_OUTPUTS := $(patsubst targets/debian/%.elp,config/%,$(call fanout_paths,$
 ALL_OUTPUTS := $(SERVICE_OUTPUTS) $(SINGLETON_OUTPUTS) $(FANOUT_OUTPUTS)
 DIRS := $(sort $(dir $(ALL_OUTPUTS)))
 
-.PHONY: clean distclean check test sync install preview all $(addprefix systemctl-,start stop restart enable disable status)
+.PHONY: clean distclean check test sync install preview all cert $(addprefix systemctl-,start stop restart enable disable status)
 
 # Lisp binaries. One CLI entry point per file in lisp/cli/; each
 # produces bin/<name>. All Lisp sources, the .asd, and qlot's state
@@ -113,7 +113,7 @@ test: $(patsubst lisp/cli/%.lisp,bin/%,$(wildcard lisp/cli/*.lisp))
 
 # --- Deployment and systemctl-helpers
 
-ifneq (,$(filter sync install preview restart-% systemctl-%,$(MAKECMDGOALS)))
+ifneq (,$(filter cert sync install preview restart-% systemctl-%,$(MAKECMDGOALS)))
 ifndef TARGET
 $(error TARGET must be set (e.g. TARGET=fatlaptop, or via Makefile.local))
 endif
@@ -145,6 +145,14 @@ systemctl-enable:
 	@ssh $(TARGET) sudo systemctl enable --now mediaserver-network.service
 	@ssh $(TARGET) sudo systemctl enable mediaserver.target
 	@ssh $(TARGET) sudo systemctl enable --now $(basename -a config/systemd/*.path)
+	@ssh $(TARGET) sudo systemctl enable --now tailscale-cert.timer
+
+# One-shot manual run of the tailscale-cert renewal unit. Useful as a
+# bootstrap step before `make systemctl-start` so the cert exists at
+# <install_base>/certs/<hostname>.{crt,key} by the time caddy starts.
+# Subsequent renewals are handled by tailscale-cert.timer.
+cert:
+	@ssh $(TARGET) sudo systemctl start tailscale-cert.service
 
 systemctl-disable:
 	@ssh $(TARGET) sudo systemctl disable mediaserver.target

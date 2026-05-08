@@ -33,26 +33,28 @@ The table below is a map of what's in the repo. Day-to-day, you don't need it �
 
 Detailed setup notes for individual services live in their own folders under `services/<name>/README.md` where applicable.
 
-| Service | Group | Port | Description |
+Every web UI is reached at `https://<tailnet-fqdn>/<path>`, with caddy fronting the lot under one cert. Plain `/` lands on the Homer dashboard.
+
+| Service | Group | Path | Description |
 |---|---|---|---|
-| [Radarr](services/radarr/) | downloading | 7878 | Movie discovery and management |
-| [Sonarr](services/sonarr/) | downloading | 8989 | TV show discovery and management |
-| [Prowlarr](services/prowlarr/) | downloading | 9696 | Indexer manager feeding Radarr/Sonarr |
-| [qBittorrent](services/qbittorrent/) | downloading | 8080 | Torrent client (shares WireGuard's netns) |
-| [Jellyfin](services/jellyfin/) | streaming | 8096 | Media server with optional GPU transcoding |
-| [Vaultwarden](services/vaultwarden/) | security | 8000 | Self-hosted Bitwarden-compatible password manager |
-| [Prometheus](services/prometheus/) | monitoring | 9090 | Metrics storage and alerting |
-| [OpenTelemetry Collector](services/otelcol/) | monitoring | 8888 | Metrics aggregation hub |
-| [Grafana](services/grafana/) | monitoring | 3000 | Dashboards and visualization |
-| [Alertmanager](services/alertmanager/) | monitoring | 9093 | Alert routing |
-| [cAdvisor](services/cadvisor/) | monitoring | 8081 | Container metrics |
-| [node-exporter](services/node-exporter/) | monitoring | 9100 | Host (OS-level) metrics |
-| [Blackbox Exporter](services/blackbox-exporter/) | monitoring | 9115 | HTTP/TCP endpoint probes |
+| [Radarr](services/radarr/) | downloading | `/radarr` | Movie discovery and management |
+| [Sonarr](services/sonarr/) | downloading | `/sonarr` | TV show discovery and management |
+| [Prowlarr](services/prowlarr/) | downloading | `/prowlarr` | Indexer manager feeding Radarr/Sonarr |
+| [qBittorrent](services/qbittorrent/) | downloading | `/qbittorrent` | Torrent client (shares WireGuard's netns) |
+| [Jellyfin](services/jellyfin/) | streaming | `/jellyfin` | Media server with optional GPU transcoding |
+| [Vaultwarden](services/vaultwarden/) | security | `/vaultwarden` | Self-hosted Bitwarden-compatible password manager |
+| [Prometheus](services/prometheus/) | monitoring | `/prometheus` | Metrics storage and alerting |
+| [OpenTelemetry Collector](services/otelcol/) | monitoring | — | Metrics aggregation hub (no UI) |
+| [Grafana](services/grafana/) | monitoring | `/grafana` | Dashboards and visualization |
+| [Alertmanager](services/alertmanager/) | monitoring | `/alertmanager` | Alert routing |
+| [cAdvisor](services/cadvisor/) | monitoring | `/cadvisor` | Container metrics |
+| [node-exporter](services/node-exporter/) | monitoring | — | Host (OS-level) metrics |
+| [Blackbox Exporter](services/blackbox-exporter/) | monitoring | `/blackbox-exporter` | HTTP/TCP endpoint probes |
 | [exportarr-radarr](services/exportarr-radarr/) | monitoring | — | Radarr metrics exporter |
 | [exportarr-sonarr](services/exportarr-sonarr/) | monitoring | — | Sonarr metrics exporter |
 | [qbittorrent-exporter](services/qbittorrent-exporter/) | monitoring | — | qBittorrent metrics exporter |
-| [Homer](services/homer/) | dashboard | 80 | Service-discovery landing page |
-| [Caddy](services/caddy/) | dashboard | — | Reverse proxy bridging WireGuard-isolated services and HTTPS for Vaultwarden |
+| [Homer](services/homer/) | dashboard | `/` | Service-discovery landing page |
+| [Caddy](services/caddy/) | dashboard | — | TLS terminator + reverse proxy for everything above |
 | [WireGuard](services/wireguard/) | vpn | — | VPN tunnel; Radarr/Sonarr/Prowlarr/qBittorrent share its netns via `network_mode: container:wireguard` |
 
 ## Networking
@@ -62,7 +64,7 @@ Two distinct VPNs:
 - **WireGuard** (container) — routes the downloading stack through an external VPN provider for privacy on their outbound traffic.
 - **Tailscale** (host) — encrypted remote access to the box from personal devices. No internet-facing ports.
 
-Caddy bridges the two and terminates HTTPS for the few services that require it (e.g. Vaultwarden).
+Caddy is the single HTTPS front door — it terminates TLS for every service and reverse-proxies them under their `/<name>` path. The cert (issued by `tailscale cert` for the host's tailnet FQDN) is renewed automatically by a systemd timer; see [docs/installation.md](docs/installation.md).
 
 ## Storage
 

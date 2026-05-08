@@ -1,4 +1,4 @@
-.PHONY: chownall deploy preview
+.PHONY: chownall deploy deploy-files preview
 
 STAGING := /opt/fx-mediaserver/staging
 INSTALL_BASE := /opt/fx-mediaserver
@@ -45,9 +45,24 @@ preview: chownall config.manifest.removed systemd.manifest.removed
 	@echo "=== unit files that would be removed from /etc/systemd/system/ ==="
 	@cat systemd.manifest.removed
 
-deploy: chownall config.manifest.removed systemd.manifest.removed
+deploy-files: chownall config.manifest.removed systemd.manifest.removed
 	@rsync -ac --no-times --exclude=systemd --exclude='*.manifest.removed' "$(STAGING)/" "$(INSTALL_BASE)/config/"
 	@rsync -ac --no-times "$(STAGING)/systemd/" /etc/systemd/system/
 	@xargs -r rm -f < config.manifest.removed
 	@xargs -r rm -f < systemd.manifest.removed
 	@systemctl daemon-reload
+
+# Real file target: if the cert is on disk, this is up-to-date and
+# the recipe doesn't run. If it's missing (fresh box, or operator
+# rm'd it to force re-issuance), systemctl start fires
+# tailscale-cert.service which writes the cert. Order-only dep on
+# deploy-files (the `|`) means we run *after* the rsync+daemon-reload
+# but the always-phony deploy-files doesn't propagate "always rebuild"
+# semantics to the cert target — so subsequent deploys are no-ops
+# here while the timer handles renewal. Fails loudly if tailscale
+# isn't authenticated yet, prompting `tailscale up` + retry.
+$(INSTALL_BASE)/certs/fx-host.crt: | deploy-files
+	@echo "Bootstrapping tailscale cert for fx-host..."
+	@systemctl start tailscale-cert.service
+
+deploy: $(INSTALL_BASE)/certs/fx-host.crt

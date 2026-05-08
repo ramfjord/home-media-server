@@ -391,21 +391,27 @@ small systemd units + a Makefile target + docs.
    the tailnet-hostname files; HTTPS still works for every
    subpath-routed service.
 
-8. **Add `make cert` target + bootstrap docs.** New phony target
-   in the root Makefile: `cert: ; $(REMOTE) sudo systemctl start
-   tailscale-cert.service` (one-shot manual seed/renewal). Enable
-   the timer by default in `systemd-enable` so a fresh box gets
-   renewal automatically once the cert has been seeded. Document
-   the host-bootstrap sequence in `docs/installation.md` (or new
-   `docs/host-bootstrap.md`): install docker + systemd +
-   tailscale on the target, `tailscale up`, `make install`,
-   `make cert`, `systemctl enable --now tailscale-cert.timer`.
-   Also document the new "everything-through-caddy" URL scheme
-   in README.md (services table needs a refresh — host ports
-   become subpaths).
-   *Verify:* `make cert` round-trips to TARGET, the unit fires,
-   cert file mtime updates; bootstrap sequence reads coherently
-   end-to-end.
+8. ✅ **Auto-bootstrap cert in deploy; `make cert` button; docs.**
+   `targets/debian/Makefile.elp` gains a real file target —
+   `$(INSTALL_BASE)/certs/<%= hostname %>.crt` — with an
+   order-only dep on a phony `deploy-files` target (the rsync +
+   daemon-reload). Make's "is the file there" check is the
+   conditional: if the cert exists, the recipe is skipped; if
+   missing, `systemctl start tailscale-cert.service` fires after
+   deploy-files completes. Subsequent deploys are no-ops here
+   while the timer handles renewal. Root `Makefile` gets a
+   `cert` phony target as a manual force-renew button
+   (`ssh $(TARGET) sudo systemctl start tailscale-cert.service`),
+   plus `tailscale-cert.timer` enabled in `systemctl-enable`.
+   `docs/installation.md` gains a fourth prerequisite ("tailscale
+   installed and authenticated on the target"); the first-install
+   step list updated to mention the auto-bootstrap and the
+   `make cert` button. README.md services table reworked:
+   "Port" column → "Path" column showing each service's
+   `https://<fqdn>/<name>` route; networking section updated to
+   describe caddy as the single HTTPS front door.
+   *Verify:* `make all` clean; `make check` clean; `make test`
+   passes after refreshing fx fixture's Makefile golden.
 
 ## Future plans
 
