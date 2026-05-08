@@ -365,7 +365,18 @@ small systemd units + a Makefile target + docs.
      depend on whatever the auto-generated reload unit's
      mechanics are.
 
-6. **Switch caddy to mount `<install_base>/certs`; drop the
+6. ✅ **Add `cap_add: NET_BIND_SERVICE` so caddy can bind 80/443
+   as non-root.** The docker-compose template auto-injects
+   `user: ${SVC_UID}:${SVC_GID}` for every dockerized service.
+   With path-routing now requiring caddy to bind privileged ports,
+   the bind would fail without the capability. caddy:latest sets
+   file caps on its binary, so cap_add is sufficient (no
+   `sysctls: net.ipv4.ip_unprivileged_port_start=0` needed).
+   *Verify:* `make all` clean; rendered `config/caddy/docker-compose.yml`
+   shows the `cap_add: - NET_BIND_SERVICE` block; `make check`
+   clean; goldens unchanged.
+
+7. **Switch caddy to mount `<install_base>/certs`; drop the
    per-service cert rsync.** Update `services/caddy/service.yml`
    volume from `<%= install_base %>/config/caddy/certs:/etc/caddy/certs:ro`
    to `<%= install_base %>/certs:/certs:ro`. Update Caddyfile
@@ -380,15 +391,14 @@ small systemd units + a Makefile target + docs.
    the tailnet-hostname files; HTTPS still works for every
    subpath-routed service.
 
-7. **Add `make cert` target + bootstrap docs.** New phony target
+8. **Add `make cert` target + bootstrap docs.** New phony target
    in the root Makefile: `cert: ; $(REMOTE) sudo systemctl start
    tailscale-cert.service` (one-shot manual seed/renewal). Enable
    the timer by default in `systemd-enable` so a fresh box gets
    renewal automatically once the cert has been seeded. Document
    the host-bootstrap sequence in `docs/installation.md` (or new
    `docs/host-bootstrap.md`): install docker + systemd +
-   tailscale on the target, `tailscale up`, create `cert-readers`
-   group (`groupadd --system cert-readers`), `make install`,
+   tailscale on the target, `tailscale up`, `make install`,
    `make cert`, `systemctl enable --now tailscale-cert.timer`.
    Also document the new "everything-through-caddy" URL scheme
    in README.md (services table needs a refresh — host ports
