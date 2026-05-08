@@ -37,6 +37,17 @@ systemd.manifest.removed: systemd/.mediaserver.manifest  /etc/systemd/system/.me
 config.manifest.removed systemd.manifest.removed:
 	@grep -Fxv -f $< $(word 2,$^) | sed 's|^|$(dir $(word 2,$^))|' > $@
 
+# --inplace on the config-side rsync is load-bearing for path-unit dispatch.
+# Default rsync writes a temp file, fsync's, then renames over the destination
+# — which generates inotify MOVED_TO on the watched path, NOT CLOSE_WRITE,
+# which is what `PathChanged=` watches. --inplace writes directly to the
+# destination, generating the CLOSE_WRITE event the path units expect.
+# Trade: not atomic — a concurrent reader catching mid-write sees partial
+# content. For our flow that's fine: docker containers don't re-read config
+# until restart, and the path unit fires on CLOSE_WRITE (post-write).
+#
+# The systemd-side rsync stays default (atomic rename) — `daemon-reload` at
+# the end picks up unit-file changes regardless of inotify semantics.
 preview: chownall config.manifest.removed systemd.manifest.removed
 	@rsync -ac --no-times --inplace --dry-run --itemize-changes --exclude=systemd --exclude='*.manifest.removed' "$(STAGING)/" "$(INSTALL_BASE)/config/"
 	@rsync -ac --no-times --dry-run --itemize-changes "$(STAGING)/systemd/" /etc/systemd/system/

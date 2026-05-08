@@ -32,3 +32,4 @@ test/config-lisp/
 # Dev container HOME (shell history, vim state, .quicklisp cache, etc.)
 .devhome/
 .env
+tools/api-config/.image-built

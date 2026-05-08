@@ -11,4 +11,10 @@ docker_config:
   - "<%= install_base %>/config/qbittorrent:/config"
   - "<%= media_path %>:/data"
   restart: unless-stopped
+api_config:
+  api_version: v2
+  body_format: qbit-form
+  # No auth — qBittorrent.conf.elp sets AuthSubnetWhitelist=0.0.0.0/0,
+  # which auth-bypasses any caller. Tailnet-only port exposure is the
+  # real security boundary.
 order: 50

@@ -1,0 +1,21 @@
+# Generated from each service.yml's `api_config` block. To wire up a new
+# upstream: add `api_config: { ... }` to its service.yml; this file picks
+# it up automatically. Schema reference (consumed by tools/api-config/):
+#   api_version:        path segment after /api/  (e.g. v3 / v2 / v1)
+#   healthcheck_path:   GET'd before reconcile; from each service's `healthz`
+#   auth:               optional. {type: header|bearer, name, value}
+#   body_format:        json (default) | qbit-form
+#   extra_mutate_query: query params on POST/PUT only (e.g. forceSave)
+<%
+(let ((upstreams (make-hash-table :test 'equal)))
+  (dolist (svc (service-where api_config))
+    (with-service-scope svc
+      (setf (gethash name upstreams)
+            (plist-tree->dict
+              (append
+                (list :base_url (format nil "http://~A:~A" hostname port))
+                (when healthz (list :healthcheck_path healthz))
+                api_config)))))
+  (yaml:with-emitter-to-stream (em *standard-output*)
+    (yaml:emit-pretty-as-document em upstreams)))
+%>

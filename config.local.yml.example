@@ -27,8 +27,10 @@ service_overrides:
     # the relay from being used as an open relay.
     allowed_sender_domains: "gmail.com"
   # Each *arr app exposes an API key in its own settings UI; copy the
-  # generated value here. Their exporters and Prowlarr consume it via
-  # for-service.
+  # generated value here. The bootstrap config.xml seeds this key on
+  # first install (cp -n; existing config.xml is left alone), and
+  # exporters / Prowlarr consume it via for-service. Generate fresh
+  # values with `openssl rand -hex 16`.
   radarr:
     apikey: "REPLACE_ME"
   sonarr:

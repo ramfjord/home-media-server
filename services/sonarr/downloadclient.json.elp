@@ -1,0 +1,20 @@
+<%- (for-service :sonarr -%>
+[
+  {
+    "name": "qBittorrent",
+    "enable": true,
+    "protocol": "torrent",
+    "priority": 1,
+    "implementation": "QBittorrent",
+    "implementationName": "qBittorrent",
+    "configContract": "QBittorrentSettings",
+    "fields": [
+      {"name": "host",       "value": "localhost"},
+      {"name": "port",       "value": <%= (for-service :qbittorrent port) %>},
+      {"name": "username",   "value": "<%= (for-service :qbittorrent username) %>"},
+      {"name": "password",   "value": "<%= (for-service :qbittorrent password) %>"},
+      {"name": "tvCategory", "value": "tv-sonarr"}
+    ]
+  }
+]
+<%- ) -%>

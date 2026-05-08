@@ -3,12 +3,20 @@ name: prowlarr
 partof: downloading
 desc: indexer manager
 port: 9696
+healthz: /ping
 use_vpn: true
 docker_config:
   image: lscr.io/linuxserver/prowlarr:latest
-  environment:
-  - PROWLARR__SERVER__URLBASE=/prowlarr
   volumes:
   - "<%= install_base %>/config/prowlarr:/config"
+  environment:
+  - PROWLARR__SERVER__URLBASE=/prowlarr
+  - "PROWLARR__AUTH__APIKEY=<%= (for-service :prowlarr apikey) %>"
+  - "PROWLARR__AUTH__METHOD=External"
+  - "PROWLARR__AUTH__REQUIRED=DisabledForLocalAddresses"
   restart: unless-stopped
+api_config:
+  api_version: v1
+  auth: { type: header, name: X-Api-Key, value: "<%= (for-service :prowlarr apikey) %>" }
+  extra_mutate_query: { forceSave: true }
 order: 40

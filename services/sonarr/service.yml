@@ -3,14 +3,22 @@ name: sonarr
 partof: downloading
 desc: find new shows
 port: 8989
+healthz: /ping
 use_vpn: true
 group: mediaserver
 docker_config:
   image: lscr.io/linuxserver/sonarr:latest
-  environment:
-  - SONARR__SERVER__URLBASE=/sonarr
   volumes:
   - "<%= install_base %>/config/sonarr:/config"
   - "<%= media_path %>:/data"
+  environment:
+  - SONARR__SERVER__URLBASE=/sonarr
+  - "SONARR__AUTH__APIKEY=<%= (for-service :sonarr apikey) %>"
+  - "SONARR__AUTH__METHOD=External"
+  - "SONARR__AUTH__REQUIRED=DisabledForLocalAddresses"
   restart: unless-stopped
+api_config:
+  api_version: v3
+  auth: { type: header, name: X-Api-Key, value: "<%= (for-service :sonarr apikey) %>" }
+  extra_mutate_query: { forceSave: true }
 order: 30

@@ -4,7 +4,11 @@ include Makefile.local
 
 MAKEFLAGS += -j$(shell nproc)
 
-ALL_SERVICES := $(patsubst services/%/,%,$(sort $(dir $(wildcard services/*/.))))
+# Only directories with a service.yml are real services. Other dirs under
+# services/ (e.g. arr-config/) carry templates whose output is consumed
+# by external tools, not by the systemd/docker pipeline — they shouldn't
+# trigger __service__ fanout (no .service unit, no path watcher).
+ALL_SERVICES := $(patsubst services/%/service.yml,%,$(wildcard services/*/service.yml))
 
 # services/<svc>/<path>.elp -> config/<svc>/<path>
 # mindepth 2 skips services/manifest.yaml.elp (the manifest intermediate
@@ -105,6 +109,33 @@ check/%: checks/%.sh.elp all
 
 check: $(patsubst checks/%.sh.elp,check/%,$(wildcard checks/*.sh.elp))
 
+# Apply declared config to upstream HTTP APIs (qBit + Servarr today).
+# config/api-config/upstreams.yaml carries auth + URL per upstream;
+# config/<svc>/<endpoint>.json files are POSTed/PUT idempotently. Tool
+# is a tiny Python image (tools/api-config/) kept out of the Lisp
+# toolchain so per-API quirks (Servarr's forceSave, qBit's qbit-form
+# encoding) live in idiomatic Python with structured error reporting.
+API_CONFIG_TAG   ?= ghcr.io/ramfjord/api-config:latest
+API_CONFIG_STAMP := tools/api-config/.image-built
+$(API_CONFIG_STAMP): tools/api-config/Dockerfile tools/api-config/configure.py
+	@docker build -t $(API_CONFIG_TAG) tools/api-config/
+	@touch $@
+
+api-config: $(API_CONFIG_STAMP) all
+	@docker run --rm --network host \
+	  -v $(PWD)/config/api-config/upstreams.yaml:/upstreams.yaml:ro \
+	  -v $(PWD)/config/sonarr:/resources/sonarr:ro \
+	  -v $(PWD)/config/radarr:/resources/radarr:ro \
+	  -v $(PWD)/config/prowlarr:/resources/prowlarr:ro \
+	  -v $(PWD)/config/qbittorrent:/resources/qbittorrent:ro \
+	  $(API_CONFIG_TAG) /upstreams.yaml /resources
+
+# Push the api-config image to GHCR. Run `docker login ghcr.io -u <user>`
+# once with a PAT that has write:packages scope before invoking. Override
+# the tag via API_CONFIG_TAG=... if pushing somewhere else.
+api-config-publish: $(API_CONFIG_STAMP)
+	@docker push $(API_CONFIG_TAG)
+
 # Run tests against "golden" config - validate changes to render code mostly
 test: $(patsubst lisp/cli/%.lisp,bin/%,$(wildcard lisp/cli/*.lisp))
 	@cd test && $(MAKE) all > /dev/null
@@ -132,6 +163,7 @@ preview: sync
 
 install: sync
 	@ssh $(TARGET) "cd /opt/mediaserver/staging ; sudo make deploy"
+	@$(MAKE) --no-print-directory api-config TARGET=$(TARGET)
 
 systemctl-start systemctl-stop systemctl-restart:
 	@ssh $(TARGET) sudo systemctl $(patsubst systemd-%,%,$@) mediaserver.target
