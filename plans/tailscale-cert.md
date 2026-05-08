@@ -376,7 +376,7 @@ small systemd units + a Makefile target + docs.
    shows the `cap_add: - NET_BIND_SERVICE` block; `make check`
    clean; goldens unchanged.
 
-7. **Switch caddy to mount `<install_base>/certs`; drop the
+7. ✅ **Switch caddy to mount `<install_base>/certs`; drop the
    per-service cert rsync.** Update `services/caddy/service.yml`
    volume from `<%= install_base %>/config/caddy/certs:/etc/caddy/certs:ro`
    to `<%= install_base %>/certs:/certs:ro`. Update Caddyfile

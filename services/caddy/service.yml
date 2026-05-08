@@ -14,7 +14,7 @@ docker_config:
   - NET_BIND_SERVICE
   volumes:
   - "<%= install_base %>/config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro"
-  - "<%= install_base %>/config/caddy/certs:/etc/caddy/certs:ro"
+  - "<%= install_base %>/certs:/certs:ro"
   ports:
   - 80:80
   - 443:443

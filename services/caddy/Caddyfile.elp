@@ -2,7 +2,7 @@
 # its name; homer at root. caddy listens on 443 and auto-redirects
 # 80 → 443 because the site is declared with a hostname.
 <%= hostname %> {
-  tls /etc/caddy/certs/<%= hostname %>.crt /etc/caddy/certs/<%= hostname %>.key
+  tls /certs/<%= hostname %>.crt /certs/<%= hostname %>.key
 <%- (loop-services (service-where displayable) %>
 
   handle /<%= name %>/* {
