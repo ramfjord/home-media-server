@@ -1,0 +1,22 @@
+[Unit]
+Description=Renew tailscale cert for <%= hostname %>
+Documentation=https://tailscale.com/kb/1153/enabling-https
+After=tailscaled.service docker.service
+Requires=tailscaled.service
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/mkdir -p <%= install_base %>/certs
+ExecStart=/usr/bin/tailscale cert \
+  --cert-file=<%= install_base %>/certs/<%= hostname %>.crt \
+  --key-file=<%= install_base %>/certs/<%= hostname %>.key \
+  <%= hostname %>
+# Caddy reads the cert as the `caddy` user; key is 0640 so other
+# users can't read the private key.
+ExecStartPost=/bin/chown caddy:caddy <%= install_base %>/certs/<%= hostname %>.crt <%= install_base %>/certs/<%= hostname %>.key
+ExecStartPost=/bin/chmod 0644 <%= install_base %>/certs/<%= hostname %>.crt
+ExecStartPost=/bin/chmod 0640 <%= install_base %>/certs/<%= hostname %>.key
+# Best-effort: nudge caddy to reload its TLS material. Non-fatal so
+# this unit succeeds even when caddy isn't running yet (first boot,
+# bootstrap before caddy is enabled).
+ExecStartPost=-/usr/bin/docker exec caddy caddy reload --config /etc/caddy/Caddyfile

@@ -25,3 +25,5 @@ fx-wireguard-reload.service
 fx-wireguard.service
 mediaserver-network.service
 mediaserver.target
+tailscale-cert.service
+tailscale-cert.timer

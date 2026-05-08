@@ -1,0 +1,22 @@
+[Unit]
+Description=Renew tailscale cert for fx-host
+Documentation=https://tailscale.com/kb/1153/enabling-https
+After=tailscaled.service docker.service
+Requires=tailscaled.service
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/mkdir -p /opt/fx-mediaserver/certs
+ExecStart=/usr/bin/tailscale cert \
+  --cert-file=/opt/fx-mediaserver/certs/fx-host.crt \
+  --key-file=/opt/fx-mediaserver/certs/fx-host.key \
+  fx-host
+# Caddy reads the cert as the `caddy` user; key is 0640 so other
+# users can't read the private key.
+ExecStartPost=/bin/chown caddy:caddy /opt/fx-mediaserver/certs/fx-host.crt /opt/fx-mediaserver/certs/fx-host.key
+ExecStartPost=/bin/chmod 0644 /opt/fx-mediaserver/certs/fx-host.crt
+ExecStartPost=/bin/chmod 0640 /opt/fx-mediaserver/certs/fx-host.key
+# Best-effort: nudge caddy to reload its TLS material. Non-fatal so
+# this unit succeeds even when caddy isn't running yet (first boot,
+# bootstrap before caddy is enabled).
+ExecStartPost=-/usr/bin/docker exec caddy caddy reload --config /etc/caddy/Caddyfile

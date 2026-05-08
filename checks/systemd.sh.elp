@@ -10,7 +10,7 @@ set -euo pipefail
 # default recursive verify trips on every Requires=docker.service. We
 # only want to verify the unit's own correctness here.
 fail=0
-for f in config/systemd/*.service config/systemd/*.path; do
+for f in config/systemd/*.service config/systemd/*.path config/systemd/*.timer; do
   [ -s "$f" ] || continue
   systemd-analyze verify --recursive-errors=no "$f" > /dev/null || { echo "FAIL: $f"; fail=1; }
 done

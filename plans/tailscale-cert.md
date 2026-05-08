@@ -317,7 +317,7 @@ small systemd units + a Makefile target + docs.
    refreshing the fx-prometheus golden (auto-publish removal
    strips the `ports: - 19090:19090` line).
 
-5. **Render `tailscale-cert.{service,timer}` under `targets/debian/`.**
+5. ✅ **Render `tailscale-cert.{service,timer}` under `targets/debian/`.**
    New `targets/debian/systemd/tailscale-cert.service.elp` and
    `tailscale-cert.timer.elp` (singletons, no `__service__`
    placeholder). Service runs `tailscale cert --cert-file=...
@@ -335,6 +335,35 @@ small systemd units + a Makefile target + docs.
    units; manual `systemctl start tailscale-cert.service` on
    TARGET creates `<install_base>/certs/<host>.{crt,key}` with
    correct perms.
+   **Decisions:**
+   - **Singleton in `targets/debian/systemd/`** rather than a
+     new `services/caddy-cert-renew/` service. Investigation
+     showed the `:has_unit` derived-field path is detected but
+     no template currently emits a `unit:` field — wiring it up
+     is real work that doesn't help cert provisioning. Singleton
+     fits the existing pattern (mediaserver-network.service,
+     mediaserver.target.elp live there too).
+   - **`cert-readers` group dropped** entirely. Caddy is the
+     only consumer (and will be forever per user). Cert files
+     are owned `caddy:caddy`, key 0640, cert 0644.
+   - **Renewer runs as root.** Simpler than running as caddy
+     user, which would require host-side
+     `tailscale set --operator=caddy` config. ExecStartPost
+     chowns to caddy user.
+   - **Caddy reload is best-effort** (`-` prefix on the
+     ExecStartPost). If caddy isn't running yet (first boot,
+     before bootstrap completes), the renewal still succeeds.
+   - **Timer: OnBootSec=5min + OnUnitActiveSec=1d**, with
+     `Persistent=true` so missed runs (host off) trigger when
+     next online. `tailscale cert` is idempotent — daily fires
+     are cheap when fresh.
+   - **Systemd check extended** to also validate `*.timer`
+     files. Was previously `*.service *.path` only.
+   - **Caddy reload via `docker exec caddy caddy reload`**
+     rather than `systemctl reload caddy.service`. The
+     containerized caddy reload is direct + idiomatic; doesn't
+     depend on whatever the auto-generated reload unit's
+     mechanics are.
 
 6. **Switch caddy to mount `<install_base>/certs`; drop the
    per-service cert rsync.** Update `services/caddy/service.yml`
