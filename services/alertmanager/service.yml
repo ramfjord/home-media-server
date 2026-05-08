@@ -9,9 +9,15 @@ docker_config:
   image: prom/alertmanager:latest
   command:
   - "--config.file=/etc/alertmanager/alertmanager.yml"
+  - "--storage.path=/alertmanager/data"
   - "--web.external-url=https://<%= hostname %>/alertmanager"
   - "--web.route-prefix=/alertmanager"
   volumes:
   - "<%= install_base %>/config/alertmanager:/etc/alertmanager:ro"
+  # Adding `command:` overrides the image's default CMD which set
+  # --storage.path=/alertmanager (writable in-image). Re-establish a
+  # writable storage dir under the per-service config root so the
+  # chownall loop owns it as the alertmanager user.
+  - "<%= install_base %>/config/alertmanager/data:/alertmanager/data"
   restart: unless-stopped
 order: 120
