@@ -3,7 +3,7 @@ name: blackbox-exporter
 partof: monitoring
 desc: Blackbox HTTP probe exporter
 port: 9115
-# Matches --web.route-prefix below. otelcol's scrape_target loop and
+# Matches --web.route-prefix below. Prometheus's scrape_target loop and
 # blackbox probe metrics_path both compose against this.
 internal_path: /blackbox-exporter
 scrape_target: true

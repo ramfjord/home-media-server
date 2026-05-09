@@ -1,15 +1,9 @@
 # prometheus
 
-Most metrics arrive via **otelcol**, not from Prometheus's own scraping. Otelcol
-runs a `prometheusreceiver` that scrapes node-exporter, cadvisor, blackbox, the
-*arr exporters, etc., and forwards everything to this Prometheus instance. You
-can tell which series came through that path by the
-`otel_scope_name="...prometheusreceiver"` label that gets stamped on them.
+Prometheus scrapes everything directly. Scrape configs are split out into
+`scrape_configs/*.yaml.elp`, loaded via the main config's `scrape_config_files`
+glob. To add a target, mark a service `scrape_target: true` in its
+`service.yml` — `scrape_configs/scrape_configs.yaml.elp` picks it up
+automatically.
 
-That's why the only entry under `scrape_configs/` is `prometheus_meta.yaml.elp`
-— Prometheus only scrapes itself here. Everything else lives in
-`services/otelcol/otelcol-config.yaml.elp`. If you want to add a new scrape
-target, add it there, not here.
-
-`rules/` and the alertmanager wiring are still owned by Prometheus and live in
-this directory.
+`rules/` and the alertmanager wiring also live here.
