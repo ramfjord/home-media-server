@@ -176,7 +176,7 @@ systemctl-status:
 systemctl-enable:
 	@ssh $(TARGET) sudo systemctl enable --now mediaserver-network.service
 	@ssh $(TARGET) sudo systemctl enable mediaserver.target
-	@ssh $(TARGET) sudo systemctl enable --now $(basename -a config/systemd/*.path)
+	@ssh $(TARGET) sudo systemctl enable --now $(notdir $(wildcard config/systemd/*.path))
 	@ssh $(TARGET) sudo systemctl enable --now tailscale-cert.timer
 
 # One-shot manual run of the tailscale-cert renewal unit. Useful as a
@@ -188,7 +188,7 @@ cert:
 
 systemctl-disable:
 	@ssh $(TARGET) sudo systemctl disable mediaserver.target
-	@ssh $(TARGET) sudo systemctl disable $(basename -a config/systemd/*.path)
+	@ssh $(TARGET) sudo systemctl disable $(notdir $(wildcard config/systemd/*.path))
 
 # Force-restart a single service. Path units already redeploy on
 # `make install`; use this when you want to bounce a service without
