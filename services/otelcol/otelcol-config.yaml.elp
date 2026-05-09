@@ -105,7 +105,12 @@ processors:
 
 exporters:
   prometheusremotewrite:
-    endpoint: "http://prometheus:9090/api/v1/write"
+    # /prometheus prefix matches prometheus's --web.route-prefix flag.
+    # Without it the receiver returns 404 and otelcol drops every batch
+    # silently except for log spam — this is the third place today
+    # we've had to add the prefix (after grafana DS and the blackbox
+    # scrape metrics_path).
+    endpoint: "http://prometheus:9090/prometheus/api/v1/write"
 
 service:
   pipelines:
