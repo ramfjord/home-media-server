@@ -14,8 +14,8 @@
 
 (defparameter *globals* nil
   "Plist of host-level config (install_base, media_path, hostname,
-   plus anything else from globals.yml + config.local.yml). Set by
-   LOAD-CONFIG. Templates that need globals reach in via
+   plus anything else from config.local.yml). Set by LOAD-CONFIG.
+   Templates that need globals reach in via
    (getf *globals* :install_base) or pass them explicitly.")
 
 (defparameter *known-fields* nil

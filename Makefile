@@ -51,7 +51,7 @@ lisp/.qlot/installed.stamp: lisp/qlfile.lock
 # Built from the per-service yamls + override files. Cwd-relative so
 # test/ builds its own manifest from test/services/.
 SERVICE_YMLS := $(wildcard services/*/service.yml)
-OVERRIDE_YMLS := $(wildcard globals.yml) $(wildcard config.local.yml)
+OVERRIDE_YMLS := $(wildcard config.local.yml)
 # build-service-config writes both files in one run: manifest.yaml.elp is
 # the merged-but-unrendered intermediate (cross-service tags still live);
 # manifest.yaml is the ELP-rendered final form templates consume.

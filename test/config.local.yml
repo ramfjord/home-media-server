@@ -1,11 +1,11 @@
 ---
-# Override install_base in config.local (globals.yml leaves it unset).
-# Exercises the DEFAULT_GLOBALS → globals.yml → config.local.yml merge,
-# verified via the ERB binding seen by service.yml preprocessing:
-#   - install_base: set only here (covers "local overrides default")
-#   - hostname:     set in globals.yml, untouched here (covers "globals wins over default")
+# Exercises the DEFAULT_GLOBALS → config.local.yml merge, verified via
+# the ELP binding seen by service.yml preprocessing:
+#   - install_base: set here (covers "local overrides default")
+#   - hostname:     set here (covers "local overrides default")
 #   - media_path:   nowhere (covers "fall through to DEFAULT_GLOBALS")
 install_base: /opt/fx-mediaserver
+hostname: fx-host
 
 # Custom keys consumed by fx-prometheus/prometheus.yml.elp via config_yaml[].
 fx_label: fixture-deployment

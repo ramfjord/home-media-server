@@ -6,7 +6,7 @@ Yet another self-hosted media server, with a focus on **observability, flexibili
 
 ## Philosophy
 
-- **Configuration as Code**: each service lives in `services/<name>/` (a `service.yml` plus any `.elp` templates it owns). `globals.yml` and `config.local.yml` cover the rest.
+- **Configuration as Code**: each service lives in `services/<name>/` (a `service.yml` plus any `.elp` templates it owns). `config.local.yml` covers per-host overrides.
 - **Templated everything**: a Lisp-based renderer (`bin/render`, sources under `lisp/`) turns the per-service definitions into Prometheus configs, Caddy routes, per-service `docker-compose.yml` files, systemd units, and Homer dashboard entries. Templates use ELP, an ERB-style Common Lisp template engine vendored at `elp/`.
 - **Systemd-native**: every service is a systemd unit on a shared `mediaserver-network`. A `.path` watcher hot-reloads each service when its config changes; `mediaserver.target` brings the whole stack up or down.
 - **Vendor-agnostic monitoring**: OpenTelemetry Collector sits in front of Prometheus/Grafana so the backend can be swapped without restructuring.
@@ -15,7 +15,7 @@ Yet another self-hosted media server, with a focus on **observability, flexibili
 
 A change goes through four stages, and **what each stage can see** is the constraint that determines what kind of fact belongs where:
 
-1. **Build the service manifest.** `bin/build-service-config` reads every `services/*/service.yml`, layers `globals.yml` and `config.local.yml` on top, and computes derived fields (`compose_file`, `dockerized`, `config_files`, …) into `services/manifest.yaml`. Each `service.yml` is read in isolation — at this stage a service can't reference another service's fields.
+1. **Build the service manifest.** `bin/build-service-config` reads every `services/*/service.yml`, layers `config.local.yml` on top of built-in defaults, and computes derived fields (`compose_file`, `dockerized`, `config_files`, …) into `services/manifest.yaml`. Each `service.yml` is read in isolation — at this stage a service can't reference another service's fields.
 2. **Render templates → `config/`.** `make all` runs `bin/render` against `services/manifest.yaml` for every `.elp` under `services/` (per-service templates) and `targets/debian/` (singletons + `__service__` fanout templates). Static files in `services/` and `targets/debian/` are rsynced through unchanged. The full manifest is in scope here, so templates *can* see other services — this is where cross-service config (Caddy routes, Prometheus scrape configs, Homer entries) gets assembled. Two manifest files are emitted alongside the output: `config/.manifest` and `config/systemd/.mediaserver.manifest`, listing every shipped file.
 3. **Sync local → target staging.** `make sync` rsyncs `config/` to `$TARGET:/opt/mediaserver/staging/` with `--delete`. Staging is fully owned by the deploy and rebuilt every time, so deleting is safe. Nothing user-facing has moved yet.
 4. **Stage → prod on the target.** `make install` runs `make deploy` on the target: it diffs the freshly-shipped `.manifest` against the previously-installed one to compute exactly which files this deploy removes, rsyncs staging into the live install dirs (`/opt/mediaserver/config/` and `/etc/systemd/system/`) **without** `--delete`, then explicitly `rm`s the diffed-out files and runs `daemon-reload`. Path units pick up the changed files and reload affected services.

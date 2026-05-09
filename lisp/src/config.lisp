@@ -73,7 +73,7 @@
 (defun load-config-from-args (service-paths override-paths)
   "Build a config plist from explicit paths. SERVICE-PATHS is a list
    of service.yml files; OVERRIDE-PATHS is a list of override yamls
-   in last-wins order (config.yaml then config.local.yaml).
+   in last-wins order (typically just config.local.yml).
 
    Each service.yml is ELP-preprocessed with the merged globals as
    bindings, then YAML-parsed. Per-service overrides from any

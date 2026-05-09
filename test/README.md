@@ -19,7 +19,7 @@ in this directory, but most are pass-throughs to the parent:
 | `targets/`              | symlink  | Shared deploy templates.                                 |
 | `script/build.sh`       | **real** | Symlink shim — see below.                                |
 | `bin/`                  | **real** | Populated by `script/build.sh` (symlinks back to parent).|
-| `services/`, `globals.yml`, `config.local.yml` | **real** | Test fixtures. |
+| `services/`, `config.local.yml` | **real** | Test fixtures. |
 | `config/`               | **real** | Golden output, checked in.                               |
 | `Makefile.local`        | **real** | Local `TARGET=…` override; kept minimal here.            |
 
