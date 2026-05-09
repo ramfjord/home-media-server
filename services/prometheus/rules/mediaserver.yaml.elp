@@ -1,11 +1,16 @@
 groups:
 - name: MediaServer
   rules:
-    - alert: SystemdUnitDown
-      expr: node_systemd_unit_state{service=~".+", state="active"} != 1
+    - alert: SystemdUnitFailed
+      # Alert on failed, not "not active": oneshot units (e.g.
+      # api-config) are inactive between path-triggered reconciles by
+      # design, so `state!=active` would page on every successful run.
+      # `state=failed` fires only when systemd actually marks the unit
+      # as having failed.
+      expr: node_systemd_unit_state{service=~".+", state="failed"} == 1
       for: 5m
       annotations:
-        summary: "{{ $labels.service }} - systemd unit {{ $labels.name}} is down"
+        summary: "{{ $labels.service }} - systemd unit {{ $labels.name }} failed"
 
     - alert: VolumeFillingUp
       expr: |
