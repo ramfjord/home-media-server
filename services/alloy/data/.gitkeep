@@ -1,0 +1,2 @@
+# Placeholder so config/alloy/data/ exists pre-deploy and chownall sets
+# ownership before the alloy container creates its WAL files.

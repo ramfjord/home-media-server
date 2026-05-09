@@ -1,0 +1,28 @@
+groups:
+- name: JournalErrors
+  rules:
+    # Fires when a service emits more than 5 error-or-worse log entries
+    # within the last 5 minutes, sustained for 2 minutes. Sums across
+    # priority levels (error+crit+alert+emerg, syslog priority ≤3) so
+    # one service in trouble produces one alert, not four.
+    #
+    # `level` comes from journald's __journal_priority_keyword via the
+    # alloy relabel rules. Alloy emits the long form ("error") for
+    # priority 3 rather than the RFC short form ("err"), so the regex
+    # accepts both.
+    #
+    # The `service` label is derived from `unit=<name>.service` by the
+    # alloy scrape's metric_relabel_configs, so alertmanager groups
+    # these into the same per-service notification as other alerts on
+    # that service. Entries with no systemd unit (kernel, bare logger)
+    # remain under service=alloy.
+    - alert: ServiceLogErrors
+      expr: |
+        sum by (service) (
+          increase(loki_process_custom_log_lines_total{level=~"error|err|crit|alert|emerg"}[5m])
+        ) > 5
+      for: 2m
+      labels:
+        severity: warning
+      annotations:
+        summary: "{{ $labels.service }}: {{ $value | printf \"%.0f\" }} error-level log entries in 5m"

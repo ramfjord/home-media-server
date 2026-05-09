@@ -1,0 +1,45 @@
+---
+name: alloy
+partof: monitoring
+desc: Journald → Prometheus metrics via Grafana Alloy
+# Port lives only inside scrape_target — a top-level `port` would trip
+# derive's displayable logic and require a homer card we don't want
+# (the metrics endpoint isn't a UI). Same pattern as node-exporter.
+scrape_target:
+  port: 12345                      # alloy default
+  # Derive `service=foo` from `unit=foo.service` so per-unit log
+  # counters route under the actual erroring service in alertmanager
+  # grouping (rather than all collapsing under service=alloy). Static
+  # configs already set service=alloy as a default; this rewrite runs
+  # later and overwrites only when the regex matches a real .service
+  # unit, so alloy's own scrape metrics keep service=alloy.
+  metric_relabel_configs:
+  - source_labels: [unit]
+    regex: '(.+)\.service'
+    target_label: service
+    replacement: '$1'
+# No dedicated host user — runs as root so libsystemd can read
+# /var/log/journal/ regardless of group/perm details. Same pattern as
+# vaultwarden/api-config/smtp.
+user: root
+docker_config:
+  image: grafana/alloy:latest
+  command:
+  - run
+  - --server.http.listen-addr=0.0.0.0:12345
+  - --storage.path=/var/lib/alloy/data
+  - /etc/alloy/config.alloy
+  volumes:
+  # Persistent and runtime journal dirs, read-only. libsystemd reads
+  # journal files directly off disk via sd_journal_open() — no D-Bus
+  # needed. /etc/machine-id selects the right per-machine subdir under
+  # /var/log/journal/.
+  - "/var/log/journal:/var/log/journal:ro"
+  - "/run/log/journal:/run/log/journal:ro"
+  - "/etc/machine-id:/etc/machine-id:ro"
+  - "<%= install_base %>/config/alloy/config.alloy:/etc/alloy/config.alloy:ro"
+  # Cursor + WAL state, so alloy resumes from where it left off on
+  # restart instead of replaying the entire journal.
+  - "<%= install_base %>/config/alloy/data:/var/lib/alloy/data"
+  restart: unless-stopped
+order: 146

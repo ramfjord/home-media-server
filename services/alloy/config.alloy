@@ -1,0 +1,40 @@
+// Read every entry from systemd-journald, attach `unit` and `level`
+// labels, and convert the stream into prometheus counters. The logs
+// themselves never leave Alloy — `loki.process.metrics` has no
+// `forward_to` target connected, so log bodies are dropped after
+// metric extraction. Only counters survive, exposed at /metrics.
+
+loki.relabel "journal" {
+	forward_to = []
+
+	rule {
+		source_labels = ["__journal__systemd_unit"]
+		target_label  = "unit"
+	}
+
+	rule {
+		source_labels = ["__journal_priority_keyword"]
+		target_label  = "level"
+	}
+}
+
+loki.source.journal "system" {
+	forward_to    = [loki.process.metrics.receiver]
+	relabel_rules = loki.relabel.journal.rules
+	max_age       = "12h"
+	labels        = { job = "alloy" }
+}
+
+loki.process "metrics" {
+	// No forward_to wired up — bodies are discarded after counters tick.
+	forward_to = []
+
+	stage.metrics {
+		metric.counter {
+			name        = "log_lines_total"
+			description = "Journald entries seen by Alloy, labelled by unit and level."
+			match_all   = true
+			action      = "inc"
+		}
+	}
+}

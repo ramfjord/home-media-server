@@ -20,8 +20,8 @@ docker_config:
   volumes:
   - "<%= install_base %>/config/prometheus:/etc/prometheus:ro"
   - "<%= install_base %>/config/prometheus/data:/prometheus/data"
-  # node-exporter runs on the host (host network), so we resolve
-  # it via the docker bridge gateway. Mirrors what otelcol used.
+  # node-exporter runs on the host (host network), reachable via the
+  # docker bridge gateway. Mirrors what otelcol used.
   extra_hosts:
   - host.docker.internal:host-gateway
   restart: unless-stopped
