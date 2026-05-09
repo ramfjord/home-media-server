@@ -80,6 +80,13 @@ all: $(ALL_OUTPUTS)
 	@echo ""
 	@rsync -ac --exclude='*.elp' --exclude='service.yml' --exclude='/manifest.yaml' services/ config/
 	@rsync -ac --exclude='*.elp' --exclude='*__service__*' targets/debian/ config/
+	@# Drop empty rendered files. Fanout templates that don't apply to a
+	@# service (e.g. <svc>-reload.service when sighup_reload is unset)
+	@# render to whitespace; without this, those zero-byte files ship and
+	@# land as no-op stubs in /etc/systemd/system/. Harmless when names
+	@# are project-local, but they'd shadow upstream package units for
+	@# host-installed services.
+	@find config -type f -empty -delete
 	@find config -type f -not -path 'config/systemd/*' -not -name .manifest -printf '%P\n' | sort > config/.manifest
 	@cd config/systemd && find . -type f -not -name .mediaserver.manifest -printf '%P\n' | sort > .mediaserver.manifest
 
