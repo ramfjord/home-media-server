@@ -4,6 +4,11 @@ partof: security
 desc: Password manager
 port: 80
 healthz: "/alive"
+# Vaultwarden doesn't natively serve under a subpath, so it gets a
+# dedicated host port instead of path-routing under the main FQDN.
+# caddy publishes the matching host port.
+public_port: 8000
+public_path: /
 user: root  # no dedicated host user; image runs as its own internal user
 docker_config:
   image: vaultwarden/server:latest
@@ -11,7 +16,7 @@ docker_config:
   - "<%= install_base %>/config/vaultwarden:/data"
   environment:
   - LOG_LEVEL=info
-  - DOMAIN=https://<%= hostname %>/vaultwarden
+  - DOMAIN=https://<%= hostname %>:8000
   - SMTP_HOST=smtp
   - SMTP_PORT=25
   - SMTP_SECURITY=off

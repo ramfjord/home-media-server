@@ -6,6 +6,12 @@
 #   auth:               optional. {type: header|bearer, name, value}
 #   body_format:        json (default) | qbit-form
 #   extra_mutate_query: query params on POST/PUT only (e.g. forceSave)
+#
+# `base_url` uses each service's `public_url` so api-config goes through
+# whatever entry point caddy knows about — covers both path-routed
+# services (https://<host>/<name>) and dedicated-port ones
+# (https://<host>:8443/). Avoids dealing with VPN-shared services that
+# don't expose ports on the host network directly.
 <%
 (let ((upstreams (make-hash-table :test 'equal)))
   (dolist (svc (service-where api_config))
@@ -13,7 +19,7 @@
       (setf (gethash name upstreams)
             (plist-tree->dict
               (append
-                (list :base_url (format nil "http://~A:~A" hostname port))
+                (list :base_url (string-right-trim "/" public_url))
                 (when healthz (list :healthcheck_path healthz))
                 api_config)))))
   (yaml:with-emitter-to-stream (em *standard-output*)

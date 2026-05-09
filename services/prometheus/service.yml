@@ -3,9 +3,10 @@ name: prometheus
 partof: monitoring
 desc: Metrics and alerting
 port: 9090
-healthz: "/-/healthy"
+healthz: "/prometheus/-/healthy"
 sighup_reload: true
-scrape_target: true
+scrape_target:
+  metrics_path: /prometheus/metrics
 docker_config:
   image: prom/prometheus:latest
   command:
