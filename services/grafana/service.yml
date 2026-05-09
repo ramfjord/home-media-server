@@ -3,7 +3,9 @@ name: grafana
 partof: monitoring
 desc: Dashboards and visualization
 port: 3000
-sighup_reload: true
+# Grafana has no runtime config reload — it ignores SIGHUP and has no
+# admin-API equivalent. Falling through to compose-reload (systemctl
+# restart) is the only way config changes take effect.
 scrape_target: true
 docker_config:
   image: grafana/grafana:latest

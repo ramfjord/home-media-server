@@ -1,10 +1,14 @@
 <%- (when sighup_reload -%>
 [Unit]
-Description=Config reload (SIGHUP) for <%= name %>
+Description=Config reload for <%= name %>
 After=<%= name %>.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/docker compose -f <%= compose_file %> kill --signal SIGHUP <%= name %>
+<%# Per-service `reload_command` overrides the default SIGHUP. Caddy in -%>
+<%# Docker logs SIGHUP as "not implemented" and ignores it, so it ships -%>
+<%# `docker exec caddy caddy reload …` instead. Prometheus/alertmanager -%>
+<%# honor SIGHUP and use the default. -%>
+ExecStart=<%= (or reload_command (format nil "/usr/bin/docker compose -f ~A kill --signal SIGHUP ~A" compose_file name)) %>
 RemainAfterExit=no
 <% ) -%>

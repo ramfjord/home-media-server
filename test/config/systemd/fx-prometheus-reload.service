@@ -1,5 +1,5 @@
 [Unit]
-Description=Config reload (SIGHUP) for fx-prometheus
+Description=Config reload for fx-prometheus
 After=fx-prometheus.service
 
 [Service]

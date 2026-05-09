@@ -3,6 +3,7 @@ name: fx-caddy
 partof: dashboard
 desc: Fixture reverse proxy
 sighup_reload: true
+reload_command: /usr/bin/docker exec fx-caddy caddy reload --config /etc/caddy/Caddyfile --force
 docker_config:
   image: example.invalid/fx-caddy:latest
   volumes:
