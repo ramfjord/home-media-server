@@ -3,6 +3,10 @@ name: radarr
 partof: downloading
 desc: find movies
 port: 7878
+# Mirrors RADARR__SERVER__URLBASE below. derive.lisp folds this into
+# `internal_url` so callers (exportarr-radarr, internal blackbox probe,
+# api-config) compose against one source of truth.
+internal_path: /radarr
 healthz: /ping
 use_vpn: true
 group: mediaserver

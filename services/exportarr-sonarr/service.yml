@@ -10,11 +10,11 @@ docker_config:
   command:
   - sonarr
   - "--url"
-  # sonarr shares wireguard's netns, so its API is reachable as
-  # `wireguard:8989` from the mediaserver-network. The earlier
-  # `caddy:8989` never worked — caddy binds :443/:8000/:8443, not the
-  # arr ports.
-  - http://wireguard:8989
+  # `internal_url` resolves to http://wireguard:<port>/<urlbase> for
+  # use_vpn services that declare internal_path. Bypassing that
+  # composition here is what got the URLBASE prefix out of sync and
+  # made exportarr 307-bounce off the API root.
+  - "<%= (for-service :sonarr internal_url) %>"
   - "--api-key"
   - "<%= (for-service :sonarr apikey) %>"
   - "--port"

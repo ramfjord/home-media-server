@@ -3,6 +3,10 @@ name: prowlarr
 partof: downloading
 desc: indexer manager
 port: 9696
+# Mirrors PROWLARR__SERVER__URLBASE below. derive.lisp folds this into
+# `internal_url` so callers (internal blackbox probe, api-config)
+# compose against one source of truth.
+internal_path: /prowlarr
 healthz: /ping
 use_vpn: true
 docker_config:

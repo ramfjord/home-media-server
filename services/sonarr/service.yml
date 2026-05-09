@@ -3,6 +3,10 @@ name: sonarr
 partof: downloading
 desc: find new shows
 port: 8989
+# Mirrors SONARR__SERVER__URLBASE below. derive.lisp folds this into
+# `internal_url` so callers (exportarr-sonarr, internal blackbox probe,
+# api-config) compose against one source of truth.
+internal_path: /sonarr
 healthz: /ping
 use_vpn: true
 group: mediaserver
