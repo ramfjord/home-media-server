@@ -10,4 +10,10 @@ docker_config:
   - "<%= install_base %>/config/fx-qbittorrent:/config"
   - "<%= media_path %>:/data"
   restart: unless-stopped
+api_config:
+  api_version: v2
+  body_format: qbit-form
+systemd_override: |
+  [Service]
+  Type=oneshot
 order: 50

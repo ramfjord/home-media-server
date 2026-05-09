@@ -24,6 +24,10 @@ Three template-scope macros, each expanding through the primitive `with-service-
 
 For predicates reused across several call sites in one template, use `macrolet` at the top of the template to define a named field-scope macro — see `services/homer/config.yml.elp` for an example. New service fields are picked up automatically from any key appearing in service yaml; no per-field declaration step today.
 
+## Per-service systemd drop-ins
+
+The default `__service__.service.elp` template generates a `Type=simple` + `Restart=on-failure` unit suitable for long-running containers. To override directives without forking the template, set `systemd_override:` in `service.yml` to a literal drop-in body — it's emitted to `<svc>.service.d/override.conf` and composed by systemd at load time. Field values still get ELP-evaluated, so `<%= compose_file %>` works. See `services/api-config/service.yml` for the canonical use (oneshot reconcile job).
+
 ## Dev REPL
 
 `script/start-image.sh` boots an SBCL image with `:mediaserver` loaded and the manifest read, so `for-service`/`loop-services` macros work and editor LSPs can attach. See [docs/dev-environment.md](docs/dev-environment.md) for editor wiring (Emacs SLIME via `.dir-locals.el`, vim/vlime, nvim+swank-lsp, container/nix overrides).

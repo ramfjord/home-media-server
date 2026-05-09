@@ -1,0 +1,27 @@
+---
+name: api-config
+partof: dashboard
+desc: Apply declared HTTP-API config to upstream services (qBit + Servarr)
+user: root  # no dedicated host user; reads :ro mounts and makes HTTP calls
+docker_config:
+  image: ghcr.io/ramfjord/api-config:latest
+  # host network so the container resolves the tailnet FQDN and the
+  # caddy-issued cert (CN = the FQDN) validates. Bridge-network alts
+  # would either need cert-name overrides or an internal upstream URL,
+  # both of which fork from how the rest of the stack reaches caddy.
+  network_mode: host
+  volumes:
+  - "<%= install_base %>/config/api-config/upstreams.yaml:/upstreams.yaml:ro"
+  - "<%= install_base %>/config/api-config/resources.yaml:/resources.yaml:ro"
+  command: ["/upstreams.yaml", "/resources.yaml"]
+  restart: "no"
+# Oneshot: exits when reconcile finishes. Drop-in overrides the default
+# `Type=simple` + `Restart=on-failure` baked into __service__.service.elp.
+# TimeoutStartSec covers configure.py's 7.5min retry budget plus slack
+# for slow first-boot upstream readiness.
+systemd_override: |
+  [Service]
+  Type=oneshot
+  Restart=no
+  TimeoutStartSec=900
+order: 200

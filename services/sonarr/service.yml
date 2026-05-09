@@ -21,4 +21,21 @@ api_config:
   api_version: v3
   auth: { type: header, name: X-Api-Key, value: "<%= (for-service :sonarr apikey) %>" }
   extra_mutate_query: { forceSave: true }
+# Literal block — see services/radarr/service.yml for rationale.
+api_resources: |
+  upserts:
+    downloadclient:
+    - name: qBittorrent
+      enable: true
+      protocol: torrent
+      priority: 1
+      implementation: QBittorrent
+      implementationName: qBittorrent
+      configContract: QBittorrentSettings
+      fields:
+      - { name: host,       value: localhost }
+      - { name: port,       value: <%= (for-service :qbittorrent port) %> }
+      - { name: username,   value: "<%= (for-service :qbittorrent username) %>" }
+      - { name: password,   value: "<%= (for-service :qbittorrent password) %>" }
+      - { name: tvCategory, value: tv-sonarr }
 order: 30

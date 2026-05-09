@@ -110,25 +110,16 @@ check/%: checks/%.sh.elp all
 check: $(patsubst checks/%.sh.elp,check/%,$(wildcard checks/*.sh.elp))
 
 # Apply declared config to upstream HTTP APIs (qBit + Servarr today).
-# config/api-config/upstreams.yaml carries auth + URL per upstream;
-# config/<svc>/<endpoint>.json files are POSTed/PUT idempotently. Tool
-# is a tiny Python image (tools/api-config/) kept out of the Lisp
-# toolchain so per-API quirks (Servarr's forceSave, qBit's qbit-form
-# encoding) live in idiomatic Python with structured error reporting.
+# api-config is a regular service — see services/api-config/. The
+# image (tools/api-config/) is kept out of the Lisp toolchain so
+# per-API quirks (Servarr's forceSave, qBit's qbit-form encoding)
+# live in idiomatic Python with structured error reporting; it ships
+# via GHCR and the deploy host pulls it like any other image.
 API_CONFIG_TAG   ?= ghcr.io/ramfjord/api-config:latest
 API_CONFIG_STAMP := tools/api-config/.image-built
 $(API_CONFIG_STAMP): tools/api-config/Dockerfile tools/api-config/configure.py
 	@docker build -t $(API_CONFIG_TAG) tools/api-config/
 	@touch $@
-
-api-config: $(API_CONFIG_STAMP) all
-	@docker run --rm --network host \
-	  -v $(PWD)/config/api-config/upstreams.yaml:/upstreams.yaml:ro \
-	  -v $(PWD)/config/sonarr:/resources/sonarr:ro \
-	  -v $(PWD)/config/radarr:/resources/radarr:ro \
-	  -v $(PWD)/config/prowlarr:/resources/prowlarr:ro \
-	  -v $(PWD)/config/qbittorrent:/resources/qbittorrent:ro \
-	  $(API_CONFIG_TAG) /upstreams.yaml /resources
 
 # Push the api-config image to GHCR. Run `docker login ghcr.io -u <user>`
 # once with a PAT that has write:packages scope before invoking. Override
@@ -163,7 +154,6 @@ preview: sync
 
 install: sync
 	@ssh $(TARGET) "cd /opt/mediaserver/staging ; sudo make deploy"
-	@$(MAKE) --no-print-directory api-config TARGET=$(TARGET)
 
 systemctl-start systemctl-stop systemctl-restart:
 	@ssh $(TARGET) sudo systemctl $(patsubst systemd-%,%,$@) mediaserver.target

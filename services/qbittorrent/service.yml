@@ -23,4 +23,11 @@ api_config:
   # No auth — qBittorrent.conf.elp sets AuthSubnetWhitelist=0.0.0.0/0,
   # which auth-bypasses any caller. Tailnet-only port exposure is the
   # real security boundary.
+# Literal block — preserves camelCase / case-sensitive endpoint paths
+# (here: app/setPreferences) through the manifest round-trip.
+api_resources: |
+  posts:
+    app/setPreferences:
+      web_ui_username: "<%= (for-service :qbittorrent username) %>"
+      web_ui_password: "<%= (for-service :qbittorrent password) %>"
 order: 50

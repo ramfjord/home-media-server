@@ -21,4 +21,24 @@ api_config:
   api_version: v3
   auth: { type: header, name: X-Api-Key, value: "<%= (for-service :radarr apikey) %>" }
   extra_mutate_query: { forceSave: true }
+# Literal block: passed through to api-config as a verbatim YAML
+# fragment so that camelCase JSON body keys (configContract,
+# implementationName, …) survive the manifest round-trip — the
+# manifest builder otherwise lowercases all keyword keys.
+api_resources: |
+  upserts:
+    downloadclient:
+    - name: qBittorrent
+      enable: true
+      protocol: torrent
+      priority: 1
+      implementation: QBittorrent
+      implementationName: qBittorrent
+      configContract: QBittorrentSettings
+      fields:
+      - { name: host,          value: localhost }
+      - { name: port,          value: <%= (for-service :qbittorrent port) %> }
+      - { name: username,      value: "<%= (for-service :qbittorrent username) %>" }
+      - { name: password,      value: "<%= (for-service :qbittorrent password) %>" }
+      - { name: movieCategory, value: movies-radarr }
 order: 20

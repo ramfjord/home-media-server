@@ -1,0 +1,3 @@
+<%- (when systemd_override -%>
+<%= systemd_override %>
+<%- ) -%>

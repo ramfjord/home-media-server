@@ -1,6 +1,0 @@
-<%- (for-service :qbittorrent -%>
-{
-  "web_ui_username": "<%= username %>",
-  "web_ui_password": "<%= password %>"
-}
-<%- ) -%>

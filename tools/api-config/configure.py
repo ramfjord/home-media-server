@@ -2,9 +2,9 @@
 """Apply declared config to upstream HTTP APIs (idempotent).
 
 Usage:
-    configure.py <upstreams.yaml> <resource-dir>
+    configure.py <upstreams.yaml> <resources.yaml>
 
-Per upstream in upstreams.yaml:
+upstreams.yaml — per-upstream connection + auth metadata:
     base_url:           HTTP base
     api_version:        path segment after /api/   (e.g. v3, v1, v2)
     healthcheck_path:   optional, GET'd before reconcile (skip on 5xx)
@@ -14,16 +14,14 @@ Per upstream in upstreams.yaml:
                           (qBittorrent's RPC-style API expects this)
     extra_mutate_query: optional, query params on POST/PUT only
 
-Resource files under <resource-dir>/<upstream>/...:
-    Path components after <upstream>/ become the endpoint path.
-        <upstream>/applications.json     -> /api/<ver>/applications
-        <upstream>/app/setPreferences.post.json -> /api/<ver>/app/setPreferences
-
-    Filename suffix selects mode:
-        <name>.json        -> upsert: GET list, match by `name`, PUT-by-id else POST
-                              (for REST-list endpoints with stable name fields)
-        <name>.post.json   -> bare POST: send the body, no upsert dance
-                              (for RPC-style endpoints that aren't list resources)
+resources.yaml — declarative endpoint configs, keyed by upstream:
+    <upstream>:
+      upserts:                # GET-list-then-PUT-by-name-else-POST
+        <endpoint>: [{body}, ...]   # for REST-list endpoints with stable
+                                    # name fields. <endpoint> is appended
+                                    # to /api/<api_version>/.
+      posts:                  # bare POST, no upsert dance
+        <endpoint>: {body}          # for RPC-style endpoints
 
 Each request retries with exponential backoff on transient errors. A failed
 healthcheck for an upstream skips its resources with a warning.
@@ -186,72 +184,54 @@ def post_resource(
         raise ConfigureError(f"POST {url} → HTTP {resp.status_code}: {err}")
 
 
-def apply_file(
-    client: httpx.Client, name: str, upstream: dict, json_path: Path, endpoint: str
+def apply_upstream(
+    client: httpx.Client, name: str, upstream: dict, resources: dict
 ) -> int:
-    """Returns count of failures."""
-    body = json.loads(json_path.read_text())
-    if json_path.name.endswith(".post.json"):
+    """Apply all upserts/posts for one upstream. Returns count of failures."""
+    failures = 0
+    for endpoint, items in (resources.get("upserts") or {}).items():
+        if not isinstance(items, list):
+            items = [items]
+        print(f"[api-configure] {name} /{endpoint} (upsert, {len(items)} item(s))")
+        for r in items:
+            try:
+                upsert_resource(client, name, upstream, endpoint, r)
+            except (httpx.HTTPError, ConfigureError) as e:
+                print(f"  FAILED name={r.get('name', '<unnamed>')}: {e}",
+                      file=sys.stderr)
+                failures += 1
+    for endpoint, body in (resources.get("posts") or {}).items():
+        print(f"[api-configure] {name} /{endpoint} (POST)")
         try:
-            print(f"[api-configure] {json_path} → {name} /{endpoint} (POST)")
             post_resource(client, name, upstream, endpoint, body)
-            return 0
         except (httpx.HTTPError, ConfigureError) as e:
             print(f"  FAILED: {e}", file=sys.stderr)
-            return 1
-    resources = body if isinstance(body, list) else [body]
-    failures = 0
-    print(f"[api-configure] {json_path} → {name} /{endpoint} (upsert, {len(resources)} item(s))")
-    for r in resources:
-        try:
-            upsert_resource(client, name, upstream, endpoint, r)
-        except (httpx.HTTPError, ConfigureError) as e:
-            print(f"  FAILED name={r.get('name', '<unnamed>')}: {e}",
-                  file=sys.stderr)
             failures += 1
     return failures
-
-
-def derive_endpoint(json_path: Path, upstream_dir: Path) -> str:
-    """Path components after <upstream>/ become the endpoint. Strip trailing
-       .json or .post.json from the leaf."""
-    rel = json_path.relative_to(upstream_dir)
-    parts = list(rel.parts)
-    leaf = parts[-1]
-    if leaf.endswith(".post.json"):
-        leaf = leaf[: -len(".post.json")]
-    elif leaf.endswith(".json"):
-        leaf = leaf[: -len(".json")]
-    parts[-1] = leaf
-    return "/".join(parts)
 
 
 def main(argv: list[str]) -> int:
     if len(argv) != 3:
         print(__doc__, file=sys.stderr)
         return 2
-    upstreams = yaml.safe_load(Path(argv[1]).read_text())
-    resource_dir = Path(argv[2])
+    upstreams = yaml.safe_load(Path(argv[1]).read_text()) or {}
+    resources = yaml.safe_load(Path(argv[2]).read_text()) or {}
     failures = 0
     skipped = 0
     with httpx.Client(timeout=30.0) as client:
-        for upstream_dir in sorted(resource_dir.iterdir()):
-            if not upstream_dir.is_dir():
-                continue
-            name = upstream_dir.name
+        for name in sorted(resources):
             if name not in upstreams:
+                print(f"[api-configure] {name}: no matching upstream entry, skipping",
+                      file=sys.stderr)
+                skipped += 1
                 continue
             upstream = upstreams[name]
             if not healthcheck(client, name, upstream):
                 skipped += 1
                 continue
-            for json_path in sorted(upstream_dir.rglob("*.json")):
-                endpoint = derive_endpoint(json_path, upstream_dir)
-                failures += apply_file(
-                    client, name, upstream, json_path, endpoint
-                )
+            failures += apply_upstream(client, name, upstream, resources[name])
     if skipped:
-        print(f"[api-configure] {skipped} upstream(s) skipped (healthcheck)",
+        print(f"[api-configure] {skipped} upstream(s) skipped (healthcheck/missing)",
               file=sys.stderr)
     if failures:
         print(f"[api-configure] {failures} failure(s)", file=sys.stderr)

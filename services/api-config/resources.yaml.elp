@@ -1,0 +1,21 @@
+# Generated from each service.yml's `api_resources` block. To wire up
+# a new endpoint: add `api_resources: |` (literal block) to the
+# upstream's service.yml; this file picks it up automatically.
+#
+# Schema (consumed by tools/api-config/configure.py):
+#   <upstream>:
+#     upserts:                # GET-list-then-PUT-by-name-else-POST
+#       <endpoint-path>: [ {body}, ... ]
+#     posts:                  # bare POST, no upsert dance
+#       <endpoint-path>: {body}
+#
+# `endpoint-path` is appended to /api/<api_version>/, so e.g. `applications`
+# → /api/v1/applications, `app/setPreferences` → /api/v2/app/setPreferences.
+---
+<%- (loop-services (service-where api_resources) -%>
+<%= name %>:
+<%= (with-output-to-string (s)
+      (with-input-from-string (in api_resources)
+        (loop for line = (read-line in nil nil) while line do
+          (format s "  ~A~%" line)))) -%>
+<%- ) -%>

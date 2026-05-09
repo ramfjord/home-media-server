@@ -19,4 +19,30 @@ api_config:
   api_version: v1
   auth: { type: header, name: X-Api-Key, value: "<%= (for-service :prowlarr apikey) %>" }
   extra_mutate_query: { forceSave: true }
+# Literal block — see services/radarr/service.yml for rationale.
+api_resources: |
+  upserts:
+    applications:
+    - name: Sonarr
+      syncLevel: fullSync
+      implementation: Sonarr
+      implementationName: Sonarr
+      configContract: SonarrSettings
+      enable: true
+      fields:
+      - { name: prowlarrUrl,     value: "http://localhost:<%= (for-service :prowlarr port) %>" }
+      - { name: baseUrl,         value: "http://localhost:<%= (for-service :sonarr port) %>" }
+      - { name: apiKey,          value: "<%= (for-service :sonarr apikey) %>" }
+      - { name: syncCategories,  value: [5000, 5010, 5020, 5030, 5040, 5045, 5050, 5090] }
+    - name: Radarr
+      syncLevel: fullSync
+      implementation: Radarr
+      implementationName: Radarr
+      configContract: RadarrSettings
+      enable: true
+      fields:
+      - { name: prowlarrUrl,    value: "http://localhost:<%= (for-service :prowlarr port) %>" }
+      - { name: baseUrl,        value: "http://localhost:<%= (for-service :radarr port) %>" }
+      - { name: apiKey,         value: "<%= (for-service :radarr apikey) %>" }
+      - { name: syncCategories, value: [2000, 2010, 2020, 2030, 2040, 2045, 2050, 2060, 2070, 2080, 2090] }
 order: 40
