@@ -140,4 +140,5 @@
            (cfg    (yaml->plist parsed)))
       (setf *globals*      (getf cfg :globals)
             *known-fields* (collect-known-fields (getf cfg :services)))
+      (populate-field-docstrings (getf cfg :services) (getf cfg :globals))
       cfg)))

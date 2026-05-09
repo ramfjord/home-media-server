@@ -15,13 +15,6 @@
     (let ((*package* (find-package :mediaserver)))
       (apply #'elp:render (probe-file path) s context))))
 
-(defun %field-binding-symbol (key)
-  "Convert :install_base -> install_base (a symbol in :mediaserver).
-   Used by WITH-SERVICE-SCOPE's symbol-macrolet, which exposes each
-   field as a bare symbol in template bodies — distinct from the
-   keyword keys used at the kwarg-dispatch boundary."
-  (alexandria:ensure-symbol key :mediaserver))
-
 (defun find-service-by-name (key services-list)
   "Look up the service named KEY (a keyword like :radarr) in
    SERVICES-LIST by case-insensitive string match against :name.
