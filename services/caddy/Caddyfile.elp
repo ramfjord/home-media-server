@@ -4,9 +4,14 @@
 # the site is declared with a hostname.
 <%= hostname %> {
   tls /certs/<%= hostname %>.crt /certs/<%= hostname %>.key
-<%- (loop-services (service-where (and displayable via_caddy (= public_port 443))) %>
 
-  handle <%= public_path %>/* {
+  # Both `/foo` and `/foo/*` matchers per service: caddy's `/foo/*`
+  # does not match the bare `/foo`, and homer tile URLs are
+  # `https://<host>/<name>` (no trailing slash). Without the bare
+  # matcher those clicks fall through to the homer catch-all and 404.
+<%- (loop-services (service-where (and displayable via_caddy (= public_port 443))) %>
+  @<%= name %> path <%= public_path %> <%= public_path %>/*
+  handle @<%= name %> {
     reverse_proxy <%= (if use_vpn "wireguard" name) %>:<%= port %>
   }
 <%- ) %>
@@ -27,6 +32,12 @@
 <%- (loop-services (service-where (and displayable via_caddy (/= public_port 443))) %>
 <%= hostname %>:<%= public_port %> {
   tls /certs/<%= hostname %>.crt /certs/<%= hostname %>.key
-  reverse_proxy <%= (if use_vpn "wireguard" name) %>:<%= port %>
+  # Rewrite Host to match the upstream's listening hostport. qBit 5.x
+  # rejects requests whose Host port differs from its server port
+  # ("Invalid Host header, port mismatch"). Forwarding the original
+  # `<hostname>:<public_port>` Host triggers that on every request.
+  reverse_proxy <%= (if use_vpn "wireguard" name) %>:<%= port %> {
+    header_up Host {upstream_hostport}
+  }
 }
 <%- ) %>
