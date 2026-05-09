@@ -5,6 +5,8 @@ datasources:
     uid: prometheus
     type: prometheus
     access: proxy
-    url: http://prometheus:9090
+    # /prometheus prefix matches prometheus's --web.route-prefix flag;
+    # without it grafana hits /api/v1/... and gets 404.
+    url: http://prometheus:9090/prometheus
     isDefault: true
     editable: true

@@ -43,10 +43,23 @@ receivers:
         #     - target_label: __address__
         #       replacement: "snmp-exporter:9116"
 
-        # HTTP probes via blackbox exporter for dockerized services
+        # HTTP probes via blackbox-exporter. Two layers:
+        #
+        #   internal_probe_<svc>   — container DNS, hits the service's
+        #                            declared healthz path. Confirms the
+        #                            container is up and serving.
+        #   public_probe_<svc>     — public_url that Homer's tile links
+        #                            to. Confirms caddy routing, TLS, and
+        #                            the auth chain end-to-end. Catches
+        #                            failures the internal probe can't
+        #                            see (wrong matcher, bare-vs-slash
+        #                            404, host-header rejection).
+        #
+        # `metrics_path: /blackbox-exporter/probe` matches blackbox-
+        # exporter's `--web.route-prefix=/blackbox-exporter`.
 <%- (loop-services (service-where (and dockerized healthz)) -%>
-        - job_name: 'http_probe_<%= name %>'
-          metrics_path: /probe
+        - job_name: 'internal_probe_<%= name %>'
+          metrics_path: /blackbox-exporter/probe
           params:
             module: [http_basic]
           static_configs:
@@ -54,6 +67,26 @@ receivers:
             # on the mediaserver network — probe via wireguard.
             - targets:
               - http://<%= (if use_vpn "wireguard" name) %>:<%= port %><%= healthz %>
+              labels:
+                service: <%= name %>
+                partof: <%= partof %>
+                description: "<%= desc %>"
+          relabel_configs:
+            - source_labels: [__address__]
+              target_label: __param_target
+            - source_labels: [__param_target]
+              target_label: instance
+            - target_label: __address__
+              replacement: "blackbox-exporter:9115"
+<%- ) -%>
+<%- (loop-services (service-where displayable) -%>
+        - job_name: 'public_probe_<%= name %>'
+          metrics_path: /blackbox-exporter/probe
+          params:
+            module: [http_basic]
+          static_configs:
+            - targets:
+              - <%= public_url %>
               labels:
                 service: <%= name %>
                 partof: <%= partof %>
