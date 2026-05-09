@@ -1,0 +1,24 @@
+[Unit]
+Description=Reconcile host-installed debian packages
+# Network is needed for apt-get; don't block boot on a flaky mirror.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash <%= install_base %>/config/debian-host-config/install.sh
+# Logged to journald like any other unit; journald-exporter (once
+# installed by this very unit, on first run) picks up failures.
+StandardOutput=journal
+StandardError=journal
+
+# Intentionally no [Install] section — this unit is path-triggered,
+# not started at boot. Mediaserver.target's per-deploy install.sh
+# refresh happens via the .path watcher when the rendered script
+# changes; boot-time apt is the failure mode we're avoiding.
+#
+# Bootstrap: PathChanged= only fires on *modification*, not on first
+# existence, so the first deploy that ships install.sh won't trigger
+# this unit. Run it manually once with
+#   sudo systemctl start debian-host-config.service
+# Subsequent deploys that touch install.sh are picked up automatically.

@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch for changes to the aggregated install script
+
+[Path]
+PathChanged=<%= install_base %>/config/debian-host-config/install.sh
+Unit=debian-host-config.service
+
+[Install]
+WantedBy=multi-user.target
