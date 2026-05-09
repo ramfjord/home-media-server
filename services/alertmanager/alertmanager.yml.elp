@@ -2,7 +2,12 @@ templates:
   - templates/*.tmpl
 
 route:
-  group_by: ['alertname']
+  # group_by: ['service'] — collapse all alerts touching the same
+  # service into one notification thread. An exporter scrape failing
+  # (TargetDown) and that service's blackbox probe failing
+  # (BlackboxProbeFailed) end up in the same Discord post instead of
+  # two separate posts. Alerts with no `service` label group under "".
+  group_by: ['service']
   group_wait: 30s
   group_interval: 5m
   repeat_interval: 4h
@@ -15,6 +20,13 @@ receivers:
   - name: discord
     discord_configs:
       - webhook_url: 'https://discord.com/api/webhooks/1302064758228254812/JEYtJUxH4yt_KBJ8cZqvZI8SWQ7WWDoJeem3PZDdbLiu155Gp-HNRLQc5c-xZn1OFBY4'
+        # Alertmanager's built-in discord templates are
+        # `discord.default.title` / `discord.default.message`; ours
+        # are named differently so we have to reference them
+        # explicitly here. Without these lines, our overrides in
+        # templates/discord.tmpl are loaded but unused.
+        title: '{{ template "discord.title" . }}'
+        message: '{{ template "discord.body" . }}'
 
 
 inhibit_rules:

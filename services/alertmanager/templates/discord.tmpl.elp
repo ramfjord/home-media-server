@@ -6,11 +6,20 @@
 {{- end }}
 
 {{ define "discord.title" -}}
-  [{{ .Status | toUpper -}} {{ .CommonLabels.alertname }} affected by {{ .Alerts.Firing | len }} alerts
+[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ if .CommonLabels.service }}{{ .CommonLabels.service }}{{ else }}untagged{{ end }}
 {{- end }}
 
+{{/*
+  Each bullet renders the alertname as a Discord markdown link to a
+  Prometheus *graph* of the triggering query over the last 3 days.
+
+  Prometheus bakes `<external_url>/graph?g0.expr=<query>&g0.tab=1`
+  into .GeneratorURL — tab=1 is the table view. We rewrite to tab=0
+  (graph) and append range_input=3d. No need to plumb the expression
+  in by hand; .GeneratorURL already has it URL-encoded.
+*/ -}}
 {{ define "discord.body" -}}
 {{ range .Alerts -}}
-* {{ .Labels.alertname }} : {{ .Labels.service }}
+* [**{{ .Labels.alertname }}**]({{ reReplaceAll "g0\\.tab=1" "g0.tab=0" .GeneratorURL }}&g0.range_input=3d){{ if .Labels.severity }} _({{ .Labels.severity }})_{{ end }}{{ with .Annotations.summary }} — {{ . }}{{ end }}
 {{ end }}
-{{ end }}
+{{- end }}
