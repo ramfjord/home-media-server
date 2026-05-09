@@ -1,3 +1,4 @@
+debian-host-config/install.sh
 fx-caddy/Caddyfile
 fx-caddy/certs/fullchain.pem
 fx-caddy/certs/privkey.pem
