@@ -57,7 +57,9 @@ receivers:
         #
         # `metrics_path: /blackbox-exporter/probe` matches blackbox-
         # exporter's `--web.route-prefix=/blackbox-exporter`.
-<%- (loop-services (service-where (and dockerized healthz)) -%>
+<%- (loop-services (service-where (and dockerized healthz
+                                       (not (equal (getf docker_config :network_mode)
+                                                   "host")))) -%>
         - job_name: 'internal_probe_<%= name %>'
           metrics_path: /blackbox-exporter/probe
           params:
