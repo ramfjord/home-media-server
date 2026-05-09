@@ -4,8 +4,9 @@ partof: monitoring
 desc: Alert management
 port: 9093
 sighup_reload: true
-scrape_target:
-  metrics_path: /alertmanager/metrics  # matches --web.route-prefix
+# Matches --web.route-prefix below.
+internal_path: /alertmanager
+scrape_target: true
 docker_config:
   image: prom/alertmanager:latest
   command:

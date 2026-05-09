@@ -3,10 +3,13 @@ name: prometheus
 partof: monitoring
 desc: Metrics and alerting
 port: 9090
-healthz: "/prometheus/-/healthy"
+# `internal_path` matches --web.route-prefix below. derive.lisp folds
+# it into `internal_url`, and otelcol's scrape_target loop defaults
+# `metrics_path` to `<internal_path>/metrics` when not overridden.
+internal_path: /prometheus
+healthz: /-/healthy
 sighup_reload: true
-scrape_target:
-  metrics_path: /prometheus/metrics
+scrape_target: true
 docker_config:
   image: prom/prometheus:latest
   command:

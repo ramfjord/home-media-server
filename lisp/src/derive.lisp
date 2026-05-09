@@ -86,4 +86,26 @@
                      (format nil "https://~A~A" host path))
                     (t
                      (format nil "https://~A:~A~A" host port path)))))))
+    ;; How another container on the mediaserver-network reaches this
+    ;; service's API root. Mirror of public_url for the inside-the-host
+    ;; perspective. Only computed for dockerized services with a port.
+    ;;
+    ;; `internal_path` (default "") declares any --web.route-prefix the
+    ;; service binary uses to shift its routes under (prometheus,
+    ;; alertmanager, blackbox-exporter all do this). Composing it here
+    ;; gives every consumer a single value to interpolate — no more
+    ;; hand-coded "http://prometheus:9090/prometheus" sprinkled across
+    ;; configs that silently 404 when missed.
+    ;;
+    ;; VPN services share wireguard's netns, so they're not addressable
+    ;; under their own container name on the mediaserver-network — the
+    ;; URL routes through wireguard:<port> instead.
+    (setf (getf s :internal_path) (or (getf s :internal_path) ""))
+    (setf (getf s :internal_url)
+          (or (getf s :internal_url)
+              (when (and (getf s :dockerized) (getf s :port))
+                (format nil "http://~A:~A~A"
+                        (if (getf s :use_vpn) "wireguard" name)
+                        (getf s :port)
+                        (getf s :internal_path)))))
     s))

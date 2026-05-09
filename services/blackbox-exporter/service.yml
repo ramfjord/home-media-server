@@ -3,8 +3,10 @@ name: blackbox-exporter
 partof: monitoring
 desc: Blackbox HTTP probe exporter
 port: 9115
-scrape_target:
-  metrics_path: /blackbox-exporter/metrics  # matches --web.route-prefix
+# Matches --web.route-prefix below. otelcol's scrape_target loop and
+# blackbox probe metrics_path both compose against this.
+internal_path: /blackbox-exporter
+scrape_target: true
 docker_config:
   image: prom/blackbox-exporter:latest
   command:

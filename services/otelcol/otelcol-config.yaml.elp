@@ -3,11 +3,21 @@ receivers:
     config:
       scrape_configs:
 <%- (loop-services (service-where scrape_target) -%>
-<%-   (let ((st (and (listp scrape_target) scrape_target))) -%>
+<%-   (let* ((st (and (listp scrape_target) scrape_target))
+             ;; Default metrics_path to <internal_path>/metrics. Services
+             ;; whose binary serves under --web.route-prefix=X (prometheus,
+             ;; alertmanager, blackbox-exporter) declare internal_path: /X,
+             ;; so /metrics composes correctly without each scrape target
+             ;; hand-coding it. Override with scrape_target.metrics_path
+             ;; for the rare case the metrics endpoint isn't <prefix>/metrics.
+             (mpath (or (getf st :metrics_path)
+                        (when (and internal_path
+                                   (not (string= internal_path "")))
+                          (format nil "~A/metrics" internal_path))))) -%>
         - job_name: '<%= name %>'
-<%-     (let ((mpath (getf st :metrics_path))) (when mpath -%>
+<%-     (when mpath -%>
           metrics_path: <%= mpath %>
-<%-     )) -%>
+<%-     ) -%>
           static_configs:
             - targets:
               - <%= (or (getf st :host) name) %>:<%= (or (getf st :port) port) %><%= (or (getf st :path) "") %>
@@ -55,20 +65,19 @@ receivers:
         #                            see (wrong matcher, bare-vs-slash
         #                            404, host-header rejection).
         #
-        # `metrics_path: /blackbox-exporter/probe` matches blackbox-
-        # exporter's `--web.route-prefix=/blackbox-exporter`.
+        # `metrics_path` is composed from blackbox-exporter's declared
+        # `internal_path` (which mirrors --web.route-prefix). Single
+        # source of truth — flipping the prefix updates every probe job.
 <%- (loop-services (service-where (and dockerized healthz
                                        (not (equal (getf docker_config :network_mode)
                                                    "host")))) -%>
         - job_name: 'internal_probe_<%= name %>'
-          metrics_path: /blackbox-exporter/probe
+          metrics_path: <%= (for-service :blackbox-exporter internal_path) %>/probe
           params:
             module: [http_basic]
           static_configs:
-            # VPN services share wireguard's netns and have no DNS name
-            # on the mediaserver network — probe via wireguard.
             - targets:
-              - http://<%= (if use_vpn "wireguard" name) %>:<%= port %><%= healthz %>
+              - <%= internal_url %><%= healthz %>
               labels:
                 service: <%= name %>
                 partof: <%= partof %>
@@ -83,7 +92,7 @@ receivers:
 <%- ) -%>
 <%- (loop-services (service-where displayable) -%>
         - job_name: 'public_probe_<%= name %>'
-          metrics_path: /blackbox-exporter/probe
+          metrics_path: <%= (for-service :blackbox-exporter internal_path) %>/probe
           params:
             module: [http_basic]
           static_configs:
@@ -107,12 +116,7 @@ processors:
 
 exporters:
   prometheusremotewrite:
-    # /prometheus prefix matches prometheus's --web.route-prefix flag.
-    # Without it the receiver returns 404 and otelcol drops every batch
-    # silently except for log spam — this is the third place today
-    # we've had to add the prefix (after grafana DS and the blackbox
-    # scrape metrics_path).
-    endpoint: "http://prometheus:9090/prometheus/api/v1/write"
+    endpoint: "<%= (for-service :prometheus internal_url) %>/api/v1/write"
 
 service:
   pipelines:

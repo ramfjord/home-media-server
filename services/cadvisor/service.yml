@@ -3,12 +3,12 @@ name: cadvisor
 partof: monitoring
 desc: Container metrics exporter
 port: 8080
+# Matches --url_base_prefix below. Same role as --web.route-prefix on
+# prometheus/blackbox-exporter — different flag spelling, same effect.
+internal_path: /cadvisor
 user: root  # needs root to read docker.sock and /dev/kmsg
 scrape_target:
   port: 8080
-  # `--url_base_prefix=/cadvisor` mounts cadvisor's UI and /metrics
-  # under /cadvisor; otelcol must scrape the prefixed path.
-  metrics_path: /cadvisor/metrics
   # cadvisor measures containers; a metric's `service` is the container
   # being measured, not whatever the cadvisor scrape job's service is.
   metric_relabel_configs:
