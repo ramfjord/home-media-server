@@ -3,7 +3,8 @@ name: blackbox-exporter
 partof: monitoring
 desc: Blackbox HTTP probe exporter
 port: 9115
-scrape_target: true
+scrape_target:
+  metrics_path: /blackbox-exporter/metrics  # matches --web.route-prefix
 docker_config:
   image: prom/blackbox-exporter:latest
   command:

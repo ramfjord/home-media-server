@@ -10,7 +10,11 @@ docker_config:
   command:
   - radarr
   - "--url"
-  - http://caddy:7878
+  # radarr shares wireguard's netns, so its API is reachable as
+  # `wireguard:7878` from the mediaserver-network. The earlier
+  # `caddy:7878` never worked — caddy binds :443/:8000/:8443, not the
+  # arr ports.
+  - http://wireguard:7878
   - "--api-key"
   - "<%= (for-service :radarr apikey) %>"
   - "--port"

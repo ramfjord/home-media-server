@@ -10,7 +10,11 @@ docker_config:
   command:
   - sonarr
   - "--url"
-  - http://caddy:8989
+  # sonarr shares wireguard's netns, so its API is reachable as
+  # `wireguard:8989` from the mediaserver-network. The earlier
+  # `caddy:8989` never worked — caddy binds :443/:8000/:8443, not the
+  # arr ports.
+  - http://wireguard:8989
   - "--api-key"
   - "<%= (for-service :sonarr apikey) %>"
   - "--port"
