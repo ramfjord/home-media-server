@@ -1,0 +1,20 @@
+---
+name: loki
+partof: monitoring
+desc: Log aggregation backend (Loki single-binary)
+port: 3100
+healthz: /ready
+scrape_target: true
+# No dedicated host user — runs as root inside the container so it can
+# write chunks/index to the bind-mounted data dir without uid/gid
+# alignment. Same convention as alloy/api-config/etc.
+user: root
+docker_config:
+  image: grafana/loki:latest
+  command:
+  - "-config.file=/etc/loki/loki.yml"
+  volumes:
+  - "<%= install_base %>/config/loki/loki.yml:/etc/loki/loki.yml:ro"
+  - "<%= install_base %>/config/loki/data:/loki"
+  restart: unless-stopped
+order: 145

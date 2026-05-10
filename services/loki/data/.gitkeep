@@ -1,0 +1,2 @@
+# Placeholder so config/loki/data/ exists pre-deploy and chownall sets
+# ownership before Loki's first write of chunks/index files.

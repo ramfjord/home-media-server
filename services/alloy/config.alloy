@@ -1,8 +1,6 @@
-// Read every entry from systemd-journald, attach `unit` and `level`
-// labels, and convert the stream into prometheus counters. The logs
-// themselves never leave Alloy — `loki.process.metrics` has no
-// `forward_to` target connected, so log bodies are dropped after
-// metric extraction. Only counters survive, exposed at /metrics.
+// Read every entry from systemd-journald, attach `unit`, `level`,
+// and `service` labels, count via stage.metrics for prometheus, and
+// forward bodies to Loki for grep/tail in Grafana.
 
 loki.relabel "journal" {
 	forward_to = []
@@ -16,6 +14,17 @@ loki.relabel "journal" {
 		source_labels = ["__journal_priority_keyword"]
 		target_label  = "level"
 	}
+
+	// Strip `.service` from unit names so the `service` Loki label
+	// matches the `service` label prometheus uses (set on the alloy
+	// scrape's metric_relabel_configs). Keeps grouping/filter labels
+	// consistent across logs and metrics.
+	rule {
+		source_labels = ["__journal__systemd_unit"]
+		regex         = "(.+)\\.service"
+		target_label  = "service"
+		replacement   = "$1"
+	}
 }
 
 loki.source.journal "system" {
@@ -26,8 +35,9 @@ loki.source.journal "system" {
 }
 
 loki.process "metrics" {
-	// No forward_to wired up — bodies are discarded after counters tick.
-	forward_to = []
+	// Bodies flow through to loki.write for storage; stage.metrics
+	// runs in-line on each entry to tick prometheus counters.
+	forward_to = [loki.write.local.receiver]
 
 	stage.metrics {
 		metric.counter {
@@ -36,5 +46,11 @@ loki.process "metrics" {
 			match_all   = true
 			action      = "inc"
 		}
+	}
+}
+
+loki.write "local" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
 	}
 }
