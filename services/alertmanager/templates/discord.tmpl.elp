@@ -11,15 +11,23 @@
 
 {{/*
   Each bullet renders the alertname as a Discord markdown link to a
-  Prometheus *graph* of the triggering query over the last 3 days.
+  Prometheus *graph* of the triggering query over the last 3 days,
+  plus a `logs` link to the Service dashboard scoped to this alert's
+  service label.
 
   Prometheus bakes `<external_url>/graph?g0.expr=<query>&g0.tab=1`
   into .GeneratorURL — tab=1 is the table view. We rewrite to tab=0
   (graph) and append range_input=3d. No need to plumb the expression
   in by hand; .GeneratorURL already has it URL-encoded.
+
+  The dashboard's middle panel filters by `_SYSTEMD_UNIT=$service.service`,
+  but the third panel shows all priority-≤3 entries on the host
+  regardless of unit — that's where service-less alerts (everything
+  bucketed under service=alloy: kernel, scope/slice units) land. So
+  the same link works for tagged services and the alloy catch-all.
 */ -}}
 {{ define "discord.body" -}}
 {{ range .Alerts -}}
-* [**{{ .Labels.alertname }}**]({{ reReplaceAll "g0\\.tab=1" "g0.tab=0" .GeneratorURL }}&g0.range_input=3d){{ if .Labels.severity }} _({{ .Labels.severity }})_{{ end }}{{ with .Annotations.summary }} — {{ . }}{{ end }}
+* [**{{ .Labels.alertname }}**]({{ reReplaceAll "g0\\.tab=1" "g0.tab=0" .GeneratorURL }}&g0.range_input=3d){{ if .Labels.severity }} _({{ .Labels.severity }})_{{ end }}{{ with .Annotations.summary }} — {{ . }}{{ end }} • [logs](https://<%= hostname %>/grafana/d/service?var-service={{ .Labels.service | urlquery }}&from=now-1h&to=now)
 {{ end }}
 {{- end }}
