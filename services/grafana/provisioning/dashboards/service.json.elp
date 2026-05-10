@@ -1,0 +1,87 @@
+{
+  "id": null,
+  "uid": "service",
+  "title": "Service",
+  "tags": ["mediaserver"],
+  "timezone": "",
+  "schemaVersion": 38,
+  "version": 0,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "query",
+        "label": "service",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(loki_process_custom_log_lines_total, service)",
+        "refresh": 1,
+        "sort": 1,
+        "multi": false,
+        "includeAll": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Log entries per second by level — $service",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum by (level) (rate(loki_process_custom_log_lines_total{service=\"$service\"}[5m]))",
+          "legendFormat": "{{level}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "stacking": { "mode": "normal", "group": "A" } }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "id": 2,
+      "type": "table",
+      "title": "Recent journal entries — $service.service",
+      "description": "Live read from systemd-journal-gatewayd via the Journal (Infinity) datasource. Returns the most recent 100 entries for the selected unit. Expand columns by editing the panel.",
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "journal" },
+      "gridPos": { "h": 16, "w": 24, "x": 0, "y": 9 },
+      "targets": [
+        {
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "url": "/entries?_SYSTEMD_UNIT=${service}.service&boot",
+          "url_options": {
+            "method": "GET",
+            "headers": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Range", "value": "entries=:-100:100" }
+            ]
+          },
+          "parser": "backend",
+          "root_selector": "",
+          "columns": [
+            { "selector": "__REALTIME_TIMESTAMP", "text": "ts (us)", "type": "string" },
+            { "selector": "PRIORITY", "text": "pri", "type": "string" },
+            { "selector": "MESSAGE", "text": "message", "type": "string" }
+          ]
+        }
+      ],
+      "options": {
+        "showHeader": true
+      }
+    }
+  ]
+}

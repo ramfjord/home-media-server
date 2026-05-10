@@ -1,0 +1,19 @@
+---
+name: journal-gatewayd
+partof: monitoring
+desc: HTTP gateway exposing systemd journal as JSON (host service)
+# No docker_config / scrape_target — this is a host-installed service
+# whose only purpose is to back Grafana's Infinity datasource for live
+# log browsing. Picked up by debian-host-config via this host_install.
+#
+# `apt-get install -y --no-install-recommends systemd-journal-remote`
+# is the package that ships /usr/lib/systemd/systemd-journal-gatewayd
+# on Debian/Ubuntu. The .socket unit binds 0.0.0.0:19531 and is what
+# the Grafana container reaches via extra_hosts/host.docker.internal.
+#
+# Idempotent: apt skips already-installed packages, and `enable --now`
+# noops if the socket is already active. The package brings other
+# systemd-journal-remote tools too, but we don't enable any of them.
+host_install: |
+  apt-get install -y --no-install-recommends systemd-journal-remote
+  systemctl enable --now systemd-journal-gatewayd.socket

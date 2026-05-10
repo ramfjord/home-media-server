@@ -1,0 +1,20 @@
+apiVersion: 1
+
+datasources:
+  # Reads systemd-journal-gatewayd as a generic HTTP+JSON source. The
+  # gatewayd is a host service installed by services/journal-gatewayd/,
+  # binding 0.0.0.0:19531 with no auth. Grafana reaches it via
+  # host.docker.internal — see services/grafana/service.yml extra_hosts.
+  - name: Journal
+    uid: journal
+    type: yesoreyeram-infinity-datasource
+    access: proxy
+    url: http://host.docker.internal:19531
+    isDefault: false
+    editable: true
+    jsonData:
+      auth_method: none
+      # Allowlist constrains which hosts panels can target — without this,
+      # Infinity refuses requests citing the configured URL.
+      allowed_hosts:
+        - http://host.docker.internal:19531

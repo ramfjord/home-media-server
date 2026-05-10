@@ -14,10 +14,19 @@ docker_config:
   - GF_SECURITY_ADMIN_PASSWORD=admin
   - GF_SERVER_ROOT_URL=https://<%= hostname %>/grafana
   - GF_SERVER_SERVE_FROM_SUB_PATH=true
+  # Auto-installed at container start (grafana fetches from the plugin
+  # registry on boot if missing). Backs the Journal datasource that
+  # reads systemd-journal-gatewayd as a generic JSON source.
+  - GF_INSTALL_PLUGINS=yesoreyeram-infinity-datasource
   volumes:
   - "<%= install_base %>/config/grafana:/var/lib/grafana"
   - "<%= install_base %>/config/grafana/grafana.ini:/etc/grafana/grafana.ini:ro"
   - "<%= install_base %>/config/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro"
   - "<%= install_base %>/config/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro"
+  # journal-gatewayd runs on the host (apt package, not dockerized).
+  # extra_hosts gives the container a host.docker.internal name that
+  # routes to the docker bridge gateway, reaching the host's loopback.
+  extra_hosts:
+  - host.docker.internal:host-gateway
   restart: unless-stopped
 order: 130
