@@ -2,9 +2,12 @@
 name: loki
 partof: monitoring
 desc: Log aggregation backend (Loki single-binary)
-port: 3100
-healthz: /ready
-scrape_target: true
+# No top-level port — Loki has only a minimal built-in web UI; the
+# real interface is via Grafana, which reaches Loki on the docker
+# network as http://loki:3100 (no caddy route, no Homer card needed).
+# Same pattern as alloy: scrape_target carries the port for prometheus.
+scrape_target:
+  port: 3100
 # No dedicated host user — runs as root inside the container so it can
 # write chunks/index to the bind-mounted data dir without uid/gid
 # alignment. Same convention as alloy/api-config/etc.

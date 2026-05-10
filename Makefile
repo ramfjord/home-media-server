@@ -97,17 +97,23 @@ all: $(ALL_OUTPUTS)
 # template wants its file-top fields bound, add `<%- (for-service :NAME -%>`
 # at the top and `<%- ) -%>` at the bottom; no Makefile change required.
 config/%: services/%.elp bin/render services/manifest.yaml | $$(@D)/
-	@bin/render $< > $@ && printf .
+	@bin/render $< > $@ && printf . || (rm -f $@; echo; echo "FAIL: $<" >&2; exit 1)
 
 # Singleton ELPs under targets/debian/ (no service in path).
 config/%: targets/debian/%.elp bin/render services/manifest.yaml | $$(@D)/
-	@bin/render $< > $@ && printf .
+	@bin/render $< > $@ && printf . || (rm -f $@; echo; echo "FAIL: $<" >&2; exit 1)
 
 # Fanout: each `__service__`-bearing template expands to one explicit rule
 # per service. Inline eval — no define needed since the rule fits on one
 # logical line via `;`-separated recipe.
+#
+# `bin/render | success || fail` ensures: on render failure, the partial
+# output file is removed (so a half-rendered config can't ship), the
+# template path is echoed prominently to stderr (so the failure isn't
+# lost in the dot-stream), and the recipe exits non-zero (so make halts
+# / parallel jobs report the failure).
 $(foreach elp,$(FANOUT_ELPS),$(foreach svc,$(ALL_SERVICES),$(eval \
-config/$(subst __service__,$(svc),$(patsubst targets/debian/%.elp,%,$(elp))): $(elp) bin/render services/manifest.yaml | $$$$(@D)/ ; @bin/render --service $(svc) $$< > $$@ && printf .)))
+config/$(subst __service__,$(svc),$(patsubst targets/debian/%.elp,%,$(elp))): $(elp) bin/render services/manifest.yaml | $$$$(@D)/ ; @bin/render --service $(svc) $$< > $$@ && printf . || (rm -f $$@; echo; echo "FAIL: $$<" >&2; exit 1))))
 
 # --- Pre-deploy Verification ---
 
