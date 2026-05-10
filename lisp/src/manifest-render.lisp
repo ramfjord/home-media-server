@@ -4,7 +4,7 @@
 ;;;
 ;;; bin/build-service-config emits services/manifest.yaml.elp — the merged
 ;;; service plists serialized as YAML, with any <%= ... %> tags from
-;;; service.yml carried through verbatim as YAML string content. This pass
+;;; service.yml.elp carried through verbatim as YAML string content. This pass
 ;;; ELP-renders that file with `services` and globals in scope, producing
 ;;; the final services/manifest.yaml. That render is where cross-service
 ;;; references (e.g. `<%= (for-service :smtp from) %>`) resolve.

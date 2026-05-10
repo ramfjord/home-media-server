@@ -12,13 +12,13 @@
 
 (defun config-files-for (name)
   "Files under services/<NAME>/ that get deployed verbatim. Skips
-   service.yml (data). Strips .elp so the listed name matches the
-   deployed file."
+   service.yml.elp (input data, not a deploy artifact). Strips .elp
+   so the listed name matches the deployed file."
   (let ((src (truename (format nil "services/~A/" name))))
     (loop for p in (directory (merge-pathnames "**/*.*" src))
           for r = (enough-namestring p src)
           when (uiop:file-pathname-p p)
-          unless (string= r "service.yml")
+          unless (string= r "service.yml.elp")
           collect (if (str:ends-with? ".elp" r)
                       (subseq r 0 (- (length r) 4)) r))))
 
@@ -65,7 +65,7 @@
     ;;     no caddy doing TLS termination.
     ;;
     ;; A non-default public_port also needs the matching `<p>:<p>`
-    ;; entry in services/caddy/service.yml `ports:` so caddy publishes
+    ;; entry in services/caddy/service.yml.elp `ports:` so caddy publishes
     ;; the port on the host. Kept manual so the set of ports caddy
     ;; binds is visible in one place.
     (setf (getf s :via_caddy)

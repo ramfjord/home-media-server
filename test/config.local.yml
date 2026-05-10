@@ -1,6 +1,6 @@
 ---
 # Exercises the DEFAULT_GLOBALS → config.local.yml merge, verified via
-# the ELP binding seen by service.yml preprocessing:
+# the ELP binding seen by service.yml.elp preprocessing:
 #   - install_base: set here (covers "local overrides default")
 #   - hostname:     set here (covers "local overrides default")
 #   - media_path:   nowhere (covers "fall through to DEFAULT_GLOBALS")

@@ -7,24 +7,24 @@
 ;;; bin/build-service-config — build the manifest yaml.
 ;;;
 ;;; Usage:
-;;;   bin/build-service-config [--override=PATH ...] -o OUT_ELP SERVICE.yml ...
+;;;   bin/build-service-config [--override=PATH ...] -o OUT_ELP SERVICE.yml.elp ...
 ;;;
-;;;   --override=PATH    layer this yaml onto globals + service_overrides
-;;;                      (last-wins; pass config.yaml then config.local.yaml)
-;;;   -o, --out=PATH     write the merged-but-unrendered manifest YAML to
-;;;                      PATH (must end in .elp). The rendered manifest
-;;;                      is written alongside it, with the .elp suffix
-;;;                      stripped (e.g. -o foo/manifest.yaml.elp also
-;;;                      writes foo/manifest.yaml).
-;;;   SERVICE.yml ...    one or more service.yml paths to include
+;;;   --override=PATH        layer this yaml onto globals + service_overrides
+;;;                          (last-wins; pass config.yaml then config.local.yaml)
+;;;   -o, --out=PATH         write the merged-but-unrendered manifest YAML to
+;;;                          PATH (must end in .elp). The rendered manifest
+;;;                          is written alongside it, with the .elp suffix
+;;;                          stripped (e.g. -o foo/manifest.yaml.elp also
+;;;                          writes foo/manifest.yaml).
+;;;   SERVICE.yml.elp ...    one or more service.yml.elp paths to include
 ;;;
 ;;; Two-phase output: the .elp file is the merged service plists serialized
-;;; as YAML, with any <%= ... %> tags from service.yml carried through
+;;; as YAML, with any <%= ... %> tags from service.yml.elp carried through
 ;;; verbatim. Then mediaserver:render-manifest evaluates those tags with
 ;;; the full set of services in scope, producing the final .yaml.
 
 (defun usage (stream)
-  (format stream "Usage: build-service-config [--override=PATH ...] -o OUT_ELP SERVICE.yml ...~%"))
+  (format stream "Usage: build-service-config [--override=PATH ...] -o OUT_ELP SERVICE.yml.elp ...~%"))
 
 (defun parse-args (args)
   (let (overrides services out help)

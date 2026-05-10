@@ -4,16 +4,21 @@ include Makefile.local
 
 MAKEFLAGS += -j$(shell nproc)
 
-# Only directories with a service.yml are real services. Other dirs under
+# Only directories with a service.yml.elp are real services. Other dirs under
 # services/ (e.g. arr-config/) carry templates whose output is consumed
 # by external tools, not by the systemd/docker pipeline — they shouldn't
 # trigger __service__ fanout (no .service unit, no path watcher).
-ALL_SERVICES := $(patsubst services/%/service.yml,%,$(wildcard services/*/service.yml))
+#
+# service.yml.elp is *input data* (parsed as YAML, with <%= %> tags carried
+# verbatim into the manifest); the .elp suffix is purely so editors can
+# treat it as an ELP-with-yaml-host file. It is NOT rendered to config/.
+ALL_SERVICES := $(patsubst services/%/service.yml.elp,%,$(wildcard services/*/service.yml.elp))
 
 # services/<svc>/<path>.elp -> config/<svc>/<path>
 # mindepth 2 skips services/manifest.yaml.elp (the manifest intermediate
 # is a build output, not a per-service template).
-SERVICE_ELPS := $(shell find services -mindepth 2 -name '*.elp' 2>/dev/null)
+# -not -name 'service.yml.elp' skips per-service input data (see above).
+SERVICE_ELPS := $(shell find services -mindepth 2 -name '*.elp' -not -name 'service.yml.elp' 2>/dev/null)
 SERVICE_OUTPUTS := $(patsubst services/%.elp,config/%,$(SERVICE_ELPS))
 
 # Most .elp files are rendered directly into the config directoy
@@ -50,7 +55,7 @@ lisp/.qlot/installed.stamp: lisp/qlfile.lock
 # The services manifest is the single source of truth at render time.
 # Built from the per-service yamls + override files. Cwd-relative so
 # test/ builds its own manifest from test/services/.
-SERVICE_YMLS := $(wildcard services/*/service.yml)
+SERVICE_YMLS := $(wildcard services/*/service.yml.elp)
 OVERRIDE_YMLS := $(wildcard config.local.yml)
 # build-service-config writes both files in one run: manifest.yaml.elp is
 # the merged-but-unrendered intermediate (cross-service tags still live);
@@ -78,7 +83,7 @@ $(DIRS):
 
 all: $(ALL_OUTPUTS)
 	@echo ""
-	@rsync -ac --exclude='*.elp' --exclude='service.yml' --exclude='/manifest.yaml' services/ config/
+	@rsync -ac --exclude='*.elp' --exclude='/manifest.yaml' services/ config/
 	@rsync -ac --exclude='*.elp' --exclude='*__service__*' targets/debian/ config/
 	@# Drop empty rendered files. Fanout templates that don't apply to a
 	@# service (e.g. <svc>-reload.service when sighup_reload is unset)

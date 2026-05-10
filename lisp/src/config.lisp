@@ -26,9 +26,9 @@
     ;; Otherwise overrides wins.
     (t overrides)))
 
-;;; service.yml is parsed as pure YAML — no ELP preprocessing.
+;;; service.yml.elp is parsed as pure YAML — no ELP preprocessing.
 ;;;
-;;; Any <%= ... %> tags inside service.yml string values flow through to
+;;; Any <%= ... %> tags inside service.yml.elp string values flow through to
 ;;; the merged manifest verbatim. They get resolved later by the manifest
 ;;; render pass (see manifest-render.lisp), which has globals + the full
 ;;; service set in scope and can therefore handle cross-service refs that
@@ -72,13 +72,14 @@
 
 (defun load-config-from-args (service-paths override-paths)
   "Build a config plist from explicit paths. SERVICE-PATHS is a list
-   of service.yml files; OVERRIDE-PATHS is a list of override yamls
+   of service.yml.elp files; OVERRIDE-PATHS is a list of override yamls
    in last-wins order (typically just config.local.yml).
 
-   Each service.yml is ELP-preprocessed with the merged globals as
-   bindings, then YAML-parsed. Per-service overrides from any
-   :service_overrides key in any override file are deep-merged in
-   override-list order."
+   Each service.yml.elp is parsed as pure YAML; any <%= ... %> tags
+   inside string values are preserved verbatim and resolved later by
+   the manifest render pass (see manifest-render.lisp). Per-service
+   overrides from any :service_overrides key in any override file are
+   deep-merged in override-list order."
   (let* (;; Layered globals: defaults < every override (last-wins).
          (elp-globals
           (reduce (lambda (acc path)
@@ -97,7 +98,7 @@
                                           :service_overrides)))
                   override-paths
                   :initial-value nil))
-         ;; Parse each service.yml as pure YAML. <%= ... %> tags inside
+         ;; Parse each service.yml.elp as pure YAML. <%= ... %> tags inside
          ;; string values are preserved as text and resolved by the later
          ;; manifest render pass.
          (services

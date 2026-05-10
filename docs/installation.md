@@ -32,7 +32,7 @@ For subsequent shells while the container is up, Docker Desktop's GUI has an "Ex
 ## Configure
 
 1. Copy `config.local.yml.example` → `config.local.yml` and set at least `hostname`, `media_path`, and `install_base`.
-2. Override any service field via `service_overrides:` (deep-merged into that service's `service.yml`).
+2. Override any service field via `service_overrides:` (deep-merged into that service's `service.yml.elp`).
 3. See [services/wireguard/README.md](../services/wireguard/) for one-time VPN setup, and [services/radarr/README.md](../services/radarr/) for the API-key bootstrap.
 
 ## Commands
@@ -113,7 +113,7 @@ If a service doesn't show up or shows red on Homer, `make systemctl-status` give
 
 ## Day-to-day workflow
 
-1. Edit `services/<name>/service.yml`, its templates, or `config.local.yml`
+1. Edit `services/<name>/service.yml.elp`, its templates, or `config.local.yml`
 2. `make install`
 3. Affected services hot-reload via path units; use `make restart-<service>` to force a bounce.
 
