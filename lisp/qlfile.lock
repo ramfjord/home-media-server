@@ -9,7 +9,7 @@
 ("swank-lsp" .
  (:class qlot/source/git:source-git
   :initargs (:remote-url "https://github.com/ramfjord/swank-lsp.git")
-  :version "git-882a76159af573c7c8ef78926661b05de7b0ec49"))
+  :version "git-1ec792665f79aebbfd75a2086e0cacf19607b57c"))
 ("cl-scope-resolver" .
  (:class qlot/source/git:source-git
   :initargs (:remote-url "https://github.com/ramfjord/cl-scope-resolver.git")
