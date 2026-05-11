@@ -1,6 +1,12 @@
 # Home Media Server
 
-Yet another self-hosted media server, with a focus on **observability, flexibility, and Infrastructure-as-Code**. Hobby project — see [docker-compose-nas](https://github.com/AdrienPoupa/docker-compose-nas) for a more battle-tested alternative.
+A templated self-hosted media server stack — Jellyfin + the arr suite + first-class monitoring — generated from per-service YAML manifests by a Lisp template engine and deployed as systemd units to a single Debian host. Caddy fronts everything under one cert, Prometheus + Grafana + Loki are wired in by default, alerts go to Discord, and `make install` does the deploy.
+
+The arr ↔ qBittorrent ↔ Prowlarr API integration is declared in YAML and reconciled by a sidecar — no clicking through Settings → Download Clients → Add per app.
+
+**Looking for a stack to copy and run as-is?** [docker-compose-nas](https://github.com/AdrienPoupa/docker-compose-nas) is more battle-tested for that.
+
+**Looking for a reference architecture** for templated, observability-first home infrastructure? Read on.
 
 > **Setting it up?** See [docs/installation.md](docs/installation.md) for prerequisites, the dev container, deploy target setup, and remote access.
 
@@ -9,7 +15,7 @@ Yet another self-hosted media server, with a focus on **observability, flexibili
 - **Configuration as Code**: each service lives in `services/<name>/` (a `service.yml.elp` plus any `.elp` templates it owns). `config.local.yml` covers per-host overrides.
 - **Templated everything**: a Lisp-based renderer (`bin/render`, sources under `lisp/`) turns the per-service definitions into Prometheus configs, Caddy routes, per-service `docker-compose.yml` files, systemd units, and Homer dashboard entries. Templates use ELP, an ERB-style Common Lisp template engine vendored at `elp/`.
 - **Systemd-native**: every service is a systemd unit on a shared `mediaserver-network`. A `.path` watcher hot-reloads each service when its config changes; `mediaserver.target` brings the whole stack up or down.
-- **Vendor-agnostic monitoring**: OpenTelemetry Collector sits in front of Prometheus/Grafana so the backend can be swapped without restructuring.
+- **Observability built-in**: every service is scraped by Prometheus directly; Alloy ships journald logs to Loki; alerts route via Alertmanager → Discord.
 
 ## Architecture: render → stage → deploy
 
@@ -44,9 +50,10 @@ Every web UI is reached at `https://<tailnet-fqdn>/<path>`, with caddy fronting 
 | [Jellyfin](services/jellyfin/) | streaming | `/jellyfin` | Media server with optional GPU transcoding |
 | [Vaultwarden](services/vaultwarden/) | security | `/vaultwarden` | Self-hosted Bitwarden-compatible password manager |
 | [Prometheus](services/prometheus/) | monitoring | `/prometheus` | Metrics storage and alerting |
-| [OpenTelemetry Collector](services/otelcol/) | monitoring | — | Metrics aggregation hub (no UI) |
 | [Grafana](services/grafana/) | monitoring | `/grafana` | Dashboards and visualization |
-| [Alertmanager](services/alertmanager/) | monitoring | `/alertmanager` | Alert routing |
+| [Alertmanager](services/alertmanager/) | monitoring | `/alertmanager` | Alert routing (Discord webhook + SMTP) |
+| [Loki](services/loki/) | monitoring | — | Log aggregation backend (queried via Grafana) |
+| [Alloy](services/alloy/) | monitoring | — | Ships journald → Loki + per-unit error metrics to Prometheus |
 | [cAdvisor](services/cadvisor/) | monitoring | `/cadvisor` | Container metrics |
 | [node-exporter](services/node-exporter/) | monitoring | — | Host (OS-level) metrics |
 | [Blackbox Exporter](services/blackbox-exporter/) | monitoring | `/blackbox-exporter` | HTTP/TCP endpoint probes |
@@ -55,6 +62,8 @@ Every web UI is reached at `https://<tailnet-fqdn>/<path>`, with caddy fronting 
 | [qbittorrent-exporter](services/qbittorrent-exporter/) | monitoring | — | qBittorrent metrics exporter |
 | [Homer](services/homer/) | dashboard | `/` | Service-discovery landing page |
 | [Caddy](services/caddy/) | dashboard | — | TLS terminator + reverse proxy for everything above |
+| [api-config](services/api-config/) | dashboard | — | Reconciles Servarr/qBittorrent API config from declared YAML |
+| [SMTP](services/smtp/) | infra | — | Postfix relay forwarding outbound mail to upstream provider |
 | [WireGuard](services/wireguard/) | vpn | — | VPN tunnel; Radarr/Sonarr/Prowlarr/qBittorrent share its netns via `network_mode: container:wireguard` |
 
 ## Networking
