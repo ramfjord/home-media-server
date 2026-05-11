@@ -62,3 +62,56 @@ services:
     command: bash
     stdin_open: true
     tty: true
+
+  # swank-lsp: long-running mediaserver image with swank-lsp's TCP
+  # listener (LSP, internal port 7777) and swank (vlime, internal port
+  # 4005). Host-side ports are parameterized so multiple repos with
+  # this service can run simultaneously: defaults here are 7789 for
+  # swank-lsp and 7788 for swank.
+  #
+  #   docker compose up -d swank-lsp     # background; nvim's start_command points here
+  #   docker compose stop swank-lsp
+  #   docker compose logs -f swank-lsp   # tail dev-image.lisp boot output
+  #
+  # SWANK_LSP_HOST_PORT is forwarded into the container so
+  # dev-image.lisp can pass it as :advertise-port — nvim reads
+  # .swank-lsp-port for the host-reachable port, not the internal one.
+  #
+  # No bind-mounts for swank-lsp's source: it's pulled via qlot into
+  # lisp/.qlot/ like any other dep, so the workspace mount already
+  # makes it visible. The trailing (loop (sleep ...)) keeps SBCL alive
+  # after dev-image.lisp finishes — without it --non-interactive would
+  # exit and compose would treat that as a successful run.
+  swank-lsp:
+    image: ghcr.io/ramfjord/home-media-server-dev:latest
+    build: .
+    pull_policy: missing
+    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      HOME: /home/mediaserver
+      # Container ships without a locale by default; SBCL then picks
+      # iso-8859-1 as its default external format and dies on any
+      # non-ASCII source byte (em-dash in a docstring, → in a comment).
+      # C.UTF-8 is the smallest UTF-8 locale Debian provides without
+      # needing locales-gen.
+      LANG: C.UTF-8
+      SWANK_PORT: "4005"
+      SWANK_LSP_HOST_PORT: ${SWANK_LSP_HOST_PORT:-7789}
+    working_dir: ${PWD}/lisp
+    volumes:
+      - ${PWD}:${PWD}
+      - ${PWD}/.devhome:/home/mediaserver
+    ports:
+      - "127.0.0.1:${SWANK_LSP_HOST_PORT:-7789}:7777"   # swank-lsp TCP; nvim attaches here
+      - "127.0.0.1:${SWANK_HOST_PORT:-7788}:4005"       # swank; vlime attaches here
+    command:
+      - qlot
+      - exec
+      - sbcl
+      - --no-userinit
+      - --non-interactive
+      - --load
+      - ${PWD}/script/dev-image.lisp
+      - --eval
+      - (loop (sleep most-positive-fixnum))
+    restart: unless-stopped

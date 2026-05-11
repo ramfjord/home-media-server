@@ -19,13 +19,13 @@ audio-normalizer/examples
 .swank-lsp-port
 .vlime-port
 .mcp.json
-.claude
 
 # Lisp build artifacts
 *.fasl
 bin/
 test/config-lisp/
 .swank-session
+.swank-lsp
 .qlot/
 .qlot-cache/
 

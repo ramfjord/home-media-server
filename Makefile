@@ -48,8 +48,8 @@ DIRS := $(sort $(dir $(ALL_OUTPUTS)))
 bin/%: lisp/cli/%.lisp lisp/src/* lisp/mediaserver.asd script/build.sh lisp/.qlot/installed.stamp
 	@script/build.sh lisp/cli/$*.lisp
 
-lisp/.qlot/installed.stamp: lisp/qlfile.lock
-	cd lisp && qlot install --no-color
+lisp/.qlot/installed.stamp: lisp/qlfile lisp/qlfile.lock
+	cd lisp && qlot install --no-cache --no-color
 	@mkdir -p lisp/.qlot && touch $@
 
 # The services manifest is the single source of truth at render time.

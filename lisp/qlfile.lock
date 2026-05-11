@@ -5,4 +5,16 @@
 ("elp" .
  (:class qlot/source/git:source-git
   :initargs (:remote-url "https://github.com/ramfjord/elp.git")
-  :version "git-7ea6bf415f9b40f838efc61ffee92872a040646b"))
+  :version "git-0ee46566c729673ddc57b075fb1fe64afc82210d"))
+("swank-lsp" .
+ (:class qlot/source/git:source-git
+  :initargs (:remote-url "https://github.com/ramfjord/swank-lsp.git")
+  :version "git-882a76159af573c7c8ef78926661b05de7b0ec49"))
+("cl-scope-resolver" .
+ (:class qlot/source/git:source-git
+  :initargs (:remote-url "https://github.com/ramfjord/cl-scope-resolver.git")
+  :version "git-b8a137c420d37ad4b2eecf529a29864b07328cde"))
+("jsonrpc" .
+ (:class qlot/source/git:source-git
+  :initargs (:remote-url "https://github.com/ramfjord/jsonrpc.git" :branch "fix/byte-counted-content-length-binary")
+  :version "git-53caf42cb3d4afabb84a3869505d16d25c423895"))
