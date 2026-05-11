@@ -16,6 +16,13 @@ docker_config:
   image: grafana/loki:latest
   command:
   - "-config.file=/etc/loki/loki.yml"
+  # Host-local-only publish on 3100. Needed so api-config (which runs
+  # network_mode: host and therefore can't resolve the `loki` docker
+  # DNS name) can query loki's HTTP API for the qbittorrent temp-
+  # password bootstrap. Bind to 127.0.0.1 so the port stays off the
+  # tailnet — loki has no auth.
+  ports:
+  - "127.0.0.1:3100:3100"
   volumes:
   - "<%= install_base %>/config/loki/loki.yml:/etc/loki/loki.yml:ro"
   - "<%= install_base %>/config/loki/data:/loki"
