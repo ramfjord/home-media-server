@@ -84,28 +84,50 @@ on `network_mode: host` and can't resolve `loki`. Add
 nothing tailnet-facing changes. api-config queries
 `http://127.0.0.1:3100/loki/api/v1/query_range`.
 
-**Operation type — qbittorrent-specific, not general.** The new
-configure.py operation is named `qbittorrent_auth_bootstrap` and
-hard-codes the regex (`temporary password is provided for this
-session: (\S+)`), the login endpoint shape (qbit-form-encoded), and
-the setPreferences body. No `source: loki, query: ...,
-extractor: regex, store_as: $temp_pw` abstraction — one consumer,
-one named operation. If sonarr or anything else ever needs a similar
-log-scrape bootstrap, generalize then.
+**Generic `steps:` operation, not a qbit-specific one.** Original
+draft put a `qbittorrent_auth_bootstrap` op into configure.py with
+the regex / unit name / qbit-specific request shape baked in.
+Reverted on user feedback: configure.py stays "curl-like" (generic
+HTTP request + value extraction); per-service quirks live in each
+`service.yml.elp`. The new primitive is a `steps:` block — an
+ordered sequence of HTTP requests with $var substitution, optional
+regex extraction from response bodies, and small control flow
+(`on_success: stop`, `on_failure: continue`,
+`retry_budget_seconds`). Per-upstream cookie jar persists across
+steps via httpx's Client.
 
-**Schema shape.** Add to qbittorrent's `api_resources:`:
+**Schema shape.** Each step is:
 
 ```yaml
-qbittorrent_auth_bootstrap:
-  username: <%= username %>
-  password: <%= password %>
-  loki_url: http://127.0.0.1:3100
-  unit: qbittorrent.service
+- name: <readable>
+  request:
+    method: GET|POST|PUT
+    url: <full url with $var substitution>
+    headers: { ... }            # optional
+    params:  { ... }            # optional, URL query params
+    json: { ... }     OR        # JSON body (Content-Type: application/json)
+    form: { ... }     OR        # form-encoded
+    qbit_form: { ... }          # form-encoded with body=`json=<JSON>`
+  success_when:                 # optional, default: 2xx
+    body_equals: "..."          #   exact-match the response body, OR
+    status: 200                 #   exact-match the status code
+  extract:                      # optional, pulls regex group 1 from body
+    regex: '...(\\S+)...'
+    store_as: <varname>
+  on_success: continue | stop   # default: continue
+  on_failure: raise    | continue  # default: raise
+  retry_budget_seconds: <int>   # default: 0 (no per-step retry loop)
 ```
 
-Drops the existing `posts: app/setPreferences` block — the bootstrap
-operation IS the password-setting flow, the posts entry was
-redundant (and didn't reliably set the password anyway).
+Drops qbittorrent's existing `posts: app/setPreferences` block —
+the steps sequence below IS the password-setting flow.
+
+**Predefined $vars in step context.** `apply_steps` initializes the
+ctx with: `$base_url` (upstream's base_url with trailing slash
+stripped), `$now_ns`, `$past_24h_ns`, `$past_30d_ns`. The time vars
+are convenience anchors for log-store queries that need `start`/`end`
+windows — Loki's query_range defaults to a 1h lookback, which is
+usually too narrow for finding the temp pw from a boot >1h ago.
 
 **Failure mode if Loki has no temp-pw line.** Possible if alloy
 hasn't shipped yet (first deploy on a fresh stack) or qbit was
@@ -125,39 +147,30 @@ pw from `docker logs`" — same as today.
    `curl -s http://127.0.0.1:3100/ready` on the host returns
    `ready` (or whatever loki's readiness reply is).
 
-2. **Add `qbittorrent_auth_bootstrap` operation to configure.py** —
-   New top-level resource type. Implementation:
-   - Attempt `POST /api/v2/auth/login` with configured creds. If
-     body is `Ok.` (qbit's success-string), return success — the
-     password is already set, nothing to do.
-   - On `Fails.` body or 401/403: query loki via
-     `GET /loki/api/v1/query_range?query={unit="qbittorrent.service"} |~ "temporary password is provided"&direction=BACKWARD&limit=10`,
-     extract `(\S+)` after `for this session: ` from the most
-     recent matching log line.
-   - Log in with the temp password → SID cookie.
-   - `POST /api/v2/app/setPreferences` (qbit-form-encoded) with
-     `web_ui_username` and `web_ui_password` set to configured
-     values, using the SID cookie.
-   - Re-attempt the configured-creds login. If it succeeds, exit
-     success; else raise `ConfigureError` with the failure body.
-   - Loki retries with the existing `RETRY_BACKOFFS` schedule when
-     the query returns empty (no matching line yet — alloy hasn't
-     shipped).
-   *Verify:* `tools/api-config/Dockerfile` builds clean. Unit
-   smoke-test: drop a fake loki response into a local mock,
-   run configure.py against an httpx mock, assert the expected
-   sequence (login fail → loki query → login with temp → setPreferences
-   → login confirm). If a quick mock isn't worth it: integration
-   verify in commit 5 via real deploy.
+2. **Add generic `steps:` operation type to configure.py** —
+   Sequence of HTTP requests with $var substitution between them,
+   regex extraction from response bodies, and small control flow.
+   No qbit-specific code. apply_steps initializes the ctx with
+   `$base_url`, `$now_ns`, `$past_24h_ns`, `$past_30d_ns`; subsequent
+   step `extract.store_as` populates additional vars. Per-upstream
+   cookie jar persists via the shared httpx Client.
+   *Verify:* `tools/api-config/Dockerfile` builds clean. Smoke-test
+   $var substitution and regex extraction locally (no httpx mock
+   needed for the pure-Python logic). Integration verify in commit
+   5 via real deploy.
 
-3. **Replace qbittorrent's `posts:` block with `qbittorrent_auth_bootstrap`** —
-   Edit `services/qbittorrent/service.yml.elp`'s `api_resources:`
-   block. Drop the comment about "qBittorrent.conf.elp sets
-   AuthSubnetWhitelist..." since the bootstrap no longer relies on
-   that auth-bypass. Keep the conf entries (they still help
-   tailnet-facing callers that come via caddy).
-   *Verify:* `make all && grep -A10 qbittorrent
-   config/api-config/resources.yaml` shows the new key shape.
+3. **Encode qbit auth bootstrap as `steps:` in qbittorrent's
+   service.yml.elp** — 5-step sequence:
+   probe configured login (stop if it works) → fetch temp pw from
+   loki (300s retry budget) → log in with temp pw → POST
+   setPreferences with configured creds → verify configured login
+   works post-set. All qbit-specific shape (the regex, the
+   Referer header, qbit-form encoding, the loki query string)
+   lives here, not in configure.py. Drop the existing
+   `posts: app/setPreferences` block.
+   *Verify:* `make all && grep -A30 '^qbittorrent:'
+   config/api-config/resources.yaml` shows the 5-step sequence
+   rendered with username/password interpolated.
 
 4. **Build + push the new api-config image** — `make api-config-publish`.
    The qbittorrent compose entry pulls `ghcr.io/ramfjord/api-config:latest`
