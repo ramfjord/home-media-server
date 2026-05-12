@@ -13,6 +13,15 @@ RestartSec=10
 ExecStartPre=/bin/sh -c 'for i in {1..30}; do docker inspect wireguard --format="{{.State.Health.Status}}" 2>/dev/null | grep -q healthy && exit 0; sleep 1; done; exit 1'
 ExecStart=/usr/bin/docker compose -f /opt/fx-mediaserver/config/fx-qbittorrent/docker-compose.yml up --force-recreate fx-qbittorrent
 ExecStop=/usr/bin/docker compose -f /opt/fx-mediaserver/config/fx-qbittorrent/docker-compose.yml stop fx-qbittorrent
+# api-config holds upstream HTTP-API state that doesn't survive a
+# container recreate (e.g. qbit's Password_PBKDF2 if SIGKILLed
+# mid-flush, arr download-client wiring on a fresh /config). Kick
+# api-config every time the upstream restarts so it reconciles
+# without waiting for one of api-config's own files to change.
+# --no-block: fire-and-forget; api-config is Type=oneshot and
+# idempotent, so multiple triggers during stack-wide boot are noise
+# at worst.
+ExecStartPost=/bin/systemctl --no-block start api-config.service
 
 [Install]
 WantedBy=mediaserver.target
