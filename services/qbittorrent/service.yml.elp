@@ -20,96 +20,17 @@ docker_config:
 api_config:
   api_version: v2
   body_format: qbit-form
-  # qbit's `steps:` block below handles its own auth. The api_config
-  # block stays minimal so other consumers (none today) can still
-  # construct a base_url from upstreams.yaml if they want.
+  # No auth header — qBittorrent.conf.elp sets AuthSubnetWhitelist=0.0.0.0/0,
+  # so api-config (which hits qbit through caddy → wireguard:8080,
+  # source-IP non-localhost) auth-bypasses entirely. setPreferences
+  # below persists Password_PBKDF2 to qBittorrent.conf so the arrs
+  # (which DO hit qbit at localhost in wireguard's netns and trigger
+  # LocalHostAuth=true) can authenticate with the same configured creds.
 # Literal block — preserves camelCase / case-sensitive endpoint paths
 # (here: app/setPreferences) through the manifest round-trip.
-#
-# Auth bootstrap. qBittorrent generates a one-shot random admin
-# password every boot that doesn't have a stored Password_PBKDF2 in
-# qBittorrent.conf — there's no API to retrieve it, only a single
-# log line on stdout. We scrape it from loki (alloy ships qbit's
-# journald there) and use it to set the configured creds.
-#
-# Idempotent: if the configured creds already log in, step 1 stops
-# the sequence and no further work happens.
 api_resources: |
-  steps:
-    # 1. Probe configured login. If it works, no-op.
-    - name: probe_configured_login
-      request:
-        method: POST
-        url: $base_url/api/v2/auth/login
-        form:
-          username: "<%= (for-service :qbittorrent username) %>"
-          password: "<%= (for-service :qbittorrent password) %>"
-        headers:
-          # qbit's Referer-CSRF check: header host must equal request
-          # host for non-localhost callers. Setting it explicitly here
-          # since httpx doesn't auto-populate it on programmatic posts.
-          Referer: $base_url/
-      success_when:
-        body_equals: "Ok."
-      on_success: stop
-      on_failure: continue
-    # 2. Fetch the temp pw qbit logged on its last boot.
-    # query_range needs start/end; we look back 30 days so a
-    # long-running container's temp-pw line is still in scope.
-    - name: fetch_temp_pw_from_loki
-      request:
-        method: GET
-        url: http://127.0.0.1:3100/loki/api/v1/query_range
-        params:
-          query: '{unit="qbittorrent.service"} |~ "temporary password is provided"'
-          start: $past_30d_ns
-          end:   $now_ns
-          limit: 10
-          direction: BACKWARD
-      retry_budget_seconds: 300
-      extract:
-        # qbit's temp pw is 9 alphanumeric chars (random base62);
-        # constrain the regex to that so it doesn't accidentally
-        # capture trailing JSON syntax (the response is a JSON-encoded
-        # log line and \S+ would gobble the closing `"]]}]`).
-        regex: 'temporary password is provided for this session: ([A-Za-z0-9]{6,})'
-        store_as: temp_pw
-    # 3. Log in with the temp pw → SID cookie persists in the client.
-    - name: login_with_temp_pw
-      request:
-        method: POST
-        url: $base_url/api/v2/auth/login
-        form:
-          username: admin
-          password: $temp_pw
-        headers:
-          Referer: $base_url/
-      success_when:
-        body_equals: "Ok."
-    # 4. Push the configured user/pw via setPreferences.
-    - name: set_configured_credentials
-      request:
-        method: POST
-        url: $base_url/api/v2/app/setPreferences
-        qbit_form:
-          web_ui_username: "<%= (for-service :qbittorrent username) %>"
-          web_ui_password: "<%= (for-service :qbittorrent password) %>"
-        headers:
-          Referer: $base_url/
-    # 5. Verify the configured creds work post-set.
-    - name: verify_configured_login
-      request:
-        method: POST
-        url: $base_url/api/v2/auth/login
-        form:
-          username: "<%= (for-service :qbittorrent username) %>"
-          password: "<%= (for-service :qbittorrent password) %>"
-        headers:
-          Referer: $base_url/
-      success_when:
-        body_equals: "Ok."
-  # cl-yaml's literal-block emitter truncates the final 1–2 chars
-  # of the captured value during the service.yml -> manifest.yaml
-  # round-trip. Trailing harmless comment keeps the closing
-  # `body_equals: "Ok."` intact in the rendered resources.yaml.
+  posts:
+    app/setPreferences:
+      web_ui_username: "<%= (for-service :qbittorrent username) %>"
+      web_ui_password: "<%= (for-service :qbittorrent password) %>"
 order: 50

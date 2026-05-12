@@ -192,27 +192,97 @@ pw from `docker logs`" — same as today.
    *Verify:* No `Failed to authenticate with qBittorrent` lines in
    `docker logs radarr` for 5 minutes after the deploy.
 
+   **Decisions / postmortem:** Deployed successfully but found a
+   structural flaw: the probe step (and verify step) hit qbit
+   *through caddy*, where qbit sees a non-localhost source IP and
+   `AuthSubnetWhitelist=0.0.0.0/0` auth-bypasses *every* endpoint
+   including `/auth/login`. `curl -d 'password=wrong_xyz'
+   https://hostname:8443/api/v2/auth/login` returns `Ok.` exactly
+   like the right password. So the probe is a false-positive
+   detector — it can't distinguish "creds work" from "auth-bypassed",
+   and `on_success: stop` then short-circuits the steps that
+   actually matter. The whole bootstrap dance never triggers.
+
+   Realized the original `posts: app/setPreferences` design was
+   correct: setPreferences via caddy auth-bypasses, qbit accepts
+   it, computes PBKDF2, persists `Password_PBKDF2=` to qBittorrent.conf.
+   Verified by hand-curling exactly that — qbit wrote the hash on
+   the first call. Restarting qbittorrent.service then cleared the
+   localhost IP-ban (radarr had hammered it for 15h with stale creds)
+   and the arrs immediately authed.
+
+   Real root cause of the original outage was *not* missing
+   bootstrap logic — it was that **api-config doesn't run when
+   qbit restarts**. api-config's `.path` watcher only fires on its
+   own rendered config files. When wireguard cascade-restarted qbit
+   and qbit lost its in-memory `Password_PBKDF2` (likely
+   SIGKILLed mid-flush), nothing told api-config to re-push the
+   password.
+
+6. **Revert qbit's `steps:` block back to
+   `posts: app/setPreferences`** — The original was right. Drop
+   the 5-step sequence, restore the 4-line posts block, update the
+   inline comment to record the why (caddy auth-bypass is what
+   makes the original correct, LocalHostAuth=true on localhost is
+   what makes Password_PBKDF2 needed).
+   *Verify:* `make all && grep -A4 '^qbittorrent:'
+   config/api-config/resources.yaml` shows the original posts shape
+   back.
+
+7. **Trigger api-config from any api-configured service's restart** —
+   The actual fix for the recurrence. Edit
+   `targets/debian/systemd/__service__.service.elp` to conditionally
+   emit `ExecStartPost=/bin/systemctl --no-block start api-config.service`
+   when the service has `api_config:` set. Auto-applies to today's
+   four upstreams (radarr, sonarr, prowlarr, qbittorrent) and any
+   future api-configured service. `--no-block` so the upstream's
+   start isn't gated on api-config completion; api-config is
+   `Type=oneshot` so multiple triggers during stack-wide boot are
+   harmless idempotent runs.
+   *Verify:* `make all && grep -A2 ExecStartPost
+   config/systemd/qbittorrent.service` shows the trigger line.
+   `grep -L ExecStartPost config/systemd/{caddy,grafana,prometheus,…}.service`
+   confirms non-api-configured services don't get it. After deploy:
+   `sudo systemctl restart qbittorrent.service && sleep 3 && sudo
+   journalctl -u api-config.service --since '30s ago'` shows
+   api-config triggered automatically.
+
+## What's worth keeping from the bootstrap detour
+
+- **`Loki :3100 on 127.0.0.1`** (commit 1) — was added for the
+  bootstrap, but stays as a debugging convenience: `curl loki`
+  from the host without a sidecar container. Bound to loopback,
+  no tailnet exposure.
+- **Generic `steps:` engine in `tools/api-config/configure.py`**
+  (commit 2) — small (~100 LoC), well-shaped primitive for any
+  future upstream that needs multi-step API flows (login → fetch
+  X → use X → verify). Today no consumer; documented in
+  configure.py's docstring so the next contributor sees the
+  capability.
+- **Commits 3 (qbit `steps:`)** and the related `make api-config-publish`
+  in commit 4 — reverted in commit 6. The pushed image happens to
+  contain the steps engine which is useful regardless.
+
 ## Future plans
 
-- **Make `Password_PBKDF2` survive deploys.** The real underlying
-  bug is that `qBittorrent.conf` gets rsynced over every install,
-  stripping qbit's persisted password line. Two options worth
-  considering:
-  - Render `Password_PBKDF2=` into the conf template (requires
-    PBKDF2-SHA512 in Lisp, salt cached in `config.local.yml` for
-    determinism).
-  - Make the deploy mechanic skip rsync of `qBittorrent.conf` if
-    it already exists on the target (treat it like a one-shot
-    bootstrap file rather than templated state).
-  Either fix removes the recurring need for the bootstrap operation
-  in this plan. The bootstrap stays as belt-and-suspenders for
-  first-install and unexpected wipe events.
+- **Alert on qbit's `temporary password is provided` log line.**
+  Catches the root cause early: any time qbit boots without
+  Password_PBKDF2, alloy ships the line to loki within seconds, an
+  alert fires. Two implementation paths: (a) alloy emits a metric
+  on regex match, prom rule alerts on it; (b) enable loki ruler.
+- **Backstop alert on arrs' `Failed to authenticate with qBittorrent`
+  log line.** The existing `ServiceLogErrors` rule keys on priority
+  ≤3; arrs log this at `[Warn]` (priority 4), so the rule misses
+  it. Either widen for arrs specifically or add a Loki-pattern rule.
 
 ## Non-goals
 
 - Generalize the bootstrap operation to a "log-scrape any
   secret from any service" primitive. Re-evaluate when a second
   consumer appears.
-- Mount docker.sock in api-config. Loki path is the choice.
+- Mount docker.sock in api-config. Loki path is the choice (the
+  steps engine kept that option open if anyone reaches for it).
 - Touch the deploy mechanic's handling of `qBittorrent.conf`.
-  Separate plan (see Future plans).
+  Verified during the postmortem: setPreferences persistence works
+  fine, the rsync isn't stripping anything. Original Future-plans
+  entry on this was wrong.
