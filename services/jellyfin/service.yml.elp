@@ -25,4 +25,43 @@ docker_config:
   environment:
   - JELLYFIN_PublishedServerUrl=http://<%= hostname %>:8096
   restart: unless-stopped
+api_config:
+  # Jellyfin's primary API is /api/v1/* but the Startup wizard endpoints
+  # we drive below live at /Startup/* (no /api prefix). api_version is
+  # unused by the steps-only flow here; set for future upsert/post use.
+  api_version: v1
+# Literal block — preserves the ELP tags inside so for-service resolves
+# at stage 2 with full manifest scope. Gate at step 1: GET /Startup/FirstUser
+# returns 200 during setup and 401 once /Startup/Complete has been called,
+# so 401 ⇒ already configured ⇒ stop. 200 ⇒ on_failure: continue into the
+# first-run sequence. Re-runs on a configured server cost one GET.
+api_resources: |
+  steps:
+    - name: already-set-up?
+      request:
+        method: GET
+        url: $base_url/Startup/FirstUser
+      success_when:
+        status: 401
+      on_success: stop
+      on_failure: continue
+    - name: server-defaults
+      request:
+        method: POST
+        url: $base_url/Startup/Configuration
+        json:
+          UICulture: en-US
+          MetadataCountryCode: US
+          PreferredMetadataLanguage: en
+    - name: admin-user
+      request:
+        method: POST
+        url: $base_url/Startup/User
+        json:
+          Name: "<%= (for-service :jellyfin admin_username) %>"
+          Password: "<%= (for-service :jellyfin admin_password) %>"
+    - name: complete
+      request:
+        method: POST
+        url: $base_url/Startup/Complete
 order: 70

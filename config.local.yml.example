@@ -40,3 +40,16 @@ service_overrides:
   qbittorrent:
     admin_username: "admin"
     admin_password: "REPLACE_ME"
+  # Seeded into Grafana via GF_SECURITY_ADMIN_{USER,PASSWORD} on first
+  # boot. Grafana persists the hashed password in its sqlite; changing
+  # the value here on a running install resets the admin login.
+  grafana:
+    admin_username: "admin"
+    admin_password: "REPLACE_ME"
+  # Driven into Jellyfin's first-run /Startup/* endpoints by api-config.
+  # On a fresh deploy this sets the initial admin; on an already-set-up
+  # server the gate step short-circuits and these values are ignored
+  # (Jellyfin's wizard can only run once).
+  jellyfin:
+    admin_username: "admin"
+    admin_password: "REPLACE_ME"
