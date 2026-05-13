@@ -39,7 +39,7 @@ api_resources: |
       fields:
       - { name: host,       value: localhost }
       - { name: port,       value: <%= (for-service :qbittorrent port) %> }
-      - { name: username,   value: "<%= (for-service :qbittorrent username) %>" }
-      - { name: password,   value: "<%= (for-service :qbittorrent password) %>" }
+      - { name: username,   value: "<%= (for-service :qbittorrent admin_username) %>" }
+      - { name: password,   value: "<%= (for-service :qbittorrent admin_password) %>" }
       - { name: tvCategory, value: tv-sonarr }
 order: 30

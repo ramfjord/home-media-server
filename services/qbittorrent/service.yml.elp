@@ -31,6 +31,6 @@ api_config:
 api_resources: |
   posts:
     app/setPreferences:
-      web_ui_username: "<%= (for-service :qbittorrent username) %>"
-      web_ui_password: "<%= (for-service :qbittorrent password) %>"
+      web_ui_username: "<%= (for-service :qbittorrent admin_username) %>"
+      web_ui_password: "<%= (for-service :qbittorrent admin_password) %>"
 order: 50

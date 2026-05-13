@@ -38,5 +38,5 @@ service_overrides:
   prowlarr:
     apikey: "REPLACE_ME"
   qbittorrent:
-    username: "admin"
-    password: "REPLACE_ME"
+    admin_username: "admin"
+    admin_password: "REPLACE_ME"
