@@ -2,3 +2,4 @@ git elp https://github.com/ramfjord/elp.git
 git swank-lsp https://github.com/ramfjord/swank-lsp.git
 git cl-scope-resolver https://github.com/ramfjord/cl-scope-resolver.git
 git jsonrpc https://github.com/ramfjord/jsonrpc.git :branch fix/byte-counted-content-length-binary
+ql cl-csv

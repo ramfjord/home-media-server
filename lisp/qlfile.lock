@@ -18,3 +18,7 @@
  (:class qlot/source/git:source-git
   :initargs (:remote-url "https://github.com/ramfjord/jsonrpc.git" :branch "fix/byte-counted-content-length-binary")
   :version "git-53caf42cb3d4afabb84a3869505d16d25c423895"))
+("cl-csv" .
+ (:class qlot/source/ql:source-ql
+  :initargs (:%version :latest)
+  :version "ql-2024-10-12"))

@@ -3,7 +3,7 @@
   :version "0.1.0"
   :author "Thomas Ramfjord"
   :license "MIT"
-  :depends-on ("cl-yaml" "elp" "str" "alexandria" "serapeum" "clingon")
+  :depends-on ("cl-yaml" "cl-csv" "elp" "str" "alexandria" "serapeum" "clingon")
   :serial t
   :components
   ((:module "lib"

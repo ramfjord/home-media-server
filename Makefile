@@ -161,8 +161,12 @@ endif
 
 # Push the rendered bundle to the target's staging dir. --delete is safe here:
 # /opt/mediaserver/staging/ is fully owned by us and rebuilt every deploy.
+# /vaultwarden/passwords.csv is rendered locally for one-time Bitwarden import
+# (see services/vaultwarden/passwords.csv.elp); excluded so plaintext creds
+# never land on the deploy host or in vaultwarden's /data volume.
 sync: all
 	@rsync -acv --delete --rsync-path="sudo rsync" --mkpath --no-owner --no-group \
+	  --exclude=/vaultwarden/passwords.csv \
 	  config/ $(TARGET):/opt/mediaserver/staging/
 	@ssh $(TARGET) "cd /opt/mediaserver/staging ; sudo make chownall"
 
