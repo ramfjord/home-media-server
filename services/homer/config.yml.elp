@@ -14,6 +14,7 @@ icon: fas fa-server
                ("streaming"   . "fas fa-play-circle")
                ("vpn"         . "fas fa-shield-alt")
                ("security"    . "fas fa-lock")
+               ("llm"         . "fas fa-robot")
                ("monitoring"  . "fas fa-chart-line"))))
   (loop-services (service-where displayable)
     (let ((icon-path (format nil "services/homer/assets/tools/~A.png" name)))

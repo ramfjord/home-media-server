@@ -9,4 +9,16 @@
 # host paths — see compose.yaml). Without this, invoking from elsewhere
 # would bind that elsewhere into the container instead of the repo.
 cd "$(dirname "$0")/.."
-exec docker compose run --rm dev "$@"
+
+# Worktree case: .git here is a pointer file ("gitdir: /abs/path/to/.git/worktrees/<name>")
+# into the main repo's .git/. Compose only binds ${PWD}:${PWD}, so following the pointer
+# from inside the container hits a missing path — git-aware tools (aider's GitPython,
+# etc.) then fail acquiring locks under .git/worktrees/<name>/. Bind the *common* gitdir
+# (the main repo's .git/) at the same host path so all internal pointers resolve.
+extra_args=()
+if [ -f .git ]; then
+  common_git=$(realpath "$(git rev-parse --git-common-dir)")
+  [ -d "$common_git" ] && extra_args+=(--volume "$common_git:$common_git")
+fi
+
+exec docker compose run --rm "${extra_args[@]}" dev "$@"

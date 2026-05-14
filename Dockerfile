@@ -31,7 +31,42 @@ RUN apt-get update \
       vim nano less \
       docker-ce-cli docker-compose-plugin \
       systemd \
- && rm -rf /var/lib/apt/lists/*
+      python3-venv python3-pip \
+      ripgrep fd-find bat jq httpie \
+ && rm -rf /var/lib/apt/lists/* \
+ && ln -s /usr/bin/fdfind /usr/local/bin/fd \
+ && ln -s /usr/bin/batcat /usr/local/bin/bat
+
+# Aider — terminal coding agent, pointed at the ollama service over
+# tailnet. Installed into a system-wide venv at /opt/aider (any UID can
+# read it; pip's --break-system-packages would also work but a venv
+# keeps aider's deps isolated from anything else we install later).
+# The wrapper at /usr/local/bin/aider auto-discovers the rendered
+# config in the repo so users don't have to pass --config every time.
+RUN python3 -m venv /opt/aider \
+ && /opt/aider/bin/pip install --no-cache-dir aider-chat \
+ && ln -s /opt/aider/bin/aider /usr/local/bin/aider.real \
+ && chmod -R a+rX /opt/aider \
+ && printf '%s\n' \
+      '#!/bin/bash' \
+      '# Auto-uses the rendered aider config from this repo (config/ollama/' \
+      '# aider.conf.yml), rendered from services/ollama/aider.conf.yml.elp.' \
+      '# Walks up from cwd looking for the config (git rev-parse would be' \
+      '# cleaner but fails inside worktrees whose .git pointer references' \
+      '# a path outside the container'\''s bind mount). Outside a checkout,' \
+      '# falls through to aider'\''s default config discovery.' \
+      'root="$PWD"' \
+      'while [ "$root" != "/" ] && [ ! -f "$root/config/ollama/aider.conf.yml" ]; do' \
+      '  root=$(dirname "$root")' \
+      'done' \
+      'cfg="$root/config/ollama/aider.conf.yml"' \
+      'if [ -f "$cfg" ]; then' \
+      '  exec /usr/local/bin/aider.real --config "$cfg" "$@"' \
+      'else' \
+      '  exec /usr/local/bin/aider.real "$@"' \
+      'fi' \
+    > /usr/local/bin/aider \
+ && chmod a+rx /usr/local/bin/aider
 
 # Named user at UID 1000 so the dev shell shows a real prompt instead
 # of "I have no name!". Compose can override UID/GID via .env for hosts

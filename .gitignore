@@ -29,10 +29,19 @@ test/config-lisp/
 .qlot/
 .qlot-cache/
 
-# Dev container HOME (shell history, vim state, .quicklisp cache, etc.)
-.devhome/
+# Dev container HOME (shell history, vim state, .quicklisp cache, etc.).
+# The directory itself is tracked (via .gitkeep) so it exists at the
+# cloning user's UID before `docker compose run` fires — otherwise the
+# docker daemon (as root) would auto-create the bind target root-owned
+# and the in-container user can't write to its own HOME.
+.devhome/*
+!.devhome/.gitkeep
 .env
 tools/api-config/.image-built
+
+# Aider session state dropped in the repo root when aider runs from
+# the dev container (chat history, input history, ctags cache).
+.aider*
 
 # Legacy cert location — pre tailscale-cert migration certs may still
 # sit here on dev machines that haven't cleaned up. Real certs now

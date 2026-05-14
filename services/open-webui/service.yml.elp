@@ -1,0 +1,60 @@
+---
+name: open-webui
+partof: llm
+desc: Chat UI for Ollama
+port: 8080
+healthz: "/health"
+# Open WebUI's subpath support is partial (WebSocket + static asset
+# paths have historically been finicky), so it gets a dedicated host
+# port like vaultwarden/qbittorrent rather than path-routing under
+# the main FQDN. Remember to keep services/caddy/service.yml.elp's
+# `ports:` list in sync (8002:8002).
+public_port: 8002
+public_path: /
+user: root  # image runs as its own internal user; SQLite under /app/backend/data
+docker_config:
+  image: ghcr.io/open-webui/open-webui:main
+  environment:
+  - OLLAMA_BASE_URL=http://ollama:11434
+  - WEBUI_URL=https://<%= hostname %>:8002
+  # Must stay `true` so api-config's first-deploy signup succeeds — Open
+  # WebUI returns 403 to *every* call when ENABLE_SIGNUP=false, even the
+  # very first one (no "first user bypass" exists). Safe to leave on
+  # permanently: after the first admin exists, Open WebUI itself returns
+  # 403 to any further public signup regardless of this flag.
+  - ENABLE_SIGNUP=true
+  volumes:
+  - "<%= install_base %>/config/open-webui:/app/backend/data"
+  restart: unless-stopped
+api_config:
+  # Auth endpoints live under /api/v1/auths/* — same /api/<api_version>
+  # base the upserts/posts machinery uses. The steps-only flow below
+  # writes full paths, so api_version is only documentary here.
+  api_version: v1
+# Literal block — ELP tags inside resolve at stage 2. Gate at step 1:
+# POST /auths/signin with the configured creds returns 200 if the admin
+# is already seeded, 400 otherwise. So 200 ⇒ done ⇒ stop; 400 ⇒ fall
+# through to signup. Re-runs on a configured server cost one POST.
+api_resources: |
+  steps:
+    - name: admin-exists?
+      request:
+        method: POST
+        url: $base_url/api/v1/auths/signin
+        json:
+          email: "<%= (for-service :open-webui admin_email) %>"
+          password: "<%= (for-service :open-webui admin_password) %>"
+      success_when:
+        status: 200
+      on_success: stop
+      on_failure: continue
+    - name: bootstrap-admin
+      request:
+        method: POST
+        url: $base_url/api/v1/auths/signup
+        json:
+          name: "<%= (for-service :open-webui admin_username) %>"
+          email: "<%= (for-service :open-webui admin_email) %>"
+          password: "<%= (for-service :open-webui admin_password) %>"
+          profile_image_url: "/user.png"
+order: 96  # after ollama (95) so the upstream is up when the UI boots

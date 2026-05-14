@@ -53,3 +53,25 @@ service_overrides:
   jellyfin:
     admin_username: "admin"
     admin_password: "REPLACE_ME"
+  # Open WebUI admin account, seeded on first deploy by api-config
+  # (POST /api/v1/auths/signup). Idempotent — re-runs no-op once the
+  # account exists.
+  open-webui:
+    admin_username: "Admin"
+    admin_email: "admin@example.com"
+    admin_password: "REPLACE_ME"
+  # Ollama: defaults are CPU-only. Uncomment to opt into NVIDIA GPU
+  # passthrough. Requires nvidia-container-toolkit on the host. See
+  # services/ollama/README.md for VRAM sizing and model selection.
+  # ollama:
+  #   docker_config:
+  #     deploy:
+  #       resources:
+  #         reservations:
+  #           devices:
+  #             - driver: nvidia
+  #               count: all
+  #               capabilities: [gpu]
+  #     environment:
+  #       - NVIDIA_VISIBLE_DEVICES=all
+  #       - OLLAMA_KEEP_ALIVE=10m

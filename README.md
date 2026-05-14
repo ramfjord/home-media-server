@@ -49,6 +49,8 @@ Every web UI is reached at `https://<tailnet-fqdn>/<path>`, with caddy fronting 
 | [qBittorrent](services/qbittorrent/) | downloading | `/qbittorrent` | Torrent client (shares WireGuard's netns) |
 | [Jellyfin](services/jellyfin/) | streaming | `/jellyfin` | Media server with optional GPU transcoding |
 | [Vaultwarden](services/vaultwarden/) | security | `/vaultwarden` | Self-hosted Bitwarden-compatible password manager |
+| [Ollama](services/ollama/) | llm | — | Local LLM server (HTTP API on `:11434`, optional GPU) |
+| [Open WebUI](services/open-webui/) | llm | `:8002` | Chat UI for Ollama |
 | [Prometheus](services/prometheus/) | monitoring | `/prometheus` | Metrics storage and alerting |
 | [Grafana](services/grafana/) | monitoring | `/grafana` | Dashboards and visualization |
 | [Alertmanager](services/alertmanager/) | monitoring | `/alertmanager` | Alert routing (Discord webhook + SMTP) |

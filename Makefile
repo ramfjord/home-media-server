@@ -92,7 +92,14 @@ all: $(ALL_OUTPUTS)
 	@# are project-local, but they'd shadow upstream package units for
 	@# host-installed services.
 	@find config -type f -empty -delete
-	@find config -type f -not -path 'config/systemd/*' -not -name .manifest -printf '%P\n' | sort > config/.manifest
+	@# Manifest = files this deploy ships. Enumerated via rsync's own
+	@# dry-run lister so --exclude-from gives byte-identical semantics to
+	@# the real sync below — excluded files are unmanaged on both sides
+	@# (not shipped, not subject to manifest-diff deletion on the host).
+	@rsync -an --out-format='%n' --exclude-from=config/.sync-exclude \
+	  --exclude=/.manifest --exclude=/.sync-exclude --exclude='systemd/***' \
+	  config/ /tmp/.mediaserver-manifest-probe/ \
+	  | grep -v '/$$' | grep -v '^$$' | sort > config/.manifest
 	@cd config/systemd && find . -type f -not -name .mediaserver.manifest -printf '%P\n' | sort > .mediaserver.manifest
 
 # Per-service ELPs in services/. Today no per-service template references
@@ -161,12 +168,13 @@ endif
 
 # Push the rendered bundle to the target's staging dir. --delete is safe here:
 # /opt/mediaserver/staging/ is fully owned by us and rebuilt every deploy.
-# /vaultwarden/passwords.csv is rendered locally for one-time Bitwarden import
-# (see services/vaultwarden/passwords.csv.elp); excluded so plaintext creds
-# never land on the deploy host or in vaultwarden's /data volume.
+# config/.sync-exclude lists rendered-but-controller-only files (e.g.
+# vaultwarden/passwords.csv); see targets/debian/.sync-exclude.elp. The same
+# file is consumed at manifest-build time above, so excluded paths are
+# unmanaged on both sides — never shipped, never manifest-diffed for deletion.
 sync: all
 	@rsync -acv --delete --rsync-path="sudo rsync" --mkpath --no-owner --no-group \
-	  --exclude=/vaultwarden/passwords.csv \
+	  --exclude-from=config/.sync-exclude --exclude=/.sync-exclude \
 	  config/ $(TARGET):/opt/mediaserver/staging/
 	@ssh $(TARGET) "cd /opt/mediaserver/staging ; sudo make chownall"
 

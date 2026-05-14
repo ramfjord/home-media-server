@@ -1,0 +1,32 @@
+---
+name: ollama
+partof: llm
+desc: Local LLM server (Ollama)
+# No top-level port: ollama isn't on the Homer dashboard or behind
+# caddy. Tailnet users hit it directly at http://<hostname>:11434/api/*
+# (same pattern as loki — interface is the API, not a web UI worth
+# fronting). docker_config.ports below publishes the port to the host.
+user: root  # owns model files in /root/.ollama; GPU device nodes prefer root
+# Model the aider config template defaults to. Override in
+# config.local.yml under service_overrides.ollama once you've pulled a
+# different one. Tag must match what `ollama pull` accepts.
+model: llama3.2:1b
+# aider.conf.yml is rendered for the dev container's aider CLI to pick
+# up on the controller — controller-only, never ships to target.
+sync_exclude:
+- aider.conf.yml
+docker_config:
+  image: ollama/ollama:latest
+  ports:
+  - "11434:11434"
+  environment:
+  - OLLAMA_HOST=0.0.0.0:11434
+  - OLLAMA_KEEP_ALIVE=5m
+  volumes:
+  # Model store + ollama state. Survives restarts; pull models with
+  # `curl -X POST http://<host>:11434/api/pull -d '{"name":"..."}'`.
+  - "<%= install_base %>/config/ollama/models:/root/.ollama"
+  restart: unless-stopped
+# GPU passthrough and model-version selection live in config.local.yml
+# under `service_overrides.ollama` — see services/ollama/README.md.
+order: 95

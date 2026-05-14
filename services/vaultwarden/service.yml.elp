@@ -24,3 +24,8 @@ docker_config:
   - SMTP_FROM_NAME=Vaultwarden
   restart: unless-stopped
 order: 90
+# Controller-only: plaintext creds rendered for one-time Bitwarden import.
+# Excluded from `make sync` and the deploy manifest so they never reach the
+# host or vaultwarden's /data volume. See targets/debian/.sync-exclude.elp.
+sync_exclude:
+- passwords.csv

@@ -1,0 +1,14 @@
+<%# Patterns of rendered files under config/ that should not ship to the
+   target. Anchored at config/ root (matches rsync --exclude semantics).
+   Both `make sync` (--exclude-from) and the .manifest enumeration read
+   this file, so excluded files are entirely unmanaged: not shipped, not
+   tracked, and not subject to manifest-diff deletion on the host.
+
+   Uses explicit (field :sync_exclude svc) rather than loop-services / a
+   bare `sync_exclude` symbol so the template renders cleanly even when
+   no service declares the field (e.g. in the fx-* test fixture set). -%>
+# Auto-generated from per-service `sync_exclude:` lists. Do not edit.
+<% (dolist (svc services)
+     (dolist (pat (field :sync_exclude svc)) -%>
+<%= (field :name svc) %>/<%= pat %>
+<%   )) -%>

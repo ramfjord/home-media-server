@@ -1,0 +1,37 @@
+<%- (for-service :ollama -%>
+# Auto-generated. Source: services/ollama/aider.conf.yml.elp.
+#
+# Aider config for the dev container's `aider` CLI, pointed at this
+# repo's ollama instance over the tailnet. Controller-only (excluded
+# from `make sync` via services/ollama/service.yml.elp:sync_exclude).
+#
+# To use a different model: pull it into ollama, then set
+#   service_overrides.ollama.model: <tag>
+# in config.local.yml and re-run `make all`.
+
+# Use ollama's openai-compatible endpoint (/v1/*) rather than the
+# native ollama route. Reason: aider/litellm reads `openai-api-base`
+# directly from the config file, whereas the `ollama_chat/<model>`
+# path requires OLLAMA_API_BASE in the env at model-resolution time —
+# `set-env:` in this file runs too late, so aider falls through to
+# OpenRouter and prompts the user to sign in.
+model: openai/<%= model %>
+openai-api-base: http://<%= hostname %>:11434/v1
+openai-api-key: ollama  # ollama doesn't auth; aider needs a non-empty value
+# Smaller local models tend to produce weak commit messages; review
+# diffs by hand and commit yourself instead of letting aider auto-commit.
+auto-commits: false
+dirty-commits: false
+# Silence first-run interactive prompts (analytics opt-in, PyPI version
+# check, .gitignore-edit consent, release-notes). aider is autoconfigured
+# from this file; users can opt back in with CLI flags if they want.
+analytics: false
+check-update: false
+show-release-notes: false
+gitignore: false
+# litellm has no pricing/context metadata for ollama-served models
+# (they reach aider via the openai/ adapter, so the warning fires for
+# every one). Cost is irrelevant locally and context overflow surfaces
+# from ollama directly — the warning has no signal here.
+show-model-warnings: false
+<%- ) -%>

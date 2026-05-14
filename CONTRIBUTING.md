@@ -24,6 +24,28 @@ Three template-scope macros, each expanding through the primitive `with-service-
 
 For predicates reused across several call sites in one template, use `macrolet` at the top of the template to define a named field-scope macro — see `services/homer/config.yml.elp` for an example. New service fields are picked up automatically from any key appearing in service yaml; no per-field declaration step today.
 
+## Controller-only rendered files: `sync_exclude:`
+
+Some rendered files belong on the controller (the machine running
+`make sync`) but should never reach the deploy target — e.g.
+`services/vaultwarden/passwords.csv.elp` (plaintext bootstrap creds),
+`services/ollama/aider.conf.yml.elp` (aider config for the dev
+container, points at `<%= hostname %>:11434`). Declare them with
+`sync_exclude:` in the service's `service.yml.elp`:
+
+```yaml
+sync_exclude:
+- passwords.csv
+- aider.conf.yml          # any rsync-style glob also works
+```
+
+Patterns are anchored at `config/<svc>/` and feed both `make sync`'s
+`--exclude-from=` AND the `.manifest` enumeration — so excluded files
+are unmanaged on both sides: never shipped, and never subject to
+manifest-diff deletion on the host. The list is rendered to
+`config/.sync-exclude` from `targets/debian/.sync-exclude.elp`; you
+don't need to touch the template to add entries.
+
 ## Per-service systemd drop-ins
 
 The default `__service__.service.elp` template generates a `Type=simple` + `Restart=on-failure` unit suitable for long-running containers. To override directives without forking the template, set `systemd_override:` in `service.yml.elp` to a literal drop-in body — it's emitted to `<svc>.service.d/override.conf` and composed by systemd at load time. Field values still get ELP-evaluated, so `<%= compose_file %>` works. See `services/api-config/service.yml.elp` for the canonical use (oneshot reconcile job).

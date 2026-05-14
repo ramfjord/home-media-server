@@ -15,3 +15,8 @@ docker_config:
   - 19090:19090
   restart: unless-stopped
 order: 5
+# Declares :sync_exclude as a known field so targets/debian/.sync-exclude.elp
+# can `(field :sync_exclude svc)` against the fx-* fixture set without
+# tripping the typo guard. Empty here — exclusion behavior is exercised
+# by the main checkout's vaultwarden manifest, not by goldens.
+sync_exclude: []
