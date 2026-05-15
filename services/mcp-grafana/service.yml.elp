@@ -1,0 +1,39 @@
+---
+name: mcp-grafana
+partof: llm
+desc: MCP server exposing Grafana (and its Prometheus/Loki datasources) to LLMs
+# No public port. Reached over the mediaserver network by mcpo only,
+# which translates its SSE protocol into the OpenAPI that Open WebUI
+# consumes.
+user: root
+docker_config:
+  image: mcp/grafana:latest
+  # Default image entrypoint runs mcp-grafana in SSE mode. Tool surface
+  # trimmed to the minimum useful for a home-media-server's
+  # "is service X healthy / what's in the logs" workflow — keeps
+  # PromQL, LogQL, dashboard search/read, alert-rule read, datasources.
+  # Drops Grafana-Cloud-specific surfaces (Incident, OnCall, Sift,
+  # Asserts, Pyroscope) plus all write ops. Cuts the OpenAPI spec from
+  # ~54 tools to ~8 — material on a small model's context budget.
+  command:
+  - "-t"
+  - "sse"
+  - "--disable-incident"
+  - "--disable-sift"
+  - "--disable-oncall"
+  - "--disable-asserts"
+  - "--disable-pyroscope"
+  - "--disable-navigation"
+  - "--disable-write"
+  environment:
+  # Internal docker DNS — grafana's container is named `grafana` and
+  # listens on its declared port (3000).
+  - GRAFANA_URL=http://grafana:<%= (for-service :grafana port) %>
+  # Basic auth against the admin user. Service-account tokens are the
+  # upstream-recommended path; deferred until there's a reason to
+  # rotate. Internal-network + tailnet-only stack makes admin/admin
+  # tolerable here.
+  - GRAFANA_USERNAME=<%= (for-service :grafana admin_username) %>
+  - GRAFANA_PASSWORD=<%= (for-service :grafana admin_password) %>
+  restart: unless-stopped
+order: 135  # after grafana (130)

@@ -5,6 +5,11 @@ logo: logo.png
 icon: fas fa-server
 
 <%-
+;; Per-service tile: PNG at services/homer/assets/tools/<name>.png if
+;; one exists, otherwise the partof-group's fontawesome icon. Lets
+;; "no real UI but caddy-fronted" services (mcpo, mcp-grafana, …) tile
+;; on homer without needing decorative art. Homer accepts either a
+;; `logo:` URL or an `icon:` fontawesome class, not both.
 (let ((categories
        (sort (remove-duplicates
               (mapcar (field :partof) (service-where displayable))
@@ -15,11 +20,10 @@ icon: fas fa-server
                ("vpn"         . "fas fa-shield-alt")
                ("security"    . "fas fa-lock")
                ("llm"         . "fas fa-robot")
-               ("monitoring"  . "fas fa-chart-line"))))
-  (loop-services (service-where displayable)
-    (let ((icon-path (format nil "services/homer/assets/tools/~A.png" name)))
-      (unless (probe-file icon-path)
-        (error "Missing icon for ~A: ~A" name icon-path))))
+               ("monitoring"  . "fas fa-chart-line")))
+      (fallback-icon "fas fa-cube"))
+  (flet ((tile-png? (svc-name)
+           (probe-file (format nil "services/homer/assets/tools/~A.png" svc-name))))
 -%>
 services:
 <%- (dolist (category categories) -%>
@@ -29,7 +33,11 @@ services:
 <%-   (loop-services (service-where (and displayable (equal partof category))) -%>
       - name: "<%= (str:capitalize name) %>"
         subtitle: "<%= desc %>"
+<%-     (cond ((tile-png? name) -%>
         logo: "assets/tools/<%= name %>.png"
+<%-     ) (t -%>
+        icon: "<%= (or (cdr (assoc partof icons :test #'equal)) fallback-icon) %>"
+<%-     )) -%>
         url: "<%= (or public_url (format nil "https://~A/~A" hostname name)) %>"
         target: "_blank"
-<%- ))) -%>
+<%- )))) -%>

@@ -1,0 +1,39 @@
+---
+name: mcpo
+partof: llm
+desc: MCP→OpenAPI bridge so Open WebUI can call MCP tool servers
+# Caddy fronts mcpo on a dedicated port (no path-routing — mcpo's
+# OpenAPI surface is at /, doesn't take a prefix). OWUI validates the
+# tool-server URL from the *browser*, not its container, so the URL
+# has to be browser-reachable; the internal `mcpo:8000` only works
+# inside docker DNS. Same pattern open-webui uses (8002).
+port: 8000
+public_port: 8003
+public_path: /
+user: root
+docker_config:
+  image: ghcr.io/open-webui/mcpo:main
+  # mcpo --port 8000 --server-type sse -- <upstream-sse-url>
+  # Wraps mcp-grafana's SSE endpoint as OpenAPI at /. Spec at
+  # /openapi.json (what OWUI's tool-server discovery hits).
+  command:
+  - "--port"
+  - "8000"
+  - "--server-type"
+  - "sse"
+  - "--"
+  - "http://mcp-grafana:8000/sse"
+  restart: unless-stopped
+# Host-wide concern, not mcpo-specific — lives here because mcpo
+# pushed the per-user inotify-instance count past the default ceiling
+# (128) by adding two more .path watchers. Every .path watcher in the
+# stack uses one inotify instance, so the next service to land would
+# hit the same wall. Bumping in a sysctl.d drop-in to survive reboot;
+# also applies at runtime so this deploy doesn't need a follow-up.
+host_install: |
+  cat >/etc/sysctl.d/90-mediaserver-inotify.conf <<'EOF'
+  fs.inotify.max_user_instances = 512
+  fs.inotify.max_user_watches = 524288
+  EOF
+  sysctl --quiet -p /etc/sysctl.d/90-mediaserver-inotify.conf
+order: 136  # after mcp-grafana (135)

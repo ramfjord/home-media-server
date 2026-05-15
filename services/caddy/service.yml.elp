@@ -29,6 +29,7 @@ docker_config:
   - 443:443
   - 8000:8000  # vaultwarden (public_port: 8000)
   - 8002:8002  # open-webui  (public_port: 8002)
+  - 8003:8003  # mcpo        (public_port: 8003)
   - 8443:8443  # qbittorrent (public_port: 8443)
   restart: unless-stopped
 order: 10
