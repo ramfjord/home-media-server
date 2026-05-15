@@ -1,8 +1,18 @@
 # Ollama
 
-Local LLM server. Speaks the standard Ollama HTTP API on port `11434`.
-Reachable from the tailnet at `http://<hostname>:11434/` — no caddy
-route, no auth (tailnet gating is the auth boundary for v1).
+Local LLM server — runs open-weight models (Llama, Qwen, etc.) on the
+host and exposes them over a simple HTTP API, so other services
+(Open WebUI, aider, scripts) can talk to a local model instead of a
+hosted API.
+
+Speaks the standard Ollama HTTP API on port `11434`. Reachable from
+the tailnet at `http://<hostname>:11434/` — no caddy route, no auth
+(tailnet gating is the auth boundary for v1).
+
+## More
+
+- Upstream: <https://github.com/ollama/ollama>
+- Docs: <https://github.com/ollama/ollama/tree/main/docs>
 
 ## What's mounted
 
