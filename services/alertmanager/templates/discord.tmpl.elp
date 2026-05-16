@@ -1,8 +1,23 @@
+{{/*
+  Link to Alertmanager's New Silence form, prefilled with this group's
+  common labels (alerts are grouped by `service`, so the silence is
+  scoped to exactly the offending service). Base URL is baked at render
+  from (for-service :alertmanager public_url) — the caddy /alertmanager
+  route — rather than .ExternalURL, so it's consistent with the rest of
+  this file's ELP and independent of AM's --web.external-url.
+
+  filter syntax is `{a="b", c="d"}`: open %7B, %2C%20-join the matchers
+  (separator only *between* items via the $i guard — a trailing comma
+  leaves an empty matcher that AM's parser rejects, blanking the form),
+  close %7D. " is %22, = is %3D, , is %2C, space is %20.
+*/ -}}
 {{ define "__alert_silence_link" -}}
-    {{ .ExternalURL }}/#/silences/new?filter=%7B
-    {{- range .CommonLabels.SortedPairs -}}
-	{{- .Name }}%3D"{{- .Value -}}"%2C%20
-    {{- end -}}
+<%= (for-service :alertmanager public_url) %>/#/silences/new?filter=%7B
+{{- range $i, $p := .CommonLabels.SortedPairs -}}
+{{- if $i }}%2C%20{{ end -}}
+{{- $p.Name }}%3D%22{{ $p.Value }}%22
+{{- end -}}
+%7D
 {{- end }}
 
 {{ define "discord.title" -}}
@@ -30,4 +45,5 @@
 {{ range .Alerts -}}
 * [**{{ .Labels.alertname }}**]({{ reReplaceAll "g0\\.tab=1" "g0.tab=0" .GeneratorURL }}&g0.range_input=3d){{ if .Labels.severity }} _({{ .Labels.severity }})_{{ end }}{{ with .Annotations.summary }} — {{ . }}{{ end }} • [logs](https://<%= hostname %>/grafana/d/service?var-service={{ .Labels.service | urlquery }}&from=now-1h&to=now)
 {{ end }}
+🔇 [mute this group]({{ template "__alert_silence_link" . }})
 {{- end }}
