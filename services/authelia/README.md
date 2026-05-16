@@ -77,6 +77,25 @@ for this service. Caddy's `reverse_proxy` default already preserves
   un-gated so the monitoring stack stays reachable to debug Authelia
   itself.
 
+## Operational (learned from the canary deploy)
+
+- **No `command:`** in `service.yml.elp`. The official image's
+  entrypoint already runs `authelia` with the default config path
+  `/config/configuration.yml` (our volume mounts it there). Passing a
+  bare `--config=…` as the container command makes `entrypoint.sh`
+  fail with `exec: illegal option --` and crash-loop. `validate-config`
+  cannot catch this — it never exercises the entrypoint.
+- **`notifier.disable_startup_check: true`.** Authelia otherwise runs
+  a notifier probe at boot and exits *fatally* if `smtp:25` isn't
+  answering yet — turning a briefly-unready relay into an Authelia
+  crash-loop, and (since Authelia gates routes via forward_auth)
+  taking every gated service down with it. Auth must come up
+  independent of email; `make install` ordering is best-effort only.
+- Verifying the container locally: never bind-mount the repo's
+  `config/authelia` writable — Authelia writes `db.sqlite3` as root
+  and blocks the next `make all`. Use a throwaway dir and
+  `--user "$(id -u):$(id -g)"`.
+
 ## More
 
 - Upstream: <https://github.com/authelia/authelia>

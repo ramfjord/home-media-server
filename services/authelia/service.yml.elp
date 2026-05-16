@@ -23,11 +23,17 @@ proxy_preserve_host: true
 user: root  # no dedicated host user; image runs as its own internal user and writes its sqlite store under /config
 docker_config:
   image: authelia/authelia:4.39.19
-  command:
-  - "--config=/config/configuration.yml"
+  # No `command:` — the official image's entrypoint already runs
+  # authelia with the default config path /config/configuration.yml
+  # (our volume below mounts it there). Passing bare `--config=...`
+  # as the container command makes entrypoint.sh choke
+  # ("exec: illegal option --") and crash-loop.
   volumes:
   - "<%= install_base %>/config/authelia:/config"
   restart: unless-stopped
-# After smtp (order 5) — the notifier depends on the relay being up —
-# and before the app services it will eventually gate.
+# Order: after smtp (5), before the app services it gates. The
+# notifier startup check is disabled in configuration.yml, so this
+# ordering is best-effort, not a hard boot dependency — Authelia must
+# come up even if the relay is briefly unready (auth gates the stack;
+# email-at-boot does not).
 order: 15
