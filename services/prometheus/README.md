@@ -32,6 +32,12 @@ deciding "would a regression here be caught?"
 | `ServiceLogErrors` | journald error rate for a unit exceeds threshold | [journal.yaml.elp](rules/journal.yaml.elp) |
 | `Prometheus*` / `Blackbox*Reload*` | self-monitoring: crashloop, config reload failure | [rules.yaml.elp](rules/rules.yaml.elp) |
 
+`ServiceLogErrors` counts journald error lines; unit-less kernel noise
+buckets under `service=alloy`. Per-host noise (e.g. a flaky NIC) can be
+dropped from the counter — without losing it from Loki — via a service's
+`log_metric_exclude_regex`; see
+[services/alloy/README.md](../alloy/README.md#excluding-log-noise-from-the-error-counter).
+
 ### The two probe layers
 
 Both built by [scrape_configs.yaml.elp](scrape_configs/scrape_configs.yaml.elp):

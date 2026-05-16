@@ -1,0 +1,92 @@
+// Read every entry from systemd-journald, attach `unit`, `level`, and
+// `service` labels, count via stage.metrics for prometheus, and forward
+// bodies to Loki for grep/tail in Grafana.
+
+loki.relabel "journal" {
+	forward_to = []
+
+	rule {
+		source_labels = ["__journal__systemd_unit"]
+		target_label  = "unit"
+	}
+
+	rule {
+		source_labels = ["__journal_priority_keyword"]
+		target_label  = "level"
+	}
+
+	// Strip `.service` from unit names so the `service` Loki label
+	// matches the `service` label prometheus uses (set on the alloy
+	// scrape's metric_relabel_configs). Keeps grouping/filter labels
+	// consistent across logs and metrics.
+	rule {
+		source_labels = ["__journal__systemd_unit"]
+		regex         = "(.+)\\.service"
+		target_label  = "service"
+		replacement   = "$1"
+	}
+
+	// Default unit-less entries (kernel ring buffer, bare scopes/slices)
+	// to service=alloy, mirroring the alloy scrape's metric_relabel
+	// default. Without this the Loki `service` label and the Prometheus
+	// `service` label disagree for unit-less lines, and the per-service
+	// stage.match below (anchored on {service="..."}) could never reach
+	// kernel noise — which is the whole reason this drop path exists.
+	rule {
+		source_labels = ["service"]
+		regex         = "^$"
+		target_label  = "service"
+		replacement   = "alloy"
+	}
+}
+
+loki.source.journal "system" {
+	// Fan out: loki.write stores every line (so noise dropped from the
+	// counter stays greppable in Grafana); loki.process.metrics is a
+	// sink that only ticks the prometheus counters.
+	forward_to    = [loki.write.local.receiver, loki.process.metrics.receiver]
+	relabel_rules = loki.relabel.journal.rules
+	max_age       = "12h"
+	labels        = { job = "alloy" }
+}
+
+loki.process "metrics" {
+	forward_to = []
+
+<%- (dolist (service services)
+      (let ((exclude-patterns (getf service :log_metric_exclude_regex)))
+        (when exclude-patterns -%>
+	// <%= (getf service :name) %>: log_metric_exclude_regex (config.local.yml
+	// service override) dropped pre-counter so it can't flap
+	// ServiceLogErrors; still shipped to Loki via the write branch above.
+	//
+	// Label-only selector for the per-service anchor; the regex goes in
+	// stage.drop.expression, a plain RE2 field (not LogQL), passed
+	// through a River backtick raw string verbatim. This sidesteps the
+	// LogQL line-filter string entirely — no escaping layer. (Earlier a
+	// `|~ \`...\`` selector here was rejected at runtime: Alloy's match
+	// stage only lexes "-quoted strings after |~, and "-quoting forced a
+	// hand-rolled \ / " escaper. Raw regex in stage.drop avoids both.)
+	stage.match {
+		selector = `{service="<%= (getf service :name) %>"}`
+		stage.drop {
+			expression          = `<%= (format nil "~{~A~^|~}" exclude-patterns) %>`
+			drop_counter_reason = "log_metric_exclude_regex"
+		}
+	}
+<%- ))) -%>
+	stage.metrics {
+		metric.counter {
+			name        = "log_lines_total"
+			description = "Journald entries seen by Alloy, labelled by unit and level."
+			match_all   = true
+			action      = "inc"
+		}
+	}
+}
+
+loki.write "local" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+}
