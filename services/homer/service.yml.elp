@@ -22,3 +22,7 @@ docker_config:
   - "<%= install_base %>/config/homer:/www/assets"
   restart: unless-stopped
 order: 80
+
+# First service gated behind the SSO portal (Authelia). Lowest-stakes
+# opt-in: browser-only dashboard, no API clients to break.
+gateway_auth: true
