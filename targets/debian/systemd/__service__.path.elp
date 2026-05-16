@@ -3,9 +3,18 @@
 Description=Config watcher for <%= name %>
 
 [Path]
+<%# `path_exclude` opts a shipped config file out of the watcher's          -%>
+<%# trigger list. Use it when the file is both deploy-shipped (template)    -%>
+<%# AND runtime-mutated by the container itself — e.g. qbit rewrites        -%>
+<%# qBittorrent.conf on every shutdown / api-config setPreferences,          -%>
+<%# which would otherwise feed a restart-loop through compose-reload.       -%>
+<%# Read via (getf service :path_exclude) — only one consumer, so no        -%>
+<%# derive.lisp default needed; missing key returns nil.                    -%>
 <%- (dolist (f config_files) -%>
+<%- (unless (member f (getf service :path_exclude) :test #'string=) -%>
 PathChanged=<%= install_base %>/config/<%= name %>/<%= f %>
 <% ) -%>
+<%- ) -%>
 <%# sighup_reload=true → SIGHUP the container (graceful, no restart). -%>
 <%# unset → trigger compose-reload, which `systemctl restart`s the .service. -%>
 <%# Previously fell back to <name>.service directly, but `systemctl start` -%>

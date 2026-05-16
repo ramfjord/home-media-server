@@ -3,8 +3,21 @@ name: homer
 partof: dashboard
 desc: Service dashboard
 port: 8080
+# No public_path override: homer is a normal path-routed service at
+# the default /homer. Caddy redirects bare `/` → `/homer/` for
+# bookmark convenience (see services/caddy/Caddyfile.elp), but homer
+# is NOT the catch-all — unmatched paths get an explicit 404 so a
+# routing regression surfaces as a failed blackbox probe rather than
+# silently serving the dashboard. See services/prometheus/README.md.
 docker_config:
   image: b4bz/homer:latest
+  # SUBFOLDER is b4bz/homer's subpath knob — rewrites index.html
+  # <base href> and asset paths at container start so homer serves
+  # under /homer instead of /. The homer-equivalent of grafana's
+  # GF_SERVER_ROOT_URL. Must agree with config.yml's `base-url`
+  # (both derive from public_path).
+  environment:
+  - "SUBFOLDER=<%= (for-service :homer public_path) %>"
   volumes:
   - "<%= install_base %>/config/homer:/www/assets"
   restart: unless-stopped

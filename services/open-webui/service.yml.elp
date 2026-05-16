@@ -31,23 +31,34 @@ api_config:
   # base the upserts/posts machinery uses. The steps-only flow below
   # writes full paths, so api_version is only documentary here.
   api_version: v1
-# Literal block — ELP tags inside resolve at stage 2. Gate at step 1:
-# POST /auths/signin with the configured creds returns 200 if the admin
-# is already seeded, 400 otherwise. So 200 ⇒ done ⇒ stop; 400 ⇒ fall
-# through to signup. Re-runs on a configured server cost one POST.
+# Literal block — ELP tags inside resolve at stage 2.
+#
+# Flow on each deploy:
+#   1. signin — captures $token. Succeeds if admin already exists.
+#   2. signup — captures $token. Succeeds on first deploy when admin doesn't
+#      exist yet; 400s afterwards (already exists). Both paths leave $token
+#      set; api-config substitutes it into the Authorization headers below.
+#   3+. Register the grafana mcpo tool server + create a Grafana-Assistant
+#      custom model with a primed system prompt. POSTs replace the stored
+#      state, so they're idempotent — every deploy reconciles to this.
+#      Manual additions in the UI to tool_servers or this model get
+#      clobbered by re-deploy; that's intentional config-as-code, document
+#      it in the README.
 api_resources: |
   steps:
-    - name: admin-exists?
+    - name: signin
       request:
         method: POST
         url: $base_url/api/v1/auths/signin
         json:
           email: "<%= (for-service :open-webui admin_email) %>"
           password: "<%= (for-service :open-webui admin_password) %>"
+      extract:
+        regex: '"token"\s*:\s*"([^"]+)"'
+        store_as: token
       success_when:
         status: 200
-      on_success: stop
-      on_failure: continue
+      on_failure: continue   # fall through to signup on first deploy
     - name: bootstrap-admin
       request:
         method: POST
@@ -57,4 +68,69 @@ api_resources: |
           email: "<%= (for-service :open-webui admin_email) %>"
           password: "<%= (for-service :open-webui admin_password) %>"
           profile_image_url: "/user.png"
+      extract:
+        regex: '"token"\s*:\s*"([^"]+)"'
+        store_as: token
+      success_when:
+        status: 200
+      on_failure: continue   # benign 400 'user exists' on re-deploys
+    - name: register-grafana-tool-server
+      request:
+        method: POST
+        url: $base_url/api/v1/configs/tool_servers
+        headers:
+          Authorization: "Bearer $token"
+        json:
+          TOOL_SERVER_CONNECTIONS:
+            - url: "https://<%= hostname %>:<%= (for-service :mcpo public_port) %>"
+              path: "openapi.json"
+              type: "openapi"
+              auth_type: "none"
+              key: ""
+              config:
+                enable: true
+                function_name_filter_list: ""
+                access_grants: []
+              info:
+                id: "grafana"
+                name: "Grafana"
+                description: "Query Grafana, Prometheus, and Loki via mcp-grafana"
+    - name: create-grafana-assistant-model
+      request:
+        method: POST
+        url: $base_url/api/v1/models/create
+        headers:
+          Authorization: "Bearer $token"
+        json:
+          id: "grafana-assistant"
+          base_model_id: "qwen2.5:3b"
+          name: "Grafana Assistant"
+          params:
+            system: |
+              You are a Grafana assistant for a self-hosted media-server stack. You have tools that query Grafana, Prometheus (metrics), and Loki (logs). Use them. Do not guess answers.
+
+              KNOWN SERVICES (the `service` label in both Prometheus and Loki):
+              alertmanager, alloy, blackbox-exporter, cadvisor, grafana, jellyfin, loki, mcpo, open-webui, prometheus, prowlarr, qbittorrent, radarr, sonarr, vaultwarden
+
+              DASHBOARDS (call search_dashboards with empty query "" to list them):
+              - "Scrape Up" — per-service Prometheus scrape status
+              - "Service" — per-service overview (logs + metrics)
+              - "Container Network Traffic" — bytes in/out per container
+
+              For ANY health/log question, always include a global firing-alerts check as one of your parallel tool calls — a system alert (loki down, prometheus down, disk full) can silently invalidate everything else.
+
+              Patterns:
+              - "Are all services healthy?": query_prometheus `ALERTS{alertstate="firing"}` + `up == 0`
+              - "Errors in SERVICE logs?": query_prometheus `ALERTS{alertstate="firing"}` + query_loki_logs `{service="SERVICE"} |~ "(?i)error"`
+              - "Is SERVICE healthy?": query_prometheus `up{service="SERVICE"}` + `ALERTS{service="SERVICE",alertstate="firing"}`
+
+              If a tool returns nothing, try broadening once before concluding. Keep answers concise — show the query, summarize findings in one or two sentences.
+            num_gpu: 0   # GTX 970M can't host 3B; force CPU. Drop when the host upgrades.
+          meta:
+            description: "Queries Grafana/Prometheus/Loki for service health and logs."
+            profile_image_url: "/static/favicon.png"
+            capabilities:
+              tool_servers: true
+          access_control: null
+      on_failure: continue   # 400 'model exists' on re-deploys is fine
 order: 96  # after ollama (95) so the upstream is up when the UI boots

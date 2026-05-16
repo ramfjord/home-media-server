@@ -36,51 +36,68 @@
     (setf (getf s :has_unit)      (and (getf s :unit) t))
     (setf (getf s :config_files)  (config-files-for name))
     (setf (getf s :group)         (getf s :group))
-    ;; A service is "displayable" when it has a web UI worth surfacing
-    ;; on the homer dashboard and fronting via caddy. Excludes homer
-    ;; itself (it's the dashboard, not a card on it) and anything in
-    ;; the dashboard partof (caddy). Requires a `port` so there's
-    ;; something for caddy to reverse-proxy to.
+    ;; A service is "displayable" when it's a user-facing surface —
+    ;; appears on the dashboard, gets public-probed. Curator-driven:
+    ;; drop a tile asset at services/homer/assets/tools/<name>.png to
+    ;; opt in. Plumbing services (mcpo, mcp-grafana) ship no asset
+    ;; and are auto-excluded. Still requires a port so there's
+    ;; something to link to.
     (setf (getf s :displayable)
-          (and (not (string= name "homer"))
-               (not (string= (getf s :partof) "dashboard"))
-               (getf s :port)
+          (and (getf s :port)
+               (probe-file (format nil "services/homer/assets/tools/~A.png" name))
                t))
-    ;; How a displayable service is reached from outside. Three modes,
-    ;; controlled by two fields:
+    ;; How a service is reached from outside. Two modes:
     ;;
-    ;;   via_caddy: true (default)   — fronted by caddy. public_port
-    ;;     defaults to 443 (path-routed under <hostname>/<public_path>
-    ;;     in caddy's main site). Set public_port to a non-443 value
-    ;;     to get a dedicated caddy site on that host port (for apps
-    ;;     like qBittorrent that don't tolerate a path prefix).
-    ;;   public_path: "/foo" (default /<name>) — the path slot on the
+    ;;   proxied: true (default for any docker-networked service)
+    ;;     — sits behind the reverse proxy. public_port defaults to
+    ;;     443, path-routed under <hostname>/<public_path> on the
+    ;;     main TLS site. Set public_port to a non-443 value to get
+    ;;     a dedicated site on that host port (for apps like
+    ;;     qBittorrent that don't tolerate a path prefix).
+    ;;     public_path: "/foo" (default /<name>) — path slot on the
     ;;     main site, only consulted when public_port=443.
     ;;
-    ;;   via_caddy: false             — caddy doesn't know about it.
-    ;;     Container reaches the LAN/tailnet directly via its own
-    ;;     :port. Typically paired with `network_mode: host` in
-    ;;     docker_config so things like SSDP/DLNA discovery work
-    ;;     (Jellyfin → Roku). public_url is plain http because there's
-    ;;     no caddy doing TLS termination.
+    ;;   proxied: false (`network_mode: host`) — container reaches
+    ;;     the LAN/tailnet directly via its own :port. Used when the
+    ;;     container needs to broadcast on the LAN (SSDP/DLNA, mDNS),
+    ;;     since host networking has no container IP under docker DNS
+    ;;     for the proxy to target. public_url is plain http — no TLS
+    ;;     terminator in the path.
     ;;
     ;; A non-default public_port also needs the matching `<p>:<p>`
-    ;; entry in services/caddy/service.yml.elp `ports:` so caddy publishes
-    ;; the port on the host. Kept manual so the set of ports caddy
-    ;; binds is visible in one place.
-    (setf (getf s :via_caddy)
-          (if (member :via_caddy s) (getf s :via_caddy) t))
+    ;; entry in services/caddy/service.yml.elp `ports:` so the proxy
+    ;; publishes the port on the host. Kept manual so the set of
+    ;; bound host ports is visible in one place.
+    ;;
+    ;; `proxied` — "caddy reverse-proxies this service". Derived, not
+    ;; declared: it's exactly the set caddy can route to, which needs
+    ;; (a) a docker DNS name to target → dockerized, (b) an upstream
+    ;; port → port, (c) not host-networked (host networking has no
+    ;; container IP under docker DNS). Caddy itself has no port, so
+    ;; this auto-excludes it — no name-check needed anywhere. Jellyfin
+    ;; is the lone host-networked service today; it's the only one
+    ;; with a port that lands `proxied: false`.
+    (setf (getf s :proxied)
+          (and (getf s :dockerized)
+               (getf s :port)
+               (not (equal (getf (getf s :docker_config) :network_mode) "host"))
+               t))
     (setf (getf s :public_port) (or (getf s :public_port) 443))
     (setf (getf s :public_path) (or (getf s :public_path)
                                     (format nil "/~A" name)))
     (setf (getf s :public_url)
           (or (getf s :public_url)
-              (when (getf s :displayable)
+              (when (getf s :port)
                 (let ((host (getf globals :hostname))
                       (port (getf s :public_port))
                       (path (getf s :public_path)))
                   (cond
-                    ((not (getf s :via_caddy))
+                    ;; This branch is the not-proxied-but-has-port
+                    ;; case = host-networked (jellyfin). A non-
+                    ;; dockerized service with a port would also land
+                    ;; here, but none exist; revisit the URL shape if
+                    ;; one ever does.
+                    ((not (getf s :proxied))
                      (format nil "http://~A:~A/" host (getf s :port)))
                     ((= port 443)
                      (format nil "https://~A~A" host path))

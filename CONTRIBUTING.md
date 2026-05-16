@@ -24,6 +24,8 @@ Three template-scope macros, each expanding through the primitive `with-service-
 
 For predicates reused across several call sites in one template, use `macrolet` at the top of the template to define a named field-scope macro — see `services/homer/config.yml.elp` for an example. New service fields are picked up automatically from any key appearing in service yaml; no per-field declaration step today.
 
+**Single-consumer optional fields:** when a field is declared by some services but not all, AND is read by only one template, prefer `(getf service :field_name)` in that template over a default in `lisp/src/derive.lisp`. Bare-symbol access (`<%= field_name %>`) errors with *unbound variable* on services that don't declare it; `getf` returns nil cleanly. Keeps the field local to its consumer. Promote to a derive.lisp default only when a second consumer appears. See `targets/debian/systemd/__service__.path.elp` reading `path_exclude` for the canonical example.
+
 ## Controller-only rendered files: `sync_exclude:`
 
 Some rendered files belong on the controller (the machine running

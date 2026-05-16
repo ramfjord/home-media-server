@@ -8,8 +8,11 @@
 - **README.md** — facts about the project (what it is, services, networking, getting-started, deploy target). Front door for humans evaluating the repo.
 - **CONTRIBUTING.md** — conventions for *changing* the project (template style, field access, debugging shortcuts, make targets).
 - **CLAUDE.md** (this file) — agent-behavior signals only. Instructions about how to act, not facts about the codebase.
+- **`services/<name>/README.md`** — per-service operational and design decisions: *why this service is wired the way it is*, what its alerts catch and miss, accepted risks, gotchas. Not imported (would bloat every session); consulted on demand.
 
 Both README.md and CONTRIBUTING.md are imported above and load into every session, so be stingy with what goes in them — verbose-but-rarely-relevant material belongs under `docs/` and should be linked, not imported.
+
+**Read the relevant `services/<name>/README.md` before reasoning about how that service operates.** When a question is "how/why does service X behave this way" or "would a regression in X be caught," the service README is the intended first stop — it's maintained to answer exactly these without re-deriving from templates and rules each time. If it's missing or stale on a point you had to investigate, update it in the same commit (see "Keeping docs current").
 
 ## Keeping docs current
 
@@ -18,6 +21,7 @@ When a change affects content owned by one of these docs, update that doc in the
 - New/removed/renamed service, port shift, setup-step change, deploy mechanic → **README.md**
 - New template convention, field-access change, debugging shortcut, make-target change → **CONTRIBUTING.md**
 - New agent-behavior expectation, or a change to the split rule itself → **CLAUDE.md**
+- Changed operational behavior, alert coverage, or accepted risk for one service → that **`services/<name>/README.md`**
 
 If a fact is load-bearing for both audiences (humans and agents), keep it in README.md or CONTRIBUTING.md — don't restate it here. CLAUDE.md should not duplicate facts that the imported docs already cover.
 

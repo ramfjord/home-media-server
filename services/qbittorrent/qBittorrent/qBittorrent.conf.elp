@@ -1,10 +1,10 @@
 [Application]
 FileLogger\Age=1
 FileLogger\AgeType=1
-FileLogger\Backup=true
-FileLogger\DeleteOld=true
+FileLogger\Backup=false
+FileLogger\DeleteOld=false
 FileLogger\Enabled=true
-FileLogger\MaxSizeBytes=66560
+FileLogger\MaxSizeBytes=1073741824
 FileLogger\Path=/config/qBittorrent/logs
 
 [BitTorrent]

@@ -11,10 +11,19 @@ public_port: 8443
 public_path: /
 use_vpn: true
 group: mediaserver
+# qBittorrent.conf is BOTH our deploy-shipped template AND qBittorrent's
+# runtime state file — qbit rewrites it on every shutdown and on every
+# api-config setPreferences call. Watching it would feed a path-watcher
+# → compose-reload → restart loop. The remaining watched files in
+# config_files (README.md, custom-cont-init.d/*) are static, so this
+# leaves a meaningful watch surface for actual config changes.
+path_exclude:
+- qBittorrent/qBittorrent.conf
 docker_config:
   image: lscr.io/linuxserver/qbittorrent:latest
   volumes:
   - "<%= install_base %>/config/qbittorrent:/config"
+  - "<%= install_base %>/config/qbittorrent/custom-cont-init.d:/custom-cont-init.d:ro"
   - "<%= media_path %>:/data"
   restart: unless-stopped
 api_config:

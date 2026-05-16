@@ -5,11 +5,12 @@ desc: Alternative media streaming server
 port: 8096
 group: mediaserver
 healthz: "/health"
-# Off-caddy: Jellyfin runs on host networking so SSDP/DLNA broadcasts
-# reach LAN clients (Roku, smart TVs). Reachable directly at
-# http://<hostname>:8096/ from tailnet, and at the host's LAN IP:8096
-# from local network. No TLS — caddy isn't in the path.
-via_caddy: false
+# Host networking: SSDP/DLNA broadcasts reach LAN clients (Roku,
+# smart TVs). Reachable directly at http://<hostname>:8096/ from
+# tailnet, and at the host's LAN IP:8096 from local network. No TLS —
+# caddy can't reverse-proxy a host-networked container (no docker DNS
+# name), so derive.lisp infers `proxied: false` from network_mode
+# and the rest of the stack falls into place.
 docker_config:
   image: jellyfin/jellyfin:latest
   network_mode: host

@@ -10,6 +10,13 @@ desc: MCP→OpenAPI bridge so Open WebUI can call MCP tool servers
 port: 8000
 public_port: 8003
 public_path: /
+# Not a dedicated health endpoint — mcpo doesn't have one. /openapi.json
+# is the cheapest 200-returning URL it serves; using it as the
+# internal_probe target gives us "is mcpo accepting connections" coverage
+# at a tolerable cost (a few KB of JSON per scrape interval). No tile
+# PNG under services/homer/assets/tools/, so mcpo is auto-excluded
+# from Homer and from public_probe — see derive.lisp's :on_homer.
+healthz: /openapi.json
 user: root
 docker_config:
   image: ghcr.io/open-webui/mcpo:main

@@ -1,25 +1,47 @@
-# Main site: every displayable service whose public_port is 443
-# (the default) is path-routed under <hostname>/<public_path>. Homer
-# at root. caddy listens on 443 and auto-redirects 80 -> 443 because
-# the site is declared with a hostname.
+# Main site: every `proxied` service whose public_port is 443 (the
+# default) is path-routed under <hostname>/<public_path>. caddy v2
+# `handle` blocks are mutually exclusive; ordering doesn't matter
+# here because no service path is a proper prefix of another
+# (`/foo/*` can't match `/foobar`), so handles emit in manifest
+# order. Homer is just another service at /homer — NOT a catch-all.
+# Bare `/` 308-redirects to /homer/ for bookmark convenience; any
+# genuinely unmatched path gets an explicit 404 (Caddy's default for
+# an unhandled request is an empty 200, which would hide routing
+# regressions from the public blackbox probe — see
+# services/prometheus/README.md). Caddy listens on 443 and
+# auto-redirects 80 -> 443 because the site has a hostname.
 <%= hostname %> {
   tls /certs/<%= hostname %>.crt /certs/<%= hostname %>.key
 
   # Both `/foo` and `/foo/*` matchers per service: caddy's `/foo/*`
   # does not match the bare `/foo`, and homer tile URLs are
   # `https://<host>/<name>` (no trailing slash). Without the bare
-  # matcher those clicks fall through to the homer catch-all and 404.
-<%- (loop-services (service-where (and displayable via_caddy (= public_port 443))) %>
+  # matcher those clicks would fall to the terminal 404.
+<%- (loop-services (service-where (and proxied (= public_port 443))) %>
   @<%= name %> path <%= public_path %> <%= public_path %>/*
   handle @<%= name %> {
     reverse_proxy <%= (if use_vpn "wireguard" name) %>:<%= port %>
   }
 <%- ) %>
 
-  # Homer dashboard at root. Hand-written: it's excluded from
-  # `displayable` and its container listens on 8080 (not :port).
+  # Bookmark convenience: bare root only (exact `path /`, never
+  # `/*` — `/*` would re-create the catch-all and, since blackbox
+  # follows redirects, re-hide the blind spot).
+  @root path /
+  handle @root {
+    # `redir * /homer/ 308`: the explicit `*` matcher is required —
+    # a `redir` arg starting with `/` is otherwise parsed as an
+    # inline path matcher, making `/homer/` the matcher and `308`
+    # the (bogus) destination.
+    redir * /homer/ 308
+  }
+
+  # Terminal fallback: anything that matched no handle above. Caddy's
+  # implicit default here is an empty 200; we force 404 so a broken
+  # service route fails its public blackbox probe instead of silently
+  # returning success.
   handle {
-    reverse_proxy homer:8080
+    error 404
   }
 }
 
@@ -28,8 +50,9 @@
 # whole host is reverse-proxied to the upstream — public_path is
 # typically "/" for these because the upstream doesn't know about a
 # prefix. Caddy's container must publish each of these ports; see
-# services/caddy/service.yml.
-<%- (loop-services (service-where (and displayable via_caddy (/= public_port 443))) %>
+# services/caddy/service.yml. Separate site blocks keyed by
+# host:port, so ordering is irrelevant here.
+<%- (loop-services (service-where (and proxied (/= public_port 443))) %>
 <%= hostname %>:<%= public_port %> {
   tls /certs/<%= hostname %>.crt /certs/<%= hostname %>.key
   # Rewrite Host to match the upstream's listening hostport. qBit 5.x
