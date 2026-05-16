@@ -54,16 +54,17 @@ Authelia takes a dedicated host port (`9091`) — the same escape hatch
 vaultwarden (`8000`) and qBittorrent (`8443`) use. caddy publishes
 `9091:9091` (see `services/caddy/service.yml.elp`).
 
-## Known follow-up (forward-auth wiring commit)
+## Host-header handling (resolved)
 
 The generic dedicated-port caddy site block rewrites `Host` to the
 upstream hostport (`header_up Host {upstream_hostport}`) — a
-qBittorrent-specific requirement that is **wrong for Authelia**.
-Authelia needs the original `Host` preserved plus `X-Forwarded-Proto`
-/`X-Forwarded-Host`/`X-Forwarded-Uri` for cookie-domain and portal-URL
-correctness. The forward-auth commit must give Authelia a tailored
-caddy block rather than reuse the generic one. Recorded here so it
-isn't rediscovered mid-integration.
+qBittorrent-specific requirement that is **wrong for Authelia**, which
+needs the original `Host` plus `X-Forwarded-*` for cookie-domain and
+portal-URL correctness. Resolved: `service.yml.elp` sets
+`proxy_preserve_host: true`, a single-consumer optional field that
+makes `services/caddy/Caddyfile.elp` skip the `header_up Host` line
+for this service. Caddy's `reverse_proxy` default already preserves
+`Host` and sets `X-Forwarded-*`, so the plain block is correct.
 
 ## Scope notes
 

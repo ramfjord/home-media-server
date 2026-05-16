@@ -20,6 +20,12 @@
 <%- (loop-services (service-where (and proxied (= public_port 443))) %>
   @<%= name %> path <%= public_path %> <%= public_path %>/*
   handle @<%= name %> {
+<%- (when gateway_protected -%>
+    forward_auth <%= (for-service :authelia name) %>:<%= (for-service :authelia port) %> {
+      uri /api/authz/forward-auth
+      copy_headers Remote-User Remote-Groups Remote-Email Remote-Name
+    }
+<% ) -%>
     reverse_proxy <%= (if use_vpn "wireguard" name) %>:<%= port %>
   }
 <%- ) %>
@@ -55,12 +61,31 @@
 <%- (loop-services (service-where (and proxied (/= public_port 443))) %>
 <%= hostname %>:<%= public_port %> {
   tls /certs/<%= hostname %>.crt /certs/<%= hostname %>.key
+<%- (when gateway_protected -%>
+  forward_auth <%= (for-service :authelia name) %>:<%= (for-service :authelia port) %> {
+    uri /api/authz/forward-auth
+    copy_headers Remote-User Remote-Groups Remote-Email Remote-Name
+  }
+<% ) -%>
+<%- ; proxy_preserve_host: known field (authelia declares it), so
+   ; read as a bare symbol — inside loop-services the raw plist is
+   ; NOT bound as `service`, so (getf service ...) is always nil here;
+   ; with-service-scope only binds known fields as symbols. When set
+   ; (the auth gateway) skip the qBit Host rewrite entirely: Authelia
+   ; needs the original Host + X-Forwarded-* for cookie-domain /
+   ; portal-URL correctness, which Caddy's reverse_proxy default
+   ; already provides. Absent => current behaviour, byte-identical.
+-%>
+<%- (unless proxy_preserve_host -%>
   # Rewrite Host to match the upstream's listening hostport. qBit 5.x
   # rejects requests whose Host port differs from its server port
   # ("Invalid Host header, port mismatch"). Forwarding the original
   # `<hostname>:<public_port>` Host triggers that on every request.
+<%- ) -%>
   reverse_proxy <%= (if use_vpn "wireguard" name) %>:<%= port %> {
+<%- (unless proxy_preserve_host -%>
     header_up Host {upstream_hostport}
+<% ) -%>
   }
 }
 <%- ) %>
