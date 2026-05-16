@@ -46,3 +46,9 @@ api_resources: |
       - { name: password,      value: "<%= (for-service :qbittorrent admin_password) %>" }
       - { name: movieCategory, value: movies-radarr }
 order: 20
+
+# Gated behind Authelia. Radarr is already RADARR__AUTH__METHOD=External
+# (delegates UI auth to the reverse proxy), so the gateway becomes its
+# actual authentication with no Radarr-side change. API/M2M clients
+# (api-config, Prowlarr, exportarr) bypass Caddy and are unaffected.
+gateway_auth: true
