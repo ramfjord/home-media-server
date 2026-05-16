@@ -17,8 +17,8 @@ public_path: /
 # reverse_proxy default already preserves both). Single-consumer
 # optional field; read as a bare symbol in Caddyfile.elp's
 # loop-services (declaring it here makes it a known field, nil for
-# services that don't). NOT via (getf service ...) — `service` is
-# unbound inside loop-services, so that would be a silent always-nil.
+# services that don't). (getf service :proxy_preserve_host) would
+# also work — with-service-scope binds `service` in every scope.
 proxy_preserve_host: true
 user: root  # no dedicated host user; image runs as its own internal user and writes its sqlite store under /config
 docker_config:

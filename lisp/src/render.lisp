@@ -42,11 +42,20 @@
 
 (defmacro with-service-scope (svc &body body)
   "Bind every key in *KNOWN-FIELDS* as a symbol-macro that looks up
-   that field on SVC. Lets BODY write `name` instead of
-   (field :name svc).
+   that field on SVC, and bind SERVICE to the raw plist itself. Lets
+   BODY write `name` instead of (field :name svc), and `(getf service
+   :x)` for the dynamic / single-consumer-optional case.
 
    The primitive binder. FOR-SERVICE, SERVICE-WHERE, and LOOP-SERVICES
-   all expand through this — the LSP behavior is uniform across them.
+   all expand through this — field access AND `service` are uniform
+   across all three (previously `service` was reachable only in
+   per-service fanout templates via the render context, making
+   `(getf service :x)` a silent nil inside loop-services; binding it
+   here closes that trap).
+
+   `service` is anaphoric, consistent with the already-anaphoric
+   `services` and `globals` in this scope. It is `ignorable` so the
+   common body that never touches it stays style-warning-free.
 
    FIELD's globals fallback comes from the GLOBALS symbol in the ELP
    context. Expanded at template-compile time, so *KNOWN-FIELDS* must
@@ -55,14 +64,17 @@
   (unless *known-fields*
     (error "with-service-scope expanded before *known-fields* was set; ~
             ensure config is loaded before rendering."))
-  (let ((svc-var (gensym "SVC")))
+  (let ((svc-var (gensym "SVC"))
+        (svc-sym (%field-binding-symbol :service)))
     `(let ((,svc-var ,svc))
-       (symbol-macrolet
-           ,(mapcar (lambda (k)
-                      (list (%field-binding-symbol k)
-                            `(field ,k ,svc-var globals)))
-                    *known-fields*)
-         ,@body))))
+       (let ((,svc-sym ,svc-var))
+         (declare (ignorable ,svc-sym))
+         (symbol-macrolet
+             ,(mapcar (lambda (k)
+                        (list (%field-binding-symbol k)
+                              `(field ,k ,svc-var globals)))
+                      *known-fields*)
+           ,@body)))))
 
 (defmacro for-service (key &body body)
   "Resolve KEY (a keyword like :radarr) to a service plist by name
