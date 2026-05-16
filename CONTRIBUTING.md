@@ -52,6 +52,34 @@ don't need to touch the template to add entries.
 
 The default `__service__.service.elp` template generates a `Type=simple` + `Restart=on-failure` unit suitable for long-running containers. To override directives without forking the template, set `systemd_override:` in `service.yml.elp` to a literal drop-in body — it's emitted to `<svc>.service.d/override.conf` and composed by systemd at load time. Field values still get ELP-evaluated, so `<%= compose_file %>` works. See `services/api-config/service.yml.elp` for the canonical use (oneshot reconcile job).
 
+## Gating a service behind the auth gateway: `gateway_auth:`
+
+A service opts into the single sign-on gateway by declaring
+`gateway_auth:` in its `service.yml.elp`. Absent it, the service is
+reached directly as before — opt-in, never automatic. Three forms:
+
+```yaml
+gateway_auth: true            # gated, any one-factor authenticated user
+```
+
+```yaml
+gateway_auth:                 # gated with overrides
+  policy: two_factor          # "one_factor" (default) | "two_factor"
+  public_paths:               # path prefixes that bypass the gate —
+  - /api                      # e.g. a machine-consumed API while the
+                              # UI stays gated
+```
+
+`derive.lisp` normalizes any of these into a canonical plist on
+`gateway_auth` plus a derived boolean `gateway_protected` (mirrors
+`proxied`; use `(service-where gateway_protected)` to fan out over the
+gated set). The field names *intent only* — which gateway enforces it
+lives entirely in that gateway's config template, never in `lisp/src`,
+so the engine stays stack-agnostic. Leave a service un-declared to
+keep it on the direct path; the monitoring stack
+(Prometheus/Grafana/Alertmanager) is intentionally left un-gated so it
+stays reachable to debug the gateway itself.
+
 ## Dev REPL
 
 `script/start-image.sh` boots an SBCL image with `:mediaserver` loaded and the manifest read, so `for-service`/`loop-services` macros work and editor LSPs can attach. See [docs/dev-environment.md](docs/dev-environment.md) for editor wiring (Emacs SLIME via `.dir-locals.el`, vim/vlime, nvim+swank-lsp, container/nix overrides).

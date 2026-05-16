@@ -125,4 +125,34 @@
                         (if (getf s :use_vpn) "wireguard" name)
                         (getf s :port)
                         (getf s :internal_path)))))
+    ;; Whether/how this service sits behind the auth gateway. Declared
+    ;; per service; which gateway enforces it lives entirely in that
+    ;; gateway's own config template, never here — this stays
+    ;; implementation-agnostic so lisp/ could template a different
+    ;; stack. Surface forms:
+    ;;
+    ;;   (absent)            not gated; reached directly as today.
+    ;;   gateway_auth: true  gated, default policy (any one-factor
+    ;;                       authenticated user).
+    ;;   gateway_auth:       gated with overrides. Recognized keys:
+    ;;     policy: two_factor  policy       — "one_factor" (default)
+    ;;     public_paths:                      or "two_factor".
+    ;;     - "/api"          public_paths — path prefixes that bypass
+    ;;                       the gate, e.g. an app's machine-consumed
+    ;;                       API while its UI stays gated.
+    ;;
+    ;; Normalized to a canonical plist so consumers (the gateway's
+    ;; route + access-control templates) read uniform fields instead
+    ;; of re-parsing the surface form. Two consumers are designed in
+    ;; from the start, so this is a derive default rather than
+    ;; per-template getf (see CONTRIBUTING "single-consumer optional
+    ;; fields"). `gateway_protected` mirrors `proxied`: a derived
+    ;; boolean for cheap (service-where gateway_protected) filtering.
+    (let* ((raw  (getf s :gateway_auth))
+           (spec (when (listp raw) raw)))
+      (setf (getf s :gateway_auth)
+            (when raw
+              (list :policy        (or (getf spec :policy) "one_factor")
+                    :public_paths  (getf spec :public_paths))))
+      (setf (getf s :gateway_protected) (and (getf s :gateway_auth) t)))
     s))
