@@ -43,3 +43,9 @@ api_resources: |
       - { name: password,   value: "<%= (for-service :qbittorrent admin_password) %>" }
       - { name: tvCategory, value: tv-sonarr }
 order: 30
+
+# Gated behind Authelia. Sonarr is SONARR__AUTH__METHOD=External
+# (delegates UI auth to the proxy), so the gateway is its actual auth
+# with no Sonarr-side change. API/M2M (api-config, exportarr, Prowlarr
+# sync) hit Sonarr directly, bypass Caddy, unaffected.
+gateway_auth: true
