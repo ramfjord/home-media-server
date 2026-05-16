@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Mint (or reset) an Authelia user. Generates a strong random password,
+# argon2id-hashes it via the pinned Authelia image, and prints the
+# plaintext ONCE plus a ready-to-paste config.local.yml block. It does
+# NOT edit config.local.yml — paste the block under
+# service_overrides.authelia.users: yourself. Reset = re-run and paste
+# the new block over the old entry, then redeploy (Authelia hot-reloads
+# the users file; see services/authelia/configuration.yml.elp).
+#
+#   script/authelia-adduser ruby
+#   script/authelia-adduser ruby -e ruby@example.com -n Ruby users
+#
+# See services/authelia/README.md.
+set -euo pipefail
+
+# Keep in sync with services/authelia/service.yml.elp's image tag.
+IMAGE=authelia/authelia:4.39.19
+
+usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; }
+
+username=""
+email=""
+displayname=""
+groups=()
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -e|--email) email="${2:?-e needs a value}"; shift 2 ;;
+    -n|--name)  displayname="${2:?-n needs a value}"; shift 2 ;;
+    -h|--help)  usage; exit 0 ;;
+    -*)         echo "unknown flag: $1" >&2; usage >&2; exit 2 ;;
+    *)          if [ -z "$username" ]; then username="$1"; else groups+=("$1"); fi; shift ;;
+  esac
+done
+
+[ -n "$username" ] || { echo "error: <username> is required" >&2; usage >&2; exit 2; }
+[ -n "$displayname" ] || displayname="$username"
+
+pw=$(docker run --rm "$IMAGE" authelia crypto rand --length 24 --charset alphanumeric | awk '/Random Value/{print $NF}')
+hash=$(docker run --rm "$IMAGE" authelia crypto hash generate argon2 --password "$pw" | awk '/Digest/{print $2}')
+
+[ -n "$pw" ] && case "$hash" in '$argon2id$'*) ;; *) hash="" ;; esac
+[ -n "$pw" ] && [ -n "$hash" ] || { echo "error: failed to generate password/hash via $IMAGE" >&2; exit 1; }
+
+cat <<EOF
+
+User '$username' — generated password (shown once; store it in Bitwarden
+under the Authelia portal URL — see services/authelia/README.md):
+
+    $pw
+
+Paste this under service_overrides.authelia.users: in config.local.yml
+(reset = paste over the existing '$username' entry, then redeploy):
+
+    - username: $username
+      displayname: $displayname
+EOF
+[ -n "$email" ] && echo "      email: $email"
+echo "      password_hash: '$hash'"
+if [ "${#groups[@]}" -gt 0 ]; then
+  echo "      groups:"
+  for g in "${groups[@]}"; do echo "      - $g"; done
+fi
+echo

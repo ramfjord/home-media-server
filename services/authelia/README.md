@@ -1,20 +1,23 @@
 # Authelia
 
 Single sign-on / forward-auth portal. Authenticates a user once, then
-the reverse proxy gates the gateway-opted-in web UIs against that
-session (wired in a later commit via the per-service `gateway_auth:`
-field — see [CONTRIBUTING.md](../../CONTRIBUTING.md)). One process,
-SQLite + flat-YAML config, no Redis/Postgres — the minimal-deps
-constraint.
+Caddy gates the gateway-opted-in web UIs against that session via the
+per-service `gateway_auth:` field (see
+[CONTRIBUTING.md](../../CONTRIBUTING.md)). Currently gated:
+radarr/sonarr/prowlarr. Homer and the monitoring stack
+(Prometheus/Grafana/Alertmanager) are deliberately left un-gated —
+the latter as break-glass (see Scope notes). One process, SQLite +
+flat-YAML config, no Redis/Postgres — the minimal-deps constraint.
 
 ## Required `config.local.yml` keys
 
-Authelia's secrets and the user record are **required** and live in
+Authelia's secrets and the `users` list are **required** and live in
 git-ignored `config.local.yml` under `service_overrides.authelia`.
 They are read via `for-service` (not `getf`), so `make all` fails
-fast with `Unknown field :jwt_secret` until they're present — the
-same uniform "your `config.local.yml` is incomplete" behaviour as
-grafana/smtp, on purpose. Add:
+fast (`Unknown field :jwt_secret`, `Unknown field :users`, or a named
+per-user `:password_hash` error) until they're present — the same
+uniform "your `config.local.yml` is incomplete" behaviour as
+grafana/smtp, on purpose. Shape:
 
 ```yaml
 service_overrides:
@@ -22,28 +25,73 @@ service_overrides:
     jwt_secret: "<rand>"
     session_secret: "<rand>"
     storage_encryption_key: "<rand>"
-    user_username: "thomas"
-    user_displayname: "Thomas"
-    user_email: "thomas.ramfjord@gmail.com"
-    user_password_hash: "$argon2id$v=19$m=65536,t=3,p=4$..."
+    users:
+      - username: thomas
+        displayname: Thomas
+        email: thomas.ramfjord@gmail.com
+        password_hash: "$argon2id$v=19$m=65536,t=3,p=4$..."
+        groups: [admins]
+      - username: ruby
+        password_hash: "$argon2id$..."
+        groups: [users]
 ```
 
-Generate them with the pinned image (no local Authelia install
-needed):
+Per user: `username` and `password_hash` are required;
+`displayname` (defaults to `username`), `email`, and `groups` are
+optional. `groups` is advisory until per-app `access_control` rules
+exist — `access_control` is currently just `default_policy:
+one_factor` (any authenticated user reaches any gated app).
+
+Generate the three secrets with the pinned image (no local Authelia
+install needed):
 
 ```sh
 # each of the three secrets (≥64 chars; run three times)
 docker run --rm authelia/authelia:4.39.19 authelia crypto rand --length 64 --charset alphanumeric
-
-# the password hash (argon2id) — never store the plaintext
-docker run --rm authelia/authelia:4.39.19 \
-  authelia crypto hash generate argon2 --password 'your-password'
 ```
 
-The hash is a one-time manual bootstrap. It's a *secret*, and every
-secret in this repo already lives out-of-band in `config.local.yml`
-as plaintext (grafana/qbittorrent/smtp) — a hash there is strictly
-better, not a new wart.
+## Adding / resetting a user
+
+```sh
+script/authelia-adduser <username> [-e email] [-n displayname] [group...]
+```
+
+generates a strong random password, argon2id-hashes it via the pinned
+image, and prints the plaintext **once** plus a ready-to-paste
+`config.local.yml` block. It does **not** edit `config.local.yml` —
+paste the block under `service_overrides.authelia.users:` yourself
+(reset = paste over the existing entry), then redeploy.
+`authentication_backend.file.watch: true` makes Authelia hot-reload
+the users file, so a reset/add takes effect without restarting
+Authelia (no gated-stack blip).
+
+**No self-service reset by design.** `users_database.yml` is
+config-as-code; an in-product reset would write to the file and be
+clobbered on the next deploy. `password_reset.disable: true` turns the
+in-product flow off so the only path is the script — single source of
+truth, at the cost of self-service.
+
+### Why hashes here, and why this does *not* generalise to Jellyfin
+
+Authelia's file backend lets you **declare the argon2id hash**.
+Verification is hash-the-input-and-compare; the server never needs
+plaintext. So the only plaintext that ever exists is what the script
+prints once for you to store in Bitwarden — `config.local.yml` holds
+just the hash. A leak there exposes slow, per-user-salted argon2id
+hashes, not usable passwords.
+
+This is *better* than the other secrets in `config.local.yml`
+(grafana/qbittorrent/smtp), which are plaintext — and it specifically
+does **not** transfer to "have api-config provision Jellyfin users."
+Jellyfin's (and qBittorrent's) password APIs take the *plaintext* and
+hash it server-side; there is no "accept a precomputed hash"
+interface. A reconciler must hold what it replays, so api-config-
+provisioned Jellyfin users would require **per-human plaintext
+passwords persisted in `config.local.yml`** — a category escalation
+over the single infra credential qBittorrent already keeps there.
+That asymmetry is the standing reason Jellyfin/qBittorrent user
+provisioning is *not* folded into this gateway; revisit only with a
+real secret store, not `config.local.yml`.
 
 ## Why a dedicated port, not `/authelia`
 

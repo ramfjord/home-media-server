@@ -1,17 +1,35 @@
 # Auto-generated. Source: services/authelia/users_database.yml.elp.
 #
-# Single admin user. `password` is an argon2id hash, NOT plaintext —
-# generate it with:
-#   docker run --rm authelia/authelia:4.39.19 \
-#     authelia crypto hash generate argon2 --password '<your-password>'
-# and store the result (plus the other user_* fields) under
-# service_overrides.authelia in config.local.yml. See
-# services/authelia/README.md.
+# Authelia file backend — one entry per human, sourced from the
+# `users:` list under service_overrides.authelia in git-ignored
+# config.local.yml. Each `password` is an argon2id HASH, never
+# plaintext. Mint or reset a user with:
+#
+#   script/authelia-adduser <username> [-e email] [-n displayname] [group...]
+#
+# which prints the generated password once and a ready-to-paste
+# config.local.yml block. Reset is not self-service (this file is
+# config-as-code; a UI reset would be clobbered next deploy) — re-run
+# the script and redeploy. See services/authelia/README.md.
+#
+# `users` and each entry's `username`/`password_hash` are required: an
+# incomplete config.local.yml fails `make all` here, naming the gap,
+# rather than at Authelia startup (CONTRIBUTING.md "Required fields").
 users:
-  <%= (for-service :authelia user_username) %>:
+<%- (dolist (u (for-service :authelia users)) -%>
+<%- (let* ((username (or (getf u :username)
+                         (error "authelia: a users entry is missing :username in config.local.yml: ~S" u)))
+           (pwhash   (or (getf u :password_hash)
+                         (error "authelia: user ~A is missing :password_hash in config.local.yml" username)))) -%>
+  <%= username %>:
     disabled: false
-    displayname: '<%= (for-service :authelia user_displayname) %>'
-    password: '<%= (for-service :authelia user_password_hash) %>'
-    email: '<%= (for-service :authelia user_email) %>'
+    displayname: '<%= (or (getf u :displayname) username) %>'
+    password: '<%= pwhash %>'
+<%- (when (getf u :email) -%>
+    email: '<%= (getf u :email) %>'
+<%- ) -%>
+<%- (when (getf u :groups) -%>
     groups:
-      - admins
+<%- (dolist (g (getf u :groups)) -%>
+      - <%= g %>
+<%- )))) -%>

@@ -23,9 +23,21 @@ identity_validation:
 
 # File backend (no LDAP) — the minimal-process constraint. Flat YAML,
 # argon2id-hashed passwords.
+#
+# password_reset.disable: reset is intentionally NOT self-service.
+# users_database.yml is config-as-code (sourced from config.local.yml);
+# a UI-driven reset would write to the file and be clobbered on the
+# next deploy. Reset = re-run script/authelia-adduser and redeploy.
+#
+# file.watch: Authelia reloads the users file in place when it changes,
+# so a deploy that rewrites users_database.yml (added/reset user) takes
+# effect without an Authelia restart — no gated-stack blip.
 authentication_backend:
+  password_reset:
+    disable: true
   file:
     path: '/config/users_database.yml'
+    watch: true
 
 # one_factor: anything the reverse proxy routes through Authelia
 # requires a logged-in user. The monitoring stack is deliberately NOT
