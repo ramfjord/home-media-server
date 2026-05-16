@@ -35,6 +35,8 @@ For subsequent shells while the container is up, Docker Desktop's GUI has an "Ex
 2. Override any service field via `service_overrides:` (deep-merged into that service's `service.yml.elp`).
 3. See [services/wireguard/README.md](../services/wireguard/) for one-time VPN setup, and [services/radarr/README.md](../services/radarr/) for the API-key bootstrap.
 
+> `config.local.yml` is required for **`make all`**, not just for deploy: services read their required secrets (e.g. grafana `admin_password`, smtp `relay_password`, authelia `jwt_secret`/`user_*`) from it, and a missing one fails the render fast with `unbound variable <KEY>` naming the template `file:line`. That's intended — fill the key in. Each such key is documented in the owning `services/<name>/README.md`.
+
 ## Commands
 
 ```bash

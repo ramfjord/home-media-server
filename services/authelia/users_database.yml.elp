@@ -1,0 +1,17 @@
+# Auto-generated. Source: services/authelia/users_database.yml.elp.
+#
+# Single admin user. `password` is an argon2id hash, NOT plaintext —
+# generate it with:
+#   docker run --rm authelia/authelia:4.39.19 \
+#     authelia crypto hash generate argon2 --password '<your-password>'
+# and store the result (plus the other user_* fields) under
+# service_overrides.authelia in config.local.yml. See
+# services/authelia/README.md.
+users:
+  <%= (for-service :authelia user_username) %>:
+    disabled: false
+    displayname: '<%= (for-service :authelia user_displayname) %>'
+    password: '<%= (for-service :authelia user_password_hash) %>'
+    email: '<%= (for-service :authelia user_email) %>'
+    groups:
+      - admins

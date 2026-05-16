@@ -1,0 +1,56 @@
+# Auto-generated. Source: services/authelia/configuration.yml.elp.
+#
+# Authelia 4.39 — single sign-on portal fronting the gateway-gated
+# web UIs. One-factor (username + password) by default; per-service
+# two_factor (WebAuthn/passkey, not TOTP) is wired in a later commit.
+# Secrets and the user record live in git-ignored config.local.yml
+# (service_overrides.authelia.*) — see services/authelia/README.md
+# for the keys and the `authelia crypto` commands that mint them.
+
+theme: light
+
+server:
+  address: 'tcp://0.0.0.0:9091'
+
+log:
+  level: 'info'
+
+# Signs the identity-verification tokens emailed for password reset.
+# Required by the schema even though reset is left at defaults.
+identity_validation:
+  reset_password:
+    jwt_secret: '<%= (for-service :authelia jwt_secret) %>'
+
+# File backend (no LDAP) — the minimal-process constraint. Flat YAML,
+# argon2id-hashed passwords.
+authentication_backend:
+  file:
+    path: '/config/users_database.yml'
+
+# one_factor: anything the reverse proxy routes through Authelia
+# requires a logged-in user. The monitoring stack is deliberately NOT
+# routed through Authelia (break-glass) so it stays reachable to
+# debug the portal itself.
+access_control:
+  default_policy: 'one_factor'
+
+session:
+  secret: '<%= (for-service :authelia session_secret) %>'
+  cookies:
+    - domain: '<%= hostname %>'
+      authelia_url: 'https://<%= hostname %>:9091'
+
+storage:
+  encryption_key: '<%= (for-service :authelia storage_encryption_key) %>'
+  local:
+    path: '/config/db.sqlite3'
+
+# Notifier → the in-stack postfix relay (services/smtp), which
+# authenticates upstream to the real provider. Plaintext on the
+# internal hop (smtp:25, no TLS/auth), exactly as vaultwarden reaches
+# it.
+notifier:
+  smtp:
+    address: 'smtp://smtp:25'
+    sender: '<%= (for-service :smtp from) %>'
+    disable_require_tls: true

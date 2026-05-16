@@ -1,0 +1,24 @@
+---
+name: authelia
+partof: security
+desc: Single sign-on / forward-auth portal
+port: 9091
+healthz: /api/health
+# Authelia doesn't serve cleanly under a path prefix (officially
+# recommends a dedicated subdomain/root; subpath needs server.path +
+# dynamic base-tag handling). This tailnet host has no subdomains, so
+# it takes a dedicated host port instead — same escape hatch as
+# vaultwarden/qBittorrent. caddy publishes the matching host port.
+public_port: 9091
+public_path: /
+user: root  # no dedicated host user; image runs as its own internal user and writes its sqlite store under /config
+docker_config:
+  image: authelia/authelia:4.39.19
+  command:
+  - "--config=/config/configuration.yml"
+  volumes:
+  - "<%= install_base %>/config/authelia:/config"
+  restart: unless-stopped
+# After smtp (order 5) — the notifier depends on the relay being up —
+# and before the app services it will eventually gate.
+order: 15

@@ -31,5 +31,6 @@ docker_config:
   - 8002:8002  # open-webui  (public_port: 8002)
   - 8003:8003  # mcpo        (public_port: 8003)
   - 8443:8443  # qbittorrent (public_port: 8443)
+  - 9091:9091  # authelia    (public_port: 9091)
   restart: unless-stopped
 order: 10
