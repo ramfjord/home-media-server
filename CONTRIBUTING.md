@@ -83,12 +83,15 @@ gateway_auth:                 # gated with overrides
 gated set). The field names *intent only* — which gateway enforces it
 lives entirely in that gateway's config template, never in `lisp/src`,
 so the engine stays stack-agnostic. Leave a service un-declared to
-keep it on the direct path; **Prometheus and Alertmanager** are
-intentionally left un-gated so they stay reachable to debug the
-gateway itself. Grafana *is* gated (it's a UI, not a break-glass
-surface; past Authelia it serves anonymous Viewer with no Grafana
-account — see `services/grafana/README.md`), so the break-glass for a
-gateway incident is Prometheus + `ssh journalctl`, not Grafana.
+keep it on the direct path; **Prometheus alone** is intentionally
+left un-gated so it stays reachable to debug the gateway itself.
+Grafana and Alertmanager *are* gated — neither is a break-glass
+surface, and un-gated they leak/permit more than they help (Grafana:
+a UI, anonymous Viewer past Authelia, see `services/grafana/README.md`;
+Alertmanager: silences + Discord-webhook/SMTP disclosure, see
+`services/alertmanager/README.md`). Break-glass for a gateway incident
+is un-gated Prometheus (`/api/v1/alerts`) + Discord (out-of-band) +
+`ssh journalctl`.
 
 ## Dev REPL
 
@@ -108,7 +111,7 @@ To validate the dev container end-to-end from a clean slate: `make distclean && 
 
 ## Debugging a running stack
 
-No service is host-published except caddy (443). Monitoring services are not on `$TARGET:<port>`; they are reached through caddy over the tailnet at `https://<tailnet-fqdn>/<route-prefix>/...` from a tailnet-connected machine. Prometheus and Alertmanager are un-gated by design (the gateway-debug break-glass — see services/prometheus/README.md); Grafana is Authelia-gated (services/grafana/README.md), so for break-glass reach for Prometheus, not Grafana. The SNI/Host must be the tailnet FQDN — that is caddy's only site block and cert. Each service keeps its route-prefix in the path, e.g.:
+No service is host-published except caddy (443). Monitoring services are not on `$TARGET:<port>`; they are reached through caddy over the tailnet at `https://<tailnet-fqdn>/<route-prefix>/...` from a tailnet-connected machine. Prometheus alone is un-gated by design (the gateway-debug break-glass — see services/prometheus/README.md); Grafana and Alertmanager are Authelia-gated, so for break-glass reach for Prometheus (`/api/v1/alerts` covers firing alerts), not Grafana or the Alertmanager UI. The SNI/Host must be the tailnet FQDN — that is caddy's only site block and cert. Each service keeps its route-prefix in the path, e.g.:
 
 ```sh
 curl -s "https://<tailnet-fqdn>/prometheus/api/v1/query?query=up"

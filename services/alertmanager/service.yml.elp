@@ -7,6 +7,14 @@ sighup_reload: true
 # Matches --web.route-prefix below.
 internal_path: /alertmanager
 scrape_target: true
+# Gated: un-gated Alertmanager is a worse surface than Prometheus —
+# /api/v2/silences lets anyone suppress alerts (blind the monitoring,
+# stealthily) and /api/v2/status leaks the running config incl. the
+# Discord webhook URL + SMTP. Prometheus→Alertmanager is
+# alertmanager:9093 internal DNS (not via Caddy), so gating the
+# browser path breaks nothing; break-glass during a gateway incident
+# is Discord (out-of-band) + un-gated Prometheus /api/v1/alerts.
+gateway_auth: true
 docker_config:
   image: prom/alertmanager:latest
   command:
