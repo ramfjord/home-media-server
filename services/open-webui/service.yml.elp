@@ -23,6 +23,22 @@ docker_config:
   # permanently: after the first admin exists, Open WebUI itself returns
   # 403 to any further public signup regardless of this flag.
   - ENABLE_SIGNUP=true
+  # Trusted-header SSO: Authelia authenticates the human, caddy's
+  # forward_auth copies Remote-Email/Remote-Name onto the proxied
+  # request (services/caddy/Caddyfile.elp), and Open WebUI trusts them
+  # — auto-provisioning/logging-in that user with NO separate OWUI
+  # login. api-config reaches OWUI directly on mediaserver-network
+  # (http://open-webui:8080, not via caddy), carries no Remote-* header,
+  # so it still authenticates its signin/bootstrap flow with
+  # admin_email/admin_password — that account stays as the M2M service
+  # account (it is NOT removed; only the *human* separate login is).
+  # Caveat: OWUI makes the first-ever user admin. On the existing
+  # persistent DB the api-config admin already exists, so humans
+  # arriving via SSO are regular users. On a *fresh* DB there's an
+  # order race (api-config bootstrap vs. a human browsing first) —
+  # DR-only, documented in services/open-webui/README.md.
+  - WEBUI_AUTH_TRUSTED_EMAIL_HEADER=Remote-Email
+  - WEBUI_AUTH_TRUSTED_NAME_HEADER=Remote-Name
   volumes:
   - "<%= install_base %>/config/open-webui:/app/backend/data"
   restart: unless-stopped
@@ -150,3 +166,11 @@ api_resources: |
           access_control: null
       on_failure: continue   # delete-step already cleared any prior; continue is defensive
 order: 96  # after ollama (95) so the upstream is up when the UI boots
+
+# Gated behind Authelia. Humans hit caddy → forward_auth → Authelia,
+# then OWUI trusts the copied Remote-Email/Remote-Name (env above) so
+# there's no second OWUI login. api-config reaches OWUI directly on
+# mediaserver-network (not via caddy), so forward_auth never touches
+# the reconcile. OWUI's own /api/* keeps its bearer auth (Authelia
+# gates the page, OWUI gates its API) — no public_paths needed.
+gateway_auth: true

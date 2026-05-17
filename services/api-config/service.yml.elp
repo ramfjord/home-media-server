@@ -5,11 +5,16 @@ desc: Apply declared HTTP-API config to upstream services (qBit + Servarr)
 user: root  # no dedicated host user; reads :ro mounts and makes HTTP calls
 docker_config:
   image: ghcr.io/ramfjord/api-config:latest
-  # host network so the container resolves the tailnet FQDN and the
-  # caddy-issued cert (CN = the FQDN) validates. Bridge-network alts
-  # would either need cert-name overrides or an internal upstream URL,
-  # both of which fork from how the rest of the stack reaches caddy.
-  network_mode: host
+  # On mediaserver-network (not host net), reaching each upstream by
+  # its internal_url (http://<name|wireguard>:<port>) — NOT via caddy.
+  # The old host-net+FQDN+caddy path was chosen for uniformity, but the
+  # auth gateway invalidated that calculus: caddy's forward_auth wraps
+  # the whole site, so any gated upstream would 302 api-config to the
+  # Authelia portal (httpx doesn't follow → step fails). Going direct
+  # bypasses the gate entirely (it's caddy-only), so gating an upstream
+  # no longer breaks its reconcile. internal_url is plain http to a
+  # docker-DNS name, so there's no cert/FQDN to satisfy — the reason
+  # host net existed is gone with it. See api-config/upstreams.yaml.elp.
   volumes:
   - "<%= install_base %>/config/api-config/upstreams.yaml:/upstreams.yaml:ro"
   - "<%= install_base %>/config/api-config/resources.yaml:/resources.yaml:ro"

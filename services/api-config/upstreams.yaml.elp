@@ -7,11 +7,18 @@
 #   body_format:        json (default) | qbit-form
 #   extra_mutate_query: query params on POST/PUT only (e.g. forceSave)
 #
-# `base_url` uses each service's `public_url` so api-config goes through
-# whatever entry point caddy knows about — covers both path-routed
-# services (https://<host>/<name>) and dedicated-port ones
-# (https://<host>:8443/). Avoids dealing with VPN-shared services that
-# don't expose ports on the host network directly.
+# `base_url` uses each service's `internal_url` — http://<name>:<port>
+# for bridge services, http://wireguard:<port> for VPN-netns ones
+# (the wireguard container holds their netns and is itself on
+# mediaserver-network, so this is the same address caddy reverse-proxies
+# to). This deliberately does NOT go through caddy: forward_auth gates
+# the whole caddy site, so a public_url base would 302 api-config to
+# the Authelia portal for any gated upstream and break its reconcile.
+# Direct internal_url bypasses the gate (caddy-only) — api-config stays
+# auth-exempt by topology, no per-path bypass needed. configure.py
+# treats base_url as an opaque HTTP base (httpx, no TLS pinning), so
+# plain http to a docker-DNS name is fine. Requires api-config to be on
+# mediaserver-network — see api-config/service.yml.elp.
 <%
 (let ((upstreams (make-hash-table :test 'equal)))
   (dolist (svc (service-where api_config))
@@ -19,7 +26,7 @@
       (setf (gethash name upstreams)
             (plist-tree->dict
               (append
-                (list :base_url (string-right-trim "/" public_url))
+                (list :base_url (string-right-trim "/" internal_url))
                 (when healthz (list :healthcheck_path healthz))
                 api_config)))))
   (yaml:with-emitter-to-stream (em *standard-output*)

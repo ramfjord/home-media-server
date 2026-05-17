@@ -30,11 +30,12 @@ api_config:
   api_version: v2
   body_format: qbit-form
   # No auth header — qBittorrent.conf.elp sets AuthSubnetWhitelist=0.0.0.0/0,
-  # so api-config (which hits qbit through caddy → wireguard:8080,
-  # source-IP non-localhost) auth-bypasses entirely. setPreferences
-  # below persists Password_PBKDF2 to qBittorrent.conf so the arrs
-  # (which DO hit qbit at localhost in wireguard's netns and trigger
-  # LocalHostAuth=true) can authenticate with the same configured creds.
+  # so api-config (now hitting wireguard:8080 *directly* on
+  # mediaserver-network — not via caddy — source-IP non-localhost)
+  # auth-bypasses entirely. setPreferences below persists
+  # Password_PBKDF2 to qBittorrent.conf so the arrs (which DO hit qbit
+  # at localhost in wireguard's netns and trigger LocalHostAuth=true)
+  # can authenticate with the same configured creds.
 # Literal block — preserves camelCase / case-sensitive endpoint paths
 # (here: app/setPreferences) through the manifest round-trip.
 api_resources: |
@@ -43,3 +44,17 @@ api_resources: |
       web_ui_username: "<%= (for-service :qbittorrent admin_username) %>"
       web_ui_password: "<%= (for-service :qbittorrent admin_password) %>"
 order: 50
+
+# Gated behind Authelia. qBittorrent has no External-auth mode, but
+# AuthSubnetWhitelist=0.0.0.0/0 (qBittorrent.conf.elp) means a
+# non-localhost client is auth-bypassed by qbit itself — so the
+# browser path (caddy → forward_auth → Authelia → wireguard:8080) gets
+# Authelia as its real gate with NO double-login (qbit asks for
+# nothing). api-config reaches wireguard:8080 directly off
+# mediaserver-network (not via caddy), so forward_auth never touches
+# it — the reconcile is unaffected. The arrs hit qbit at localhost in
+# wireguard's netns (LocalHostAuth=true), also not via caddy,
+# unaffected. (Defense-in-depth follow-up, optional & separable:
+# narrow AuthSubnetWhitelist from 0.0.0.0/0 to the docker bridge
+# subnet — not required for correctness here.)
+gateway_auth: true

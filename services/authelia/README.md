@@ -4,9 +4,12 @@ Single sign-on / forward-auth portal. Authenticates a user once, then
 Caddy gates the gateway-opted-in web UIs against that session via the
 per-service `gateway_auth:` field (see
 [CONTRIBUTING.md](../../CONTRIBUTING.md)). Currently gated:
-radarr/sonarr/prowlarr. Homer and the monitoring stack
-(Prometheus/Grafana/Alertmanager) are deliberately left un-gated —
-the latter as break-glass (see Scope notes). One process, SQLite +
+radarr/sonarr/prowlarr, qBittorrent, Open WebUI. Homer and the
+monitoring stack (Prometheus/Grafana/Alertmanager) are deliberately
+left un-gated — the latter as break-glass (see Scope notes).
+api-config is auth-exempt by topology (reaches upstreams directly off
+mediaserver-network, never through caddy) — see
+[services/api-config/README.md](../api-config/README.md). One process, SQLite +
 flat-YAML config, no Redis/Postgres — the minimal-deps constraint.
 
 ## Required `config.local.yml` keys
