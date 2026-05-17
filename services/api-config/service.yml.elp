@@ -3,6 +3,16 @@ name: api-config
 partof: dashboard
 desc: Apply declared HTTP-API config to upstream services (qBit + Servarr)
 user: root  # no dedicated host user; reads :ro mounts and makes HTTP calls
+# A healthcheck give-up means "upstream unreachable, skipping" — a
+# by-design skip, not a config failure. configure.py tags it with the
+# stable `healthcheck:` token; drop it pre-counter (same mechanism as
+# alloy's r8169 NIC noise) so it never pages — neither ServiceLogErrors
+# nor ApiConfigReconcileFailed — while it still ships to Loki (the write
+# branch is upstream of this drop), so it stays greppable and shows in
+# the per-service panel. A real reconcile give-up has no token and is
+# left to page.
+log_metric_exclude_regex:
+- 'ERROR healthcheck: gave up after '
 docker_config:
   image: ghcr.io/ramfjord/api-config:latest
   # On mediaserver-network (not host net), reaching each upstream by
@@ -34,11 +44,14 @@ docker_config:
 #
 # ExecStart is reset (empty line clears the inherited list) to `compose
 # run --rm` instead of the base template's `compose up`: `up` does not
-# propagate the container's exit code, so a non-zero configure.py exit
-# would leave the oneshot looking successful and the failure would only
-# live in the log body. `run --rm` returns the process exit code, so a
-# failed reconcile makes the unit enter `failed` → SystemdUnitFailed →
-# Discord (services/api-config/README.md). The compose path is built
+# propagate the container's exit code, so an engine-level configure.py
+# failure would leave the oneshot looking successful. `run --rm`
+# returns the process exit code. Note: configure.py exits non-zero
+# ONLY on an api-config *engine* error (flow-firewall / parse / IO) —
+# a per-upstream reconcile failure exits 0 and is paged per-target via
+# ApiConfigReconcileFailed, NOT via this unit failing. So unit `failed`
+# ⇒ "the reconcile engine is down", a strictly narrower signal than
+# "something didn't reconcile" (services/api-config/README.md). The compose path is built
 # from the global `install_base` + literal service name (mirroring the
 # volume lines above): systemd_override is rendered in the manifest's
 # top-level scope where only globals bind — per-service/derived fields

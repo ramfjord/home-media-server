@@ -16,10 +16,18 @@ groups:
     # these into the same per-service notification as other alerts on
     # that service. Entries with no systemd unit (kernel, bare logger)
     # remain under service=alloy.
+    #
+    # config_target=~"|api-config": api-config's per-upstream error
+    # lines carry config_target=<that upstream> and are paged by
+    # ApiConfigReconcileFailed under service=<upstream> — they must NOT
+    # also fire here under service=api-config (double attribution).
+    # Every other service has no config_target label (≡ "", matches the
+    # empty alternative → unchanged); api-config's own engine errors
+    # carry config_target=api-config (matched → still page api-config).
     - alert: ServiceLogErrors
       expr: |
         sum by (service) (
-          increase(loki_process_custom_log_lines_total{level=~"error|err|crit|alert|emerg"}[5m])
+          increase(loki_process_custom_log_lines_total{level=~"error|err|crit|alert|emerg", config_target=~"|api-config"}[5m])
         ) > 5
       for: 2m
       labels:

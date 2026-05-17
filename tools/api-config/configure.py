@@ -86,8 +86,18 @@ class ConfigureError(Exception):
 
 
 class FlowResult(NamedTuple):
+    # `failures` = upstream reconcile failures (a resource/step didn't
+    # apply). These do NOT fail the unit — they're surfaced per-target
+    # via the [<upstream>] ERROR log lines (Alloy config_target → a
+    # per-service Prometheus alert). `engine_error` = api-config itself
+    # broke (flow-firewall caught an unexpected exception): that, and
+    # top-level parse/IO, are the only things that exit nonzero ->
+    # SystemdUnitFailed under service=api-config. Keeping the two
+    # distinct is what lets "radarr didn't reconcile" page radarr while
+    # "the reconcile engine is down" pages api-config.
     failures: int
     skipped: bool
+    engine_error: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -181,6 +191,7 @@ async def request(
     method: str,
     url: str,
     upstream: dict,
+    context: str = "",
     **kwargs,
 ) -> httpx.Response:
     """HTTP request with explicit-schedule retry on transient failures.
@@ -190,7 +201,15 @@ async def request(
     restart races), and a stubborn outage gets ~7.5 min of total budget
     before we give up. On final give-up an ERROR is logged naming the
     attempt count and elapsed wall time, so an exhausted retry is never
-    silent."""
+    silent.
+
+    `context` is a stable token prepended to the give-up ERROR (e.g.
+    "healthcheck") so the observability layer can match it precisely —
+    a healthcheck give-up means "upstream unreachable, will skip", not
+    a config failure, and is excluded from alerting via api-config's
+    log_metric_exclude_regex (same mechanism as the r8169 NIC noise).
+    A real reconcile give-up has no context and stays page-worthy."""
+    ctx = f"{context}: " if context else ""
     headers = {**auth_headers(upstream), **kwargs.pop("headers", {})}
     n_attempts = len(RETRY_BACKOFFS) + 1
     t0 = time.monotonic()
@@ -202,8 +221,8 @@ async def request(
             if is_last:
                 elapsed = int(time.monotonic() - t0)
                 log.error(
-                    "gave up after %d attempts / %ds: %s %s: %s: %s",
-                    n_attempts, elapsed, method, url, type(e).__name__, e,
+                    "%sgave up after %d attempts / %ds: %s %s: %s: %s",
+                    ctx, n_attempts, elapsed, method, url, type(e).__name__, e,
                 )
                 raise
             backoff = RETRY_BACKOFFS[attempt]
@@ -219,8 +238,8 @@ async def request(
                 # 5xx into a resource-level failure (complementary signal).
                 elapsed = int(time.monotonic() - t0)
                 log.error(
-                    "gave up after %d attempts / %ds: %s %s → HTTP %d (transient)",
-                    n_attempts, elapsed, method, url, resp.status_code,
+                    "%sgave up after %d attempts / %ds: %s %s → HTTP %d (transient)",
+                    ctx, n_attempts, elapsed, method, url, resp.status_code,
                 )
                 return resp
             backoff = RETRY_BACKOFFS[attempt]
@@ -242,7 +261,8 @@ async def healthcheck(
         return True
     url = f"{upstream['base_url']}{path}"
     try:
-        resp = await request(client, log, "GET", url, upstream)
+        resp = await request(client, log, "GET", url, upstream,
+                             context="healthcheck")
     except httpx.HTTPError as e:
         log.warning("healthcheck %s failed: %s", url, e)
         return False
@@ -536,8 +556,15 @@ async def run_flow(name: str, upstream: dict, resources: dict) -> FlowResult:
             failures = await apply_upstream(client, flog, upstream, resources)
             return FlowResult(failures=failures, skipped=False)
     except Exception as e:  # firewall: a flow must never raise out
-        flog.error("flow aborted (unexpected %s): %s", type(e).__name__, e)
-        return FlowResult(failures=1, skipped=False)
+        # An unexpected exception is an api-config *engine* defect, not
+        # an upstream reconcile failure — attribute it to api-config
+        # (config_target=api-config, page api-config, exit nonzero), not
+        # to the upstream whose flow happened to be running.
+        flow_log("api-config").error(
+            "engine error in %s flow (unexpected %s): %s",
+            name, type(e).__name__, e,
+        )
+        return FlowResult(failures=0, skipped=False, engine_error=True)
 
 
 async def main(argv: list[str]) -> int:
@@ -563,12 +590,23 @@ async def main(argv: list[str]) -> int:
 
     results = {name: t.result() for name, t in tasks.items()}
     failures = sum(r.failures for r in results.values())
+    engine_errors = sum(1 for r in results.values() if r.engine_error)
     skipped = skipped_no_upstream + sum(1 for r in results.values() if r.skipped)
 
     if skipped:
         mlog.warning("%d upstream(s) skipped (healthcheck/missing)", skipped)
     if failures:
-        mlog.error("%d failure(s)", failures)
+        # WARNING, not ERROR: an upstream that didn't reconcile is paged
+        # per-target (its own [<upstream>] ERROR lines → service=<that>),
+        # NOT under service=api-config. Logging this at ERROR would
+        # re-page api-config for every upstream failure — exactly the
+        # double-attribution this design removes.
+        mlog.warning("%d upstream reconcile failure(s) (alerted per-target)",
+                     failures)
+    if engine_errors:
+        # The only nonzero exit: api-config itself broke → unit enters
+        # failed → SystemdUnitFailed under service=api-config.
+        mlog.error("%d engine error(s)", engine_errors)
         return 1
     return 0
 

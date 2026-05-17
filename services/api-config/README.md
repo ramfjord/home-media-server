@@ -48,21 +48,34 @@ Logs are one line per event, prefixed `[<upstream>]`; reconstruct a
 single flow with `grep '\[radarr\]'`. A request that exhausts its
 retry budget logs an explicit `ERROR gave up after N attempts / Ns`.
 
-## Failure visibility
+## Failure visibility & attribution
 
-Logs reach Grafana regardless of outcome: container stdout → journald
-under `api-config.service` → Alloy relabels to `service=api-config` →
-Loki, greppable in the per-service logs panel (filter the single-line
-`[<upstream>] ERROR …` records).
+Every line reaches Grafana regardless of outcome: container stdout →
+journald under `api-config.service` → Alloy → Loki. configure.py
+prefixes a `<N>` syslog level so journald `PRIORITY` is accurate, and
+Alloy lifts the `[<upstream>]` prefix into a **`config_target`** label
+(service stays `api-config`). Two failure classes, deliberately
+attributed differently:
 
-Alerting depends on the unit *failing*. `ServiceLogErrors` can't see
-this: its `level` comes from journald priority, and a container
-streamed through `docker compose` lands at priority *info* whatever the
-text says. So the signal is the exit code — the unit runs
-`docker compose run --rm` (not `up`, which swallows the container's
-exit code), so any `configure.py` non-zero exit (≥1 reconcile failure)
-puts the unit in `failed` → `SystemdUnitFailed` (`for: 5m`) → Discord.
-Granularity is per-run ("this reconcile failed"), not per-line.
+- **Per-upstream reconcile failure** (radarr's PUT 500s after
+  retries): exits 0 — the unit does **not** fail. The `[radarr] ERROR
+  …` line carries `config_target=radarr`; **`ApiConfigReconcileFailed`**
+  `label_replace`s that to `service=radarr`, so Alertmanager threads it
+  with radarr's own alerts and the per-service Grafana dashboard's
+  "api-config reconcile — radarr" panel shows the relevant lines next
+  to radarr's logs. The reconcile engine is fine; *radarr* is the
+  problem, so radarr is what's paged.
+- **Engine error** (flow-firewall caught an unexpected exception,
+  bad `upstreams.yaml`): exits non-zero → unit `failed` →
+  `SystemdUnitFailed` + `ServiceLogErrors`, both under
+  `service=api-config` (`config_target=api-config`). The reconcile
+  engine itself is down.
+
+A failed **healthcheck** is a by-design *skip*, not a failure: its
+give-up line carries the `healthcheck:` token and is dropped
+pre-counter via `log_metric_exclude_regex` (see `service.yml.elp`), so
+it never pages — an unreachable upstream is covered by its own
+`TargetDown`/Blackbox — but it still shows in the panel.
 
 ## More
 

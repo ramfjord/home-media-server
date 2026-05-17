@@ -105,6 +105,26 @@ async def test_transport_exhaustion_logs_and_raises(fast_backoffs, caplog_lines)
     errs = [l for l in caplog_lines if " ERROR " in l]
     assert len(errs) == 1 and errs[0].startswith("[beta]")
     assert "gave up after 3 attempts" in errs[0]
+    # No context → no token → page-worthy real reconcile give-up.
+    assert "healthcheck:" not in errs[0]
+
+
+async def test_healthcheck_giveup_carries_matchable_token(fast_backoffs,
+                                                          caplog_lines):
+    """A healthcheck give-up must carry the stable `healthcheck:` token
+    so Alloy's log_metric_exclude_regex drops it from alerting (skip !=
+    failure) while a real reconcile give-up (no token) still pages."""
+    def boom(_req):
+        raise httpx.ConnectError("refused")
+
+    upstream = {"base_url": "http://x", "healthcheck_path": "/health"}
+    async with _client(boom) as c:
+        ok = await configure.healthcheck(c, configure.flow_log("jellyfin"),
+                                         upstream)
+    assert ok is False
+    errs = [l for l in caplog_lines if " ERROR " in l]
+    assert len(errs) == 1, errs
+    assert errs[0].startswith("[jellyfin] ERROR healthcheck: gave up after")
 
 
 def test_journal_priority_prefix():
@@ -138,15 +158,44 @@ async def test_single_line_formatter_escapes_newlines(caplog_lines):
 
 
 async def test_run_flow_firewalls_unexpected_error(caplog_lines, monkeypatch):
-    """An unexpected exception inside a flow must become a counted
-    failure, never propagate (else TaskGroup cross-cancels siblings)."""
+    """An unexpected exception is an api-config *engine* defect: never
+    propagates (TaskGroup), is attributed to api-config (not the
+    upstream whose flow ran), and flags engine_error so the unit exits
+    nonzero."""
     async def kaboom(*_a, **_k):
         raise RuntimeError("kaboom")
 
     monkeypatch.setattr(configure, "healthcheck", kaboom)
     res = await configure.run_flow("delta", {"base_url": "http://x"}, {})
-    assert res == configure.FlowResult(failures=1, skipped=False)
-    assert any(l.startswith("[delta]") and "flow aborted" in l for l in caplog_lines)
+    assert res == configure.FlowResult(failures=0, skipped=False,
+                                       engine_error=True)
+    # Attributed to api-config (config_target=api-config), not [delta].
+    assert any(l.startswith("[api-config] ERROR engine error in delta flow")
+               for l in caplog_lines)
+    assert not any(l.startswith("[delta]") for l in caplog_lines)
+
+
+async def test_main_exit_code_engine_vs_reconcile(tmp_path, monkeypatch):
+    """Upstream reconcile failures must NOT fail the unit (exit 0);
+    only an engine error does (exit 1). Pins answer-1 semantics."""
+    up = tmp_path / "up.yaml"
+    res = tmp_path / "res.yaml"
+    up.write_text("radarr: {base_url: 'http://x'}\nsonarr: {base_url: 'http://x'}\n")
+    res.write_text("radarr: {}\nsonarr: {}\n")
+    argv = ["configure.py", str(up), str(res)]
+
+    async def only_failures(name, *_a, **_k):
+        return configure.FlowResult(failures=3, skipped=False)
+
+    monkeypatch.setattr(configure, "run_flow", only_failures)
+    assert await configure.main(argv) == 0  # reconcile failures ≠ unit fail
+
+    async def has_engine_error(name, *_a, **_k):
+        return configure.FlowResult(failures=0, skipped=False,
+                                    engine_error=True)
+
+    monkeypatch.setattr(configure, "run_flow", has_engine_error)
+    assert await configure.main(argv) == 1  # engine error → unit fails
 
 
 async def test_steps_carry_upstream_auth(caplog_lines):

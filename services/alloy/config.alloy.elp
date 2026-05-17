@@ -41,13 +41,38 @@ loki.relabel "journal" {
 }
 
 loki.source.journal "system" {
-	// Fan out: loki.write stores every line (so noise dropped from the
-	// counter stays greppable in Grafana); loki.process.metrics is a
-	// sink that only ticks the prometheus counters.
-	forward_to    = [loki.write.local.receiver, loki.process.metrics.receiver]
+	// Single pre-fan-out enrich stage so config_target lands on BOTH
+	// the stored logs (Grafana per-service panel) and the metric
+	// (per-target alert). enrich itself fans out to write + metrics.
+	forward_to    = [loki.process.enrich.receiver]
 	relabel_rules = loki.relabel.journal.rules
 	max_age       = "12h"
 	labels        = { job = "alloy" }
+}
+
+loki.process "enrich" {
+	// config_target: on api-config lines only, lift the leading
+	// `[<target>]` prefix into a label (service stays api-config). It's
+	// exclusive to api-config — the stage.match scope means no other
+	// service ever carries it — so `{config_target="X"}` unambiguously
+	// reads as "api-config's reconcile lines about X". Both the Grafana
+	// per-service panel and the ApiConfigReconcileFailed alert key off
+	// it; the regex is anchored RE2 (Go), named group becomes the label
+	// via stage.labels (empty value = use the extracted key).
+	stage.match {
+		selector = `{service="api-config"}`
+		stage.regex {
+			expression = `^\[(?P<config_target>[^\]]+)\]`
+		}
+		stage.labels {
+			values = { config_target = "" }
+		}
+	}
+
+	// Fan out: loki.write stores every line (so noise dropped from the
+	// counter stays greppable in Grafana); loki.process.metrics is a
+	// sink that only ticks the prometheus counters.
+	forward_to = [loki.write.local.receiver, loki.process.metrics.receiver]
 }
 
 loki.process "metrics" {

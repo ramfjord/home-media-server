@@ -76,12 +76,38 @@
       }
     },
     {
+      "id": 4,
+      "type": "logs",
+      "title": "api-config reconcile — $service",
+      "description": "api-config's reconcile log lines *about this service* (config_target=$service), whatever the outcome. When you're paged that api-config couldn't configure this service (ApiConfigReconcileFailed), the relevant `[$service] …` lines are right here next to the service's own logs. Healthcheck give-ups (`healthcheck: gave up`) show here but don't page — a skipped/unreachable upstream isn't a config failure.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 21 },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "{config_target=\"$service\"}",
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      }
+    },
+    {
       "id": 3,
       "type": "logs",
       "title": "Recent host errors — level ≥ err (any unit)",
       "description": "All journal entries at priority emerg/alert/crit/err/error from anywhere on the host. Surfaces the kernel/scope/slice errors that alerts under service=alloy point at.",
       "datasource": { "type": "loki", "uid": "loki" },
-      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 21 },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 31 },
       "targets": [
         {
           "refId": "A",

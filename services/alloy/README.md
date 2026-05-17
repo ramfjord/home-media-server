@@ -9,6 +9,21 @@ to logs without Prometheus having to read logs directly.
 to relabel, and where to send the result. It renders to
 `config/alloy/config.alloy`.
 
+## `config_target` (api-config attribution)
+
+A pre-fan-out `loki.process "enrich"` stage, scoped to
+`{service="api-config"}`, regexes the leading `[<target>]` prefix off
+api-config's log lines into a `config_target` label (`service` stays
+`api-config`). It sits before the write/metrics fan-out so the label
+lands on both the stored logs (the per-service Grafana panel queries
+`{config_target="$service"}`) and the metric (the
+`ApiConfigReconcileFailed` rule `label_replace`s `config_target` →
+`service`). The label is *exclusive* to api-config — no other service's
+lines ever carry it — which is what makes `{config_target="X"}`
+unambiguous and lets `ServiceLogErrors` exclude api-config's
+per-upstream errors via `config_target=~"|api-config"` without
+affecting any other service (they have no such label ≡ "").
+
 ## Excluding log noise from the error counter
 
 Kernel/hardware noise (e.g. a flaky NIC spamming the ring buffer) has no

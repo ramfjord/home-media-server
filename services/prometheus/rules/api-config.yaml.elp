@@ -1,0 +1,39 @@
+groups:
+- name: ApiConfig
+  rules:
+    # api-config logs `[<upstream>] ERROR …` when it cannot reconcile
+    # that upstream after retries. Alloy lifts <upstream> into the
+    # `config_target` label (service stays api-config — see
+    # services/alloy/config.alloy.elp). label_replace rewrites
+    # `service` to that target so Alertmanager (group_by: [service])
+    # threads it with the target's own alerts (TargetDown, Blackbox,
+    # …) instead of a separate api-config post — the failure shows up
+    # against the service that actually isn't configured.
+    #
+    # Excluded by construction:
+    #   - config_target="api-config": api-config's *engine* errors
+    #     (flow-firewall, parse/IO). Those page via SystemdUnitFailed
+    #     (nonzero exit) + ServiceLogErrors under service=api-config;
+    #     they are not a per-upstream reconcile problem.
+    #   - config_target="": every non-api-config service (no such
+    #     label) — they have their own ServiceLogErrors.
+    #   - healthcheck give-ups: tagged `healthcheck:` by configure.py
+    #     and dropped pre-counter via api-config's
+    #     log_metric_exclude_regex (a skipped/unreachable upstream is
+    #     not a config failure; its own TargetDown covers reachability).
+    #
+    # for: 0m / > 0: a reconcile failure is rare and meaningful — page
+    # on the first one rather than waiting for a rate to build.
+    - alert: ApiConfigReconcileFailed
+      expr: |
+        label_replace(
+          sum by (config_target) (
+            increase(loki_process_custom_log_lines_total{service="api-config", level=~"error|err|crit|alert|emerg", config_target!="api-config", config_target!=""}[10m])
+          ) > 0,
+          "service", "$1", "config_target", "(.+)"
+        )
+      for: 0m
+      labels:
+        severity: warning
+      annotations:
+        summary: "{{ $labels.service }}: api-config could not reconcile it ({{ $value | printf \"%.0f\" }} error log line(s) in 10m)"
