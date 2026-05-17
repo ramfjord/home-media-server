@@ -31,6 +31,11 @@ api_config:
   # we drive below live at /Startup/* (no /api prefix). api_version is
   # unused by the steps-only flow here; set for future upsert/post use.
   api_version: v1
+  # host-net: jellyfin is on no docker network, so the default
+  # internal_url (http://jellyfin:8096) can't resolve from api-config's
+  # bridge. Reach its host port via the bridge gateway instead
+  # (api-config sets extra_hosts: host.docker.internal:host-gateway).
+  base_url: "http://host.docker.internal:8096"
 # Literal block — preserves the ELP tags inside so for-service resolves
 # at stage 2 with full manifest scope. Gate at step 1: GET /Startup/FirstUser
 # returns 200 during setup and 401 once /Startup/Complete has been called,

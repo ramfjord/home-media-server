@@ -15,6 +15,13 @@ docker_config:
   # no longer breaks its reconcile. internal_url is plain http to a
   # docker-DNS name, so there's no cert/FQDN to satisfy — the reason
   # host net existed is gone with it. See api-config/upstreams.yaml.elp.
+  #
+  # Host-networked upstreams (jellyfin) are on no docker network, so
+  # internal_url can't resolve from the bridge; map host.docker.internal
+  # to the bridge gateway so their api_config base_url can target the
+  # host port directly.
+  extra_hosts:
+  - "host.docker.internal:host-gateway"
   volumes:
   - "<%= install_base %>/config/api-config/upstreams.yaml:/upstreams.yaml:ro"
   - "<%= install_base %>/config/api-config/resources.yaml:/resources.yaml:ro"

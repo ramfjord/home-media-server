@@ -6,8 +6,10 @@
 #   auth:               optional. {type: header|bearer, name, value}
 #   body_format:        json (default) | qbit-form
 #   extra_mutate_query: query params on POST/PUT only (e.g. forceSave)
+#   base_url:           optional; overrides the internal_url default
+#                       (host-net upstreams not reachable by docker DNS)
 #
-# `base_url` uses each service's `internal_url` — http://<name>:<port>
+# `base_url` defaults to each service's `internal_url` — http://<name>:<port>
 # for bridge services, http://wireguard:<port> for VPN-netns ones
 # (the wireguard container holds their netns and is itself on
 # mediaserver-network, so this is the same address caddy reverse-proxies
@@ -18,7 +20,9 @@
 # auth-exempt by topology, no per-path bypass needed. configure.py
 # treats base_url as an opaque HTTP base (httpx, no TLS pinning), so
 # plain http to a docker-DNS name is fine. Requires api-config to be on
-# mediaserver-network — see api-config/service.yml.elp.
+# mediaserver-network — see api-config/service.yml.elp. A service whose
+# api_config sets base_url overrides this default (host-net jellyfin is
+# not on docker DNS, so it targets the host gateway instead).
 <%
 (let ((upstreams (make-hash-table :test 'equal)))
   (dolist (svc (service-where api_config))
