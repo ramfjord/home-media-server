@@ -40,6 +40,14 @@ tunnel-up ⟺ exiting via the VPN. VPN consumers gate on this via their
 tunnel holds qBittorrent down rather than launching it onto a leaky
 path.
 
+## Metrics
+
+WireGuard emits none itself; [wireguard-exporter](../wireguard-exporter/)
+(in this netns) exposes handshake + per-peer transfer, feeding the VPN
+Containment dashboard and the `WireGuardTunnelStale` alert. It proves
+the tunnel is alive and carrying the payload — *not* the absence of a
+leak; that is this killswitch's structural job, not a metric.
+
 ## More
 
 - Project: <https://www.wireguard.com/>

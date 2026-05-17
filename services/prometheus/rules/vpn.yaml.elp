@@ -1,0 +1,19 @@
+groups:
+- name: VPN
+  rules:
+    - alert: WireGuardTunnelStale
+      # No WireGuard handshake in >3m. The tunnel is the intended
+      # egress; when it's down, containment rests SOLELY on the
+      # killswitch (services/wireguard/README.md) and the qbit
+      # stop-gate. That's the degraded posture worth knowing about --
+      # not a leak (the killswitch fails closed), but the early
+      # warning that you're one regression from one. TargetDown
+      # already covers wireguard-exporter being down; this covers
+      # exporter-up-but-tunnel-dead.
+      expr: time() - wireguard_latest_handshake_seconds > 180
+      for: 5m
+      labels:
+        partof: vpn
+        service: wireguard
+      annotations:
+        summary: "WireGuard tunnel stale ({{ $labels.interface }}) — no handshake in >3m; VPN egress unconfirmed, containment now relies on the killswitch alone"

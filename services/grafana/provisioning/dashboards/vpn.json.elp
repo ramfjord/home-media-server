@@ -1,0 +1,106 @@
+{
+  "id": null,
+  "uid": "vpn-containment",
+  "title": "VPN Containment",
+  "tags": ["mediaserver", "vpn"],
+  "timezone": "",
+  "schemaVersion": 38,
+  "version": 0,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Tunnel handshake age (s) — low = alive; rises = tunnel down",
+      "description": "time() - wireguard_latest_handshake_seconds. A fresh handshake means the tunnel is negotiated. If this climbs, egress via the VPN is not confirmed and containment rests solely on the killswitch — see the WireGuardTunnelStale alert.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "time() - wireguard_latest_handshake_seconds",
+          "legendFormat": "{{interface}} {{allowed_ips}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "unit": "s",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 180 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Tunnel throughput (payload through wg0)",
+      "description": "rate of wireguard_{sent,received}_bytes_total. Proves the payload is going THROUGH the tunnel. Does not prove the absence of a parallel leak — that is the killswitch's structural job, not a throughput metric.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(wireguard_sent_bytes_total[5m]))",
+          "legendFormat": "sent (to peers, via tunnel)",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(wireguard_received_bytes_total[5m]))",
+          "legendFormat": "received (from peers, via tunnel)",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "unit": "Bps",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Netns egress: eth0 vs wg0 (leak signature)",
+      "description": "cAdvisor, the whole use_vpn netns (one black box — per-app is impossible, shared netns). CAVEAT: eth0 also carries the legitimate ENCRYPTED tunnel transport, so a healthy tunnel makes eth0 ≈ wg0. The leak signature is eth0 GROSSLY exceeding wg0 (pre-fix it was ~40×). Post-killswitch this is a trend/anomaly view, not proof — proof is the killswitch itself.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum by (interface) (rate(container_network_transmit_bytes_total{service=\"wireguard\",interface=~\"eth0|wg0\"}[5m]))",
+          "legendFormat": "{{interface}} tx",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "unit": "Bps",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi" }
+      }
+    }
+  ]
+}

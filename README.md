@@ -65,6 +65,7 @@ Every web UI is reached at `https://<tailnet-fqdn>/<path>`, with caddy fronting 
 | [exportarr-radarr](services/exportarr-radarr/) | monitoring | — | Radarr metrics exporter |
 | [exportarr-sonarr](services/exportarr-sonarr/) | monitoring | — | Sonarr metrics exporter |
 | [qbittorrent-exporter](services/qbittorrent-exporter/) | monitoring | — | qBittorrent metrics exporter |
+| [wireguard-exporter](services/wireguard-exporter/) | monitoring | — | WireGuard tunnel metrics (handshake, per-peer transfer) |
 | [Homer](services/homer/) | dashboard | `/` | Service-discovery landing page |
 | [Caddy](services/caddy/) | dashboard | — | TLS terminator + reverse proxy for everything above |
 | [api-config](services/api-config/) | dashboard | — | Reconciles Servarr/qBittorrent API config from declared YAML |

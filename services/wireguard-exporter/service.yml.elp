@@ -1,0 +1,36 @@
+---
+name: wireguard-exporter
+partof: vpn
+desc: WireGuard tunnel metrics exporter
+# Must share wireguard's netns: it reads the tunnel via `wg show all
+# dump`, so it has to see wg0 itself (not reachable over the bridge).
+# use_vpn -> network_mode: container:wireguard, plus the systemd
+# BindsTo/health-gate/--force-recreate machinery, same as the arrs.
+use_vpn: true
+user: root  # `wg show` needs CAP_NET_ADMIN; image default user is root
+# use_vpn services aren't addressable by their own container name on
+# mediaserver-network (they're in wireguard's netns), so Prometheus
+# scrapes this at wireguard:9586. The scrape line keys off
+# scrape_target.host; service=wireguard so the metrics file under the
+# tunnel's own subject (mirrors qbittorrent-exporter -> qbittorrent).
+scrape_target:
+  host: wireguard
+  port: 9586
+  service: wireguard
+docker_config:
+  # Pinned, not :latest -- single-maintainer upstream; bump deliberately
+  # (see services/wireguard-exporter/README.md). amd64 image, multi-arch.
+  image: mindflavor/prometheus-wireguard-exporter:3.6.6
+  # The image ships a broken default `CMD ["-a"]` -- the binary's
+  # -a/--prepend_sudo now REQUIRES a true|false value, so the stock
+  # container crash-loops on "argument requires a value". Override
+  # with the value. false: no sudo; we run as root (user: root) with
+  # CAP_NET_ADMIN, so `wg show all dump` works directly. Port stays
+  # default 9586.
+  command:
+  - "-a"
+  - "false"
+  cap_add:
+  - NET_ADMIN
+  restart: unless-stopped
+order: 170
