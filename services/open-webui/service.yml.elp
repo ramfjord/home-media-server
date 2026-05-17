@@ -23,20 +23,13 @@ docker_config:
   # permanently: after the first admin exists, Open WebUI itself returns
   # 403 to any further public signup regardless of this flag.
   - ENABLE_SIGNUP=true
-  # Trusted-header SSO: Authelia authenticates the human, caddy's
-  # forward_auth copies Remote-Email/Remote-Name onto the proxied
-  # request (services/caddy/Caddyfile.elp), and Open WebUI trusts them
-  # — auto-provisioning/logging-in that user with NO separate OWUI
-  # login. api-config reaches OWUI directly on mediaserver-network
-  # (http://open-webui:8080, not via caddy), carries no Remote-* header,
-  # so it still authenticates its signin/bootstrap flow with
-  # admin_email/admin_password — that account stays as the M2M service
-  # account (it is NOT removed; only the *human* separate login is).
-  # Caveat: OWUI makes the first-ever user admin. On the existing
-  # persistent DB the api-config admin already exists, so humans
-  # arriving via SSO are regular users. On a *fresh* DB there's an
-  # order race (api-config bootstrap vs. a human browsing first) —
-  # DR-only, documented in services/open-webui/README.md.
+  # Trusted-header SSO: Authelia auths the human; caddy forward_auth
+  # copies Remote-Email/Name onto the request and OWUI trusts it — no
+  # separate OWUI login. api-config reaches OWUI directly (no caddy)
+  # but self-asserts the same Remote-Email (api_config.auth below), so
+  # it and the human resolve to one OWUI user. Fresh DB → first
+  # authenticator is admin; sharing the email makes order moot unless a
+  # different-email user logs in first (services/open-webui/README.md).
   - WEBUI_AUTH_TRUSTED_EMAIL_HEADER=Remote-Email
   - WEBUI_AUTH_TRUSTED_NAME_HEADER=Remote-Name
   volumes:
@@ -47,19 +40,15 @@ api_config:
   # base the upserts/posts machinery uses. The steps-only flow below
   # writes full paths, so api_version is only documentary here.
   api_version: v1
-# Literal block — ELP tags inside resolve at stage 2.
-#
-# Flow on each deploy:
-#   1. signin — captures $token. Succeeds if admin already exists.
-#   2. signup — captures $token. Succeeds on first deploy when admin doesn't
-#      exist yet; 400s afterwards (already exists). Both paths leave $token
-#      set; api-config substitutes it into the Authorization headers below.
-#   3+. Register the grafana mcpo tool server + create a Grafana-Assistant
-#      custom model with a primed system prompt. POSTs replace the stored
-#      state, so they're idempotent — every deploy reconciles to this.
-#      Manual additions in the UI to tool_servers or this model get
-#      clobbered by re-deploy; that's intentional config-as-code, document
-#      it in the README.
+  # api-config self-asserts Remote-Email (= the Authelia admin's email)
+  # on every OWUI request; trusted-header mode authenticates by it, no
+  # password. Must equal the Authelia user's email → one shared admin.
+  auth: { type: header, name: Remote-Email, value: "<%= (for-service :open-webui admin_email) %>" }
+# Literal block — ELP tags resolve at stage 2. Flow: signin returns a
+# token for the Remote-Email user (admin = first user on a fresh OWUI
+# DB); signup is a vestigial fallback. Then register the grafana mcpo
+# tool server + Grafana-Assistant model (idempotent; clobbers manual
+# UI edits to those — config-as-code).
 api_resources: |
   steps:
     - name: signin
@@ -68,13 +57,13 @@ api_resources: |
         url: $base_url/api/v1/auths/signin
         json:
           email: "<%= (for-service :open-webui admin_email) %>"
-          password: "<%= (for-service :open-webui admin_password) %>"
+          password: "unused-trusted-header-auth"   # ignored in trusted-header mode
       extract:
         regex: '"token"\s*:\s*"([^"]+)"'
         store_as: token
       success_when:
         status: 200
-      on_failure: continue   # fall through to signup on first deploy
+      on_failure: continue   # trusted-header signin shouldn't fail; defensive
     - name: bootstrap-admin
       request:
         method: POST
@@ -82,7 +71,7 @@ api_resources: |
         json:
           name: "<%= (for-service :open-webui admin_username) %>"
           email: "<%= (for-service :open-webui admin_email) %>"
-          password: "<%= (for-service :open-webui admin_password) %>"
+          password: "unused-trusted-header-auth"   # ignored in trusted-header mode
           profile_image_url: "/user.png"
       extract:
         regex: '"token"\s*:\s*"([^"]+)"'

@@ -6,31 +6,19 @@ through the web UI.
 
 ## Auth: Authelia trusted-header SSO
 
-Gated behind Authelia (`gateway_auth: true`). caddy's `forward_auth`
-authenticates the human and copies `Remote-Email`/`Remote-Name` onto
-the proxied request; `WEBUI_AUTH_TRUSTED_EMAIL_HEADER` /
-`WEBUI_AUTH_TRUSTED_NAME_HEADER` make Open WebUI trust them and
-auto-provision/log-in that user — **no separate Open WebUI login**.
+Gated (`gateway_auth: true`). caddy `forward_auth` copies
+`Remote-Email`/`Remote-Name`; `WEBUI_AUTH_TRUSTED_*_HEADER` make OWUI
+trust them — no separate OWUI login. api-config reaches OWUI directly
+(no caddy) and self-asserts the same `Remote-Email` (= `admin_email`,
+which must equal the Authelia user's email), so api-config and the
+human resolve to one OWUI user. Trusted-header mode ignores passwords;
+`open-webui.admin_password` is unused.
 
-The api-config admin (`admin_email`/`admin_password`) is **not**
-removed: api-config reaches OWUI directly on mediaserver-network
-(`http://open-webui:8080`, no caddy → no `Remote-*` header) and still
-authenticates its signin/bootstrap flow with that account. It is now
-purely an **M2M service account** (drives the Grafana tool-server +
-Grafana-Assistant model reconcile); humans no longer use it. OWUI's
-own `/api/*` keeps its bearer auth, so no `public_paths` carve-out is
-needed — Authelia gates the page, OWUI gates its API.
-
-**Fresh-DB admin race (DR-only caveat).** OWUI makes the *first-ever*
-user an admin. On the existing persistent DB the api-config admin
-already exists, so humans arriving via SSO are regular users — fine.
-On a *from-scratch* DB there's an order race: if a human browses in
-(trusted-header → auto-provisioned, becomes admin) before api-config's
-first reconcile creates the admin account, the roles invert and the
-Grafana-Assistant reconcile (which needs an admin token) silently
-degrades (its steps are `on_failure: continue`). Recovery: clear the
-errant user / promote the api-config account in OWUI, redeploy. Only
-relevant on disaster-recovery rebuilds, not normal deploys.
+First authenticator on a fresh OWUI DB becomes admin. Sharing the
+email makes order moot — whoever's first creates the shared admin, the
+other logs into it — unless a *different*-email user logs in before
+api-config, who is then admin (recovery: clear that user, redeploy).
+DR-only.
 
 **Verify post-deploy:** chat streaming uses websockets through
 `forward_auth` — confirm a streamed response works after the first
