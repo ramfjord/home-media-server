@@ -42,6 +42,15 @@ docker_config:
 # TimeoutStartSec is slack over configure.py's retry budget; flows run
 # concurrently so the wall bound is ~max(flow) (~7.5min) not sum(flow).
 #
+# ExecStartPre best-effort-pulls :latest before every run. The image is
+# an unversioned :latest with no pull anywhere in the deploy path, so
+# without this a `make install`-triggered reconcile runs whatever stale
+# image is cached until someone pulls by hand. Pulling on every start
+# closes that race structurally. The `-` makes it non-fatal: a GHCR
+# outage/rate-limit must fall back to the cached image, never block a
+# reconcile (cached-but-stale beats not-running). Drop this if/when the
+# image gets real version tags + a pull in the deploy.
+#
 # ExecStart is reset (empty line clears the inherited list) to `compose
 # run --rm` instead of the base template's `compose up`: `up` does not
 # propagate the container's exit code, so an engine-level configure.py
@@ -61,6 +70,7 @@ systemd_override: |
   Type=oneshot
   Restart=no
   TimeoutStartSec=900
+  ExecStartPre=-/usr/bin/docker compose -f <%= install_base %>/config/api-config/docker-compose.yml pull api-config
   ExecStart=
   ExecStart=/usr/bin/docker compose -f <%= install_base %>/config/api-config/docker-compose.yml run --rm api-config
 order: 200
