@@ -7,11 +7,26 @@ port: 3000
 # admin-API equivalent. Falling through to compose-reload (systemctl
 # restart) is the only way config changes take effect.
 scrape_target: true
+# Gated: humans reach Grafana only through Caddy→Authelia (the SSO they
+# already use), no Grafana account of their own. Prometheus and
+# Alertmanager stay un-gated as the gateway-debug break-glass; Grafana
+# moving behind the gate is the deliberate exception (it's a UI, not a
+# break-glass surface — see services/grafana/README.md).
+gateway_auth: true
 docker_config:
   image: grafana/grafana:latest
   environment:
-  - GF_SECURITY_ADMIN_USER=<%= (for-service :grafana admin_username) %>
-  - GF_SECURITY_ADMIN_PASSWORD=<%= (for-service :grafana admin_password) %>
+  # No admin secret in config.local.yml. Browser users come via
+  # Authelia and land as anonymous Viewer; mcp-grafana reads as
+  # anonymous Viewer over internal DNS (least privilege — it's
+  # --disable-write). The admin account still exists but the login
+  # form is disabled, so the default cred can't be used on the
+  # internal network; break-glass is `docker exec grafana grafana cli
+  # admin reset-admin-password` (services/grafana/README.md), a
+  # runbook step, not a stored secret.
+  - GF_AUTH_ANONYMOUS_ENABLED=true
+  - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+  - GF_AUTH_DISABLE_LOGIN_FORM=true
   - GF_SERVER_ROOT_URL=https://<%= hostname %>/grafana
   - GF_SERVER_SERVE_FROM_SUB_PATH=true
   volumes:

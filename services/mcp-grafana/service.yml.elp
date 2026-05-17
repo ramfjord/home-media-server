@@ -29,11 +29,12 @@ docker_config:
   # Internal docker DNS — grafana's container is named `grafana` and
   # listens on its declared port (3000).
   - GRAFANA_URL=http://grafana:<%= (for-service :grafana port) %>
-  # Basic auth against the admin user. Service-account tokens are the
-  # upstream-recommended path; deferred until there's a reason to
-  # rotate. Internal-network + tailnet-only stack makes admin/admin
-  # tolerable here.
-  - GRAFANA_USERNAME=<%= (for-service :grafana admin_username) %>
-  - GRAFANA_PASSWORD=<%= (for-service :grafana admin_password) %>
+  # No credentials: Grafana grants anonymous Viewer (services/grafana),
+  # and mcp-grafana is --disable-write, so unauthenticated reads over
+  # internal DNS are exactly the access it needs — least privilege,
+  # and it drops the Grafana admin secret from config.local.yml. (The
+  # gate is on the human/browser path at Caddy→Authelia; this
+  # daemon→grafana:3000 hop is internal, un-authed by design like
+  # every other service-to-service hop in the stack.)
   restart: unless-stopped
 order: 135  # after grafana (130)

@@ -31,7 +31,7 @@ For predicates reused across several call sites in one template, use `macrolet` 
 
 (`service` is bound uniformly across all scope macros — historically it was reachable only in fanout templates, making `(getf service …)` a silent nil inside `loop-services`; `with-service-scope` now binds it everywhere, so that trap is gone.)
 
-**Required fields (including secrets) — do the opposite, on purpose.** When a field is *required* for the service to function (typically a secret living in git-ignored `config.local.yml` under `service_overrides.<name>`: grafana's `admin_password`, smtp's `relay_password`, authelia's `jwt_secret`/`session_secret`/`storage_encryption_key`/`user_*`), read it via bare-symbol / `for-service` access — **not** `getf`. `make all` then fails the render fast whenever `config.local.yml` is incomplete: field-scope access (both the bare-symbol `<%= jwt_secret %>` and the `for-service` form `<%= (for-service :authelia jwt_secret) %>` — `for-service` binds fields as bare symbols too) signals `unbound variable <KEY>` with the offending template's `file:line`. (The `Unknown field :<key>` typo-guard is a *different*, narrower path — the explicit `(field :key svc)` accessor — not what these idioms use; in practice no required secret reaches the missing case because it's always supplied.) Either way it's a hard render failure naming the missing key, giving one uniform "your `config.local.yml` is incomplete" experience across every service at the same stage. Softening a required field with `getf` is a bug, not a courtesy: it renders structurally-broken config (empty secret) that passes `make all` and only fails much later at the service's own startup/validate step — worst on a security component. Rule of thumb: *required* fields (every instance must supply it) use bare-symbol / `for-service` so absence fails the render — never `getf` (with `service` now bound everywhere, `(getf service :missing)` reliably returns nil, which is exactly the silent-broken outcome you don't want for a required secret). *Optional* fields: either form, both work in all scopes (see above). See `services/authelia/` for the canonical required-secret set.
+**Required fields (including secrets) — do the opposite, on purpose.** When a field is *required* for the service to function (typically a secret living in git-ignored `config.local.yml` under `service_overrides.<name>`: smtp's `relay_password`, authelia's `jwt_secret`/`session_secret`/`storage_encryption_key`/`user_*`), read it via bare-symbol / `for-service` access — **not** `getf`. `make all` then fails the render fast whenever `config.local.yml` is incomplete: field-scope access (both the bare-symbol `<%= jwt_secret %>` and the `for-service` form `<%= (for-service :authelia jwt_secret) %>` — `for-service` binds fields as bare symbols too) signals `unbound variable <KEY>` with the offending template's `file:line`. (The `Unknown field :<key>` typo-guard is a *different*, narrower path — the explicit `(field :key svc)` accessor — not what these idioms use; in practice no required secret reaches the missing case because it's always supplied.) Either way it's a hard render failure naming the missing key, giving one uniform "your `config.local.yml` is incomplete" experience across every service at the same stage. Softening a required field with `getf` is a bug, not a courtesy: it renders structurally-broken config (empty secret) that passes `make all` and only fails much later at the service's own startup/validate step — worst on a security component. Rule of thumb: *required* fields (every instance must supply it) use bare-symbol / `for-service` so absence fails the render — never `getf` (with `service` now bound everywhere, `(getf service :missing)` reliably returns nil, which is exactly the silent-broken outcome you don't want for a required secret). *Optional* fields: either form, both work in all scopes (see above). See `services/authelia/` for the canonical required-secret set.
 
 ## Controller-only rendered files: `sync_exclude:`
 
@@ -83,9 +83,12 @@ gateway_auth:                 # gated with overrides
 gated set). The field names *intent only* — which gateway enforces it
 lives entirely in that gateway's config template, never in `lisp/src`,
 so the engine stays stack-agnostic. Leave a service un-declared to
-keep it on the direct path; the monitoring stack
-(Prometheus/Grafana/Alertmanager) is intentionally left un-gated so it
-stays reachable to debug the gateway itself.
+keep it on the direct path; **Prometheus and Alertmanager** are
+intentionally left un-gated so they stay reachable to debug the
+gateway itself. Grafana *is* gated (it's a UI, not a break-glass
+surface; past Authelia it serves anonymous Viewer with no Grafana
+account — see `services/grafana/README.md`), so the break-glass for a
+gateway incident is Prometheus + `ssh journalctl`, not Grafana.
 
 ## Dev REPL
 
@@ -105,7 +108,7 @@ To validate the dev container end-to-end from a clean slate: `make distclean && 
 
 ## Debugging a running stack
 
-No service is host-published except caddy (443). Monitoring services are not on `$TARGET:<port>`; they are reached through caddy over the tailnet at `https://<tailnet-fqdn>/<route-prefix>/...`, un-gated by design (see services/prometheus/README.md), from a tailnet-connected machine. The SNI/Host must be the tailnet FQDN — that is caddy's only site block and cert. Each service keeps its route-prefix in the path, e.g.:
+No service is host-published except caddy (443). Monitoring services are not on `$TARGET:<port>`; they are reached through caddy over the tailnet at `https://<tailnet-fqdn>/<route-prefix>/...` from a tailnet-connected machine. Prometheus and Alertmanager are un-gated by design (the gateway-debug break-glass — see services/prometheus/README.md); Grafana is Authelia-gated (services/grafana/README.md), so for break-glass reach for Prometheus, not Grafana. The SNI/Host must be the tailnet FQDN — that is caddy's only site block and cert. Each service keeps its route-prefix in the path, e.g.:
 
 ```sh
 curl -s "https://<tailnet-fqdn>/prometheus/api/v1/query?query=up"
