@@ -12,6 +12,7 @@ docker_config:
     net.ipv4.conf.all.src_valid_mark: 1
   volumes:
   - "<%= install_base %>/config/wireguard:/config"
+  - "<%= install_base %>/config/wireguard/custom-cont-init.d:/custom-cont-init.d:ro"
   - "/lib/modules:/lib/modules:ro"
   healthcheck:
     test: ping -c 1 1.1.1.1 || exit 1
