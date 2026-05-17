@@ -15,10 +15,23 @@ docker_config:
   - "<%= install_base %>/config/wireguard/custom-cont-init.d:/custom-cont-init.d:ro"
   - "/lib/modules:/lib/modules:ro"
   healthcheck:
-    test: ping -c 1 1.1.1.1 || exit 1
+    # Verify the tunnel is actually negotiated (fresh handshake), not
+    # mere reachability. `ping 1.1.1.1` false-greened (eth0 path before
+    # the killswitch) AND false-redded (provider drops ICMP through the
+    # tunnel). With the killswitch, a fresh wg0 handshake IS the egress
+    # guarantee: eth0 egress is dropped, so tunnel-up <-> exiting via
+    # the VPN. ($$ escapes compose interpolation -> $ at deploy.)
+    test:
+    - CMD-SHELL
+    - >-
+      t=$$(wg show wg0 latest-handshakes 2>/dev/null | awk '{print $$NF}' | sort -n | tail -1);
+      [ -n "$$t" ] && [ "$$t" -gt 0 ] && [ $$(( $$(date +%s) - $$t )) -lt 180 ]
     interval: 30s
     timeout: 10s
     retries: 3
-    start_period: 10s
+    # Tunnel needs a few seconds to complete its first handshake; gate
+    # qbit (ExecStartPre waits for healthy) on the real tunnel, not a
+    # premature green.
+    start_period: 30s
   restart: unless-stopped
 order: 0

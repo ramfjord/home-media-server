@@ -29,6 +29,17 @@ Accepted seam: UDP egress on the endpoint port is open to any IP
 (required for endpoint rotation). It carries only encrypted WireGuard
 handshakes — no torrent identity.
 
+## Healthcheck
+
+Asserts a **fresh wg0 handshake** (< 180s), not `ping 1.1.1.1` —
+reachability false-greened (eth0 path pre-killswitch) and false-redded
+(provider drops ICMP through the tunnel). With the killswitch, a fresh
+handshake *is* the egress guarantee: eth0 egress is dropped, so
+tunnel-up ⟺ exiting via the VPN. VPN consumers gate on this via their
+`ExecStartPre` (`use_vpn` in `__service__.service.elp`), so a dead
+tunnel holds qBittorrent down rather than launching it onto a leaky
+path.
+
 ## More
 
 - Project: <https://www.wireguard.com/>
