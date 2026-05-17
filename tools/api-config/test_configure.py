@@ -107,6 +107,28 @@ async def test_transport_exhaustion_logs_and_raises(fast_backoffs, caplog_lines)
     assert "gave up after 3 attempts" in errs[0]
 
 
+def test_journal_priority_prefix():
+    """Production formatter prefixes <N> by level (systemd sets the
+    journal PRIORITY → Alloy level → ServiceLogErrors). The human/grep
+    formatter must NOT prefix it (tests + non-systemd runs pin the bare
+    [upstream] form)."""
+    fmt = "[%(upstream)s] %(levelname)s %(message)s"
+
+    def rec(levelno):
+        r = logging.LogRecord("x", levelno, "", 0, "boom", None, None)
+        r.upstream = "radarr"
+        return r
+
+    assert configure._JournalPriorityFormatter(fmt).format(rec(logging.ERROR)) \
+        == "<3>[radarr] ERROR boom"
+    assert configure._SingleLineFormatter(fmt).format(rec(logging.ERROR)) \
+        == "[radarr] ERROR boom"
+    for levelno, sev in [(logging.WARNING, 4), (logging.INFO, 6),
+                         (logging.CRITICAL, 2)]:
+        assert configure._JournalPriorityFormatter(fmt).format(
+            rec(levelno)).startswith(f"<{sev}>")
+
+
 async def test_single_line_formatter_escapes_newlines(caplog_lines):
     configure.flow_log("gamma").error("multi\nline\rbody")
     assert len(caplog_lines) == 1

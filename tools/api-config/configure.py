@@ -98,6 +98,22 @@ class FlowResult(NamedTuple):
 # ---------------------------------------------------------------------------
 
 
+# syslog severities systemd's journal-stream parser reads from a leading
+# `<N>` (SyslogLevelPrefix=yes, the default) and strips before storing —
+# so the entry's journald PRIORITY is set, Alloy's relabel derives
+# `level` from it, and ServiceLogErrors sees api-config errors. Only
+# sound because the unit runs `compose run` (not `up`, which prepends
+# `api-config | ` and would push the `<N>` off line-start where systemd
+# won't parse it).
+_SYSLOG_SEVERITY = {
+    logging.CRITICAL: 2,  # LOG_CRIT
+    logging.ERROR:    3,  # LOG_ERR
+    logging.WARNING:  4,  # LOG_WARNING
+    logging.INFO:     6,  # LOG_INFO
+    logging.DEBUG:    7,  # LOG_DEBUG
+}
+
+
 class _SingleLineFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         if not hasattr(record, "upstream"):
@@ -106,9 +122,21 @@ class _SingleLineFormatter(logging.Formatter):
         return s.replace("\r", "\\r").replace("\n", "\\n")
 
 
+class _JournalPriorityFormatter(_SingleLineFormatter):
+    """Production formatter: `_SingleLineFormatter` + a leading `<N>` so
+    systemd tags the journal entry's PRIORITY. Kept separate from
+    `_SingleLineFormatter` (which the tests pin as the human/grep form)
+    so the `<N>` never leaks into assertions or non-systemd runs."""
+    def format(self, record: logging.LogRecord) -> str:
+        sev = _SYSLOG_SEVERITY.get(record.levelno, 6)
+        return f"<{sev}>{super().format(record)}"
+
+
 def setup_logging() -> None:
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(_SingleLineFormatter("[%(upstream)s] %(levelname)s %(message)s"))
+    handler.setFormatter(
+        _JournalPriorityFormatter("[%(upstream)s] %(levelname)s %(message)s")
+    )
     log.addHandler(handler)
     log.setLevel(logging.INFO)
     log.propagate = False  # our handler is terminal; don't double-emit via root
