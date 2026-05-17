@@ -122,9 +122,8 @@ make distclean         # clean + remove bin/ and lisp/.qlot/ (full from-scratch 
 make check             # Validate prometheus, alertmanager, docker-compose syntax
 make test              # Run unit tests + golden renderer tests
 make install           # check + render + rsync to $TARGET; path units pick up changes
-make install-systemd   # rsync unit files + daemon-reload (does NOT enable/start)
-make systemd-enable    # enable mediaserver-network, mediaserver.target, and all path units
-make systemd-{start,stop,restart,status,disable}
+make systemctl-enable  # enable mediaserver-network, mediaserver.target, all path units, cert timer
+make systemctl-{start,stop,restart,status,disable}
 make restart-<service> # force-restart one service (no install)
 ```
 
