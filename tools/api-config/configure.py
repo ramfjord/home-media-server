@@ -276,7 +276,8 @@ def step_extract(resp: httpx.Response, extract: dict | None, ctx: dict) -> bool:
     return True
 
 
-def run_step(client: httpx.Client, name: str, step: dict, ctx: dict) -> bool:
+def run_step(client: httpx.Client, name: str, step: dict, ctx: dict,
+             upstream: dict) -> bool:
     """Execute one step; return True to continue the sequence, False to
     stop. Honors success_when / extract / on_success / on_failure /
     retry_budget_seconds. Raises ConfigureError if the step fails and
@@ -289,6 +290,10 @@ def run_step(client: httpx.Client, name: str, step: dict, ctx: dict) -> bool:
     while True:
         req = substitute(step["request"], ctx)
         method, url, kwargs = step_request_kwargs(req)
+        # Upstream-level auth applies to steps too (mirrors request());
+        # a step's own headers win on collision.
+        kwargs["headers"] = {**auth_headers(upstream),
+                             **kwargs.get("headers", {})}
         try:
             resp = client.request(method, url, **kwargs)
         except httpx.TransportError as e:
@@ -337,7 +342,7 @@ def apply_steps(
     for i, step in enumerate(steps, start=1):
         print(f"[api-configure] {name} step {i}/{len(steps)}: "
               f"{step.get('name') or step['request'].get('url', '?')}")
-        cont = run_step(client, name, step, ctx)
+        cont = run_step(client, name, step, ctx, upstream)
         if not cont:
             return
 
