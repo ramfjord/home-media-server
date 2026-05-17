@@ -29,6 +29,28 @@ hardening:** narrow the whitelist from `0.0.0.0/0` to the docker
 bridge subnet (defense-in-depth; not required for correctness — the
 browser gate is Authelia, the in-stack callers are on that subnet).
 
+## VPN containment
+
+qBittorrent shares wireguard's netns, which contains both `wg0` (the
+tunnel) and `eth0` (the docker bridge → host → home IP). Containment is
+layered:
+
+1. **libtorrent pinned to `wg0`** (`Session\Interface` /
+   `Session\InterfaceName` in `qBittorrent.conf.elp`). Fail-closed: if
+   `wg0` is absent, transfers stall rather than falling back to `eth0`.
+   Does **not** by itself cover tracker/DHT/DNS — libtorrent's
+   interface bind has historically excluded those.
+2. **netns killswitch** (wireguard) — the categorical backstop:
+   anything leaving on a non-`wg0` interface (except the docker subnet,
+   which carries the WebUI / api-config / arr paths) is dropped,
+   independent of qBittorrent's config or wg-quick lifecycle timing.
+3. **healthcheck verifies VPN egress**, not mere reachability, so qbit
+   is never gated open onto a leaky path.
+
+`qBittorrent.conf` is shipped (not `sync_exclude`d), so the `wg0` pin
+applies on deploy + `make restart-qbittorrent`; qbit preserves the
+keys on its own rewrites.
+
 ## More
 
 - Project: <https://www.qbittorrent.org/>

@@ -9,6 +9,18 @@ FileLogger\Path=/config/qBittorrent/logs
 
 [BitTorrent]
 Session\AddTorrentStopped=false
+# Pin libtorrent to the WireGuard tunnel interface. qBittorrent shares
+# wireguard's netns, which also contains eth0 (the docker bridge ->
+# host -> home IP). Without this, libtorrent binds all interfaces and
+# uses whatever the kernel routes it to, so any window where wg-quick's
+# policy-routing rules are absent (tunnel/container restart, startup
+# race) sends already-active torrents out the home IP. Bound to wg0,
+# libtorrent fails closed: if wg0 is gone it stalls instead of falling
+# back to eth0. (Not a complete fix on its own -- libtorrent's bind has
+# historically not covered tracker/DHT/DNS; the netns killswitch is the
+# categorical backstop. See services/qbittorrent/README.md.)
+Session\Interface=wg0
+Session\InterfaceName=wg0
 Session\DefaultSavePath=/data/torrents
 Session\ExcludedFileNames=
 Session\GlobalDLSpeedLimit=0
