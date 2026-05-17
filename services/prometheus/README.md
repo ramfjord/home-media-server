@@ -54,9 +54,10 @@ Both built by [scrape_configs.yaml.elp](scrape_configs/scrape_configs.yaml.elp):
 ### Routing-regression coverage (formerly a blind spot)
 
 `public_probe_<svc>` uses the `http_basic` blackbox module
-([blackbox.yml.elp](blackbox.yml.elp)), which has **no body
-assertion and no `valid_status_codes` override** — `probe_success`
-means only "response was 2xx."
+([blackbox.yml.elp](blackbox.yml.elp)) for un-gated services, which
+has **no body assertion and no `valid_status_codes` override** —
+`probe_success` means only "response was 2xx." (Gated services use
+`http_gated` instead — see "Gated services" below.)
 
 This *used* to be a silent blind spot: Homer was the catch-all at
 `/` and, being an SPA, answered **HTTP 200 for any path**. A caddy
@@ -84,6 +85,27 @@ low-value. Note there is intentionally **no golden test covering the
 production `Caddyfile.elp`** (the golden suite exercises the render
 engine against synthetic fixtures only); the blackbox 404 path is
 now the regression detector for caddy routing.
+
+### Gated services: `http_gated`, where 401 is healthy
+
+A `gateway_protected` service answers an *unauthenticated* public
+probe with the auth gateway's challenge, not the service's 2xx.
+Authelia returns **401** to a non-browser client (the probe sends no
+`Accept: text/html`, so it gets 401, not the browser 302). Under
+plain `http_basic` that 401 reads as failure → `BlackboxProbeFailed`
+critical → pages, even though the gate working *is* the healthy
+state. (This bit prod: gating radarr/sonarr/prowlarr without making
+the probe gating-aware paged on every probe.)
+
+So `public_probe_<svc>` selects its module on the derived
+`gateway_protected` flag (no service names in the template):
+gated → **`http_gated`** (`valid_status_codes:[401]`,
+`no_follow_redirects`), un-gated → `http_basic` (2xx). For a gated
+service this is *stronger* than the 2xx check: 401 = gate enforced
+(healthy); a 200 = gate failed **open** (probe_success=0, pages —
+exactly what you want); 5xx/connection-refused = caddy/upstream down
+(pages). `internal_probe_<svc>` stays `http_basic` — it bypasses
+caddy, so the gate never sees it and it must still be 2xx.
 
 ## More
 

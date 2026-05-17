@@ -100,7 +100,12 @@ scrape_configs:
   - job_name: 'public_probe_<%= name %>'
     metrics_path: <%= (for-service :blackbox-exporter internal_path) %>/probe
     params:
-      module: [http_basic]
+      # gateway_protected services answer an unauthenticated probe with
+      # the gateway's 401 challenge — that's healthy (gate enforced),
+      # so probe with http_gated (valid_status_codes:[401]). Un-gated
+      # services still expect 2xx via http_basic. Keys off the derived
+      # gateway_protected flag — no service names here.
+      module: [<%= (if gateway_protected "http_gated" "http_basic") %>]
     static_configs:
       - targets:
         - <%= public_url %>

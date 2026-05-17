@@ -10,6 +10,21 @@ modules:
     http:
       method: HEAD
       preferred_ip_protocol: "ip4"
+  # Public-probe module for gateway_protected services. An
+  # unauthenticated request through caddy must be challenged by the
+  # auth gateway: Authelia returns 401 to non-browser clients (the
+  # probe sends no `Accept: text/html`, so no 302 redirect). 401 is
+  # therefore the *healthy* state — it proves the gate is enforced.
+  # no_follow_redirects so a misroute that 302s to a 200 page can't
+  # mask a gate that has failed open; a 200 here (gate bypassed) or a
+  # 5xx (caddy/upstream down) is correctly !valid → probe_success=0.
+  http_gated:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: "ip4"
+      no_follow_redirects: true
+      valid_status_codes: [401]
   icmp:
     prober: icmp
     timeout: 5s
