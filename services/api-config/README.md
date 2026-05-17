@@ -32,6 +32,38 @@ treats `base_url` as an opaque HTTP base (no TLS pinning), so plain
 http to a docker-DNS name needs no cert/FQDN — the host-net rationale
 left with it.
 
+## Concurrency model
+
+Each upstream is an independent flow: a coroutine with its own
+`httpx.AsyncClient` (isolated cookie jar) that runs healthcheck →
+steps → upserts → posts strictly in sequence. All flows run
+concurrently, so total runtime is ~max(flow), not sum(flow) — one
+unreachable upstream burns its retry budget alongside the others, not
+serialized ahead of them. This keeps a few slow/down upstreams from
+stacking past the unit's `TimeoutStartSec` (the prior serial design's
+failure mode: the oneshot getting killed mid-reconcile, then
+`ExecStartPost` no-op'ing on the failed unit until `reset-failed`).
+
+Logs are one line per event, prefixed `[<upstream>]`; reconstruct a
+single flow with `grep '\[radarr\]'`. A request that exhausts its
+retry budget logs an explicit `ERROR gave up after N attempts / Ns`.
+
+## Failure visibility
+
+Logs reach Grafana regardless of outcome: container stdout → journald
+under `api-config.service` → Alloy relabels to `service=api-config` →
+Loki, greppable in the per-service logs panel (filter the single-line
+`[<upstream>] ERROR …` records).
+
+Alerting depends on the unit *failing*. `ServiceLogErrors` can't see
+this: its `level` comes from journald priority, and a container
+streamed through `docker compose` lands at priority *info* whatever the
+text says. So the signal is the exit code — the unit runs
+`docker compose run --rm` (not `up`, which swallows the container's
+exit code), so any `configure.py` non-zero exit (≥1 reconcile failure)
+puts the unit in `failed` → `SystemdUnitFailed` (`for: 5m`) → Discord.
+Granularity is per-run ("this reconcile failed"), not per-line.
+
 ## More
 
 - Upstream: <https://github.com/ramfjord/api-config>

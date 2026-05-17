@@ -35,7 +35,7 @@ FANOUT_OUTPUTS := $(patsubst targets/debian/%.elp,config/%,$(call fanout_paths,$
 ALL_OUTPUTS := $(SERVICE_OUTPUTS) $(SINGLETON_OUTPUTS) $(FANOUT_OUTPUTS)
 DIRS := $(sort $(dir $(ALL_OUTPUTS)))
 
-.PHONY: clean distclean check test sync install preview all cert $(addprefix systemctl-,start stop restart enable disable status)
+.PHONY: clean distclean check test test-api-config sync install preview all cert $(addprefix systemctl-,start stop restart enable disable status)
 
 # Lisp binaries. One CLI entry point per file in lisp/cli/; each
 # produces bin/<name>. All Lisp sources, the .asd, and qlot's state
@@ -152,8 +152,16 @@ $(API_CONFIG_STAMP): tools/api-config/Dockerfile tools/api-config/configure.py
 api-config-publish: $(API_CONFIG_STAMP)
 	@docker push $(API_CONFIG_TAG)
 
+# api-config's Python unit suite. Skips cleanly (exit 0) when pytest is
+# absent so the Lisp `make test` and the dev container stay green —
+# install with `pip install -r tools/api-config/requirements-dev.txt`.
+test-api-config:
+	@python3 -c 'import pytest, pytest_asyncio' 2>/dev/null \
+	  && (cd tools/api-config && python3 -m pytest -q) \
+	  || echo "api-config tests skipped (pip install -r tools/api-config/requirements-dev.txt)"
+
 # Run tests against "golden" config - validate changes to render code mostly
-test: $(patsubst lisp/cli/%.lisp,bin/%,$(wildcard lisp/cli/*.lisp))
+test: test-api-config $(patsubst lisp/cli/%.lisp,bin/%,$(wildcard lisp/cli/*.lisp))
 	@cd test && $(MAKE) all > /dev/null
 	@git diff --exit-code test/config/ > /dev/null && echo "goldens clean" || \
 	  (echo "GOLDEN DIFF in test/config/. Inspect via 'git diff test/config/'."; exit 1)

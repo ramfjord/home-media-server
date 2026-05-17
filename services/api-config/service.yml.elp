@@ -22,11 +22,25 @@ docker_config:
   restart: "no"
 # Oneshot: exits when reconcile finishes. Drop-in overrides the default
 # `Type=simple` + `Restart=on-failure` baked into __service__.service.elp.
-# TimeoutStartSec covers configure.py's 7.5min retry budget plus slack
-# for slow first-boot upstream readiness.
+# TimeoutStartSec is slack over configure.py's retry budget; flows run
+# concurrently so the wall bound is ~max(flow) (~7.5min) not sum(flow).
+#
+# ExecStart is reset (empty line clears the inherited list) to `compose
+# run --rm` instead of the base template's `compose up`: `up` does not
+# propagate the container's exit code, so a non-zero configure.py exit
+# would leave the oneshot looking successful and the failure would only
+# live in the log body. `run --rm` returns the process exit code, so a
+# failed reconcile makes the unit enter `failed` → SystemdUnitFailed →
+# Discord (services/api-config/README.md). The compose path is built
+# from the global `install_base` + literal service name (mirroring the
+# volume lines above): systemd_override is rendered in the manifest's
+# top-level scope where only globals bind — per-service/derived fields
+# like compose_file are NOT available here.
 systemd_override: |
   [Service]
   Type=oneshot
   Restart=no
   TimeoutStartSec=900
+  ExecStart=
+  ExecStart=/usr/bin/docker compose -f <%= install_base %>/config/api-config/docker-compose.yml run --rm api-config
 order: 200

@@ -1,0 +1,5 @@
+# Test-only deps. Install with: pip install -r requirements-dev.txt
+# (httpx — a runtime dep, see Dockerfile — must also be importable;
+# the tests drive configure.py via httpx.MockTransport.)
+pytest>=8,<9
+pytest-asyncio>=0.23,<0.25

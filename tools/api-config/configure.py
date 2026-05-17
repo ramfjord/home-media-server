@@ -44,16 +44,28 @@ step field undergo $var substitution: `$base_url` is always set to the
 upstream's base_url; `$<name>` references variables captured by an
 earlier step's `extract.store_as`.
 
-Each request retries with exponential backoff on transient errors. A failed
-healthcheck for an upstream skips its resources with a warning.
+Concurrency & logging: each upstream is an independent *flow* — a
+coroutine that runs its healthcheck + steps + upserts + posts strictly
+in sequence. All flows run concurrently (one asyncio task each, its own
+httpx.AsyncClient so cookie jars never cross), so total runtime is
+~max(flow) not sum(flow): one unreachable upstream burns its retry
+budget alongside the others, not serialized ahead of them. Every log
+line is single-line and prefixed `[<upstream>]` so concurrent flows
+stay attributable under `grep`. Each request retries with exponential
+backoff on transient errors; exhausting the retries logs an explicit
+ERROR naming attempts + elapsed. A failed healthcheck skips that
+upstream's resources with a warning.
 """
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import re
 import sys
 import time
 from pathlib import Path
+from typing import NamedTuple
 
 import httpx
 import yaml
@@ -62,12 +74,53 @@ import yaml
 # container recreates that take a while to come up (qbit in particular).
 # The 10s first-retry covers the "deploy → restart → not yet listening"
 # window where a tighter budget gives up before the upstream is back.
+# This is now a *per-flow* budget paid concurrently, not serially.
 RETRY_BACKOFFS = [10, 30, 60, 120, 240]
 TRANSIENT_STATUS = {502, 503, 504}
+
+log = logging.getLogger("api-configure")
 
 
 class ConfigureError(Exception):
     pass
+
+
+class FlowResult(NamedTuple):
+    failures: int
+    skipped: bool
+
+
+# ---------------------------------------------------------------------------
+# Logging: one stdout stream, every record prefixed `[<upstream>]` and
+# squashed to a single physical line so concurrently-interleaved flows
+# stay grep-attributable (the multi-line body/traceback case is the only
+# thing that would otherwise splice un-prefixed across flows).
+# ---------------------------------------------------------------------------
+
+
+class _SingleLineFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        if not hasattr(record, "upstream"):
+            record.upstream = "api-config"
+        s = super().format(record)
+        return s.replace("\r", "\\r").replace("\n", "\\n")
+
+
+def setup_logging() -> None:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(_SingleLineFormatter("[%(upstream)s] %(levelname)s %(message)s"))
+    log.addHandler(handler)
+    log.setLevel(logging.INFO)
+    log.propagate = False  # our handler is terminal; don't double-emit via root
+
+
+def flow_log(name: str) -> logging.LoggerAdapter:
+    """A logger bound to one upstream flow — every record carries `upstream`
+    so the formatter can prefix it and a reader can `grep '\\[name\\]'`."""
+    return logging.LoggerAdapter(log, {"upstream": name})
+
+
+# ---------------------------------------------------------------------------
 
 
 def auth_headers(upstream: dict) -> dict[str, str]:
@@ -94,49 +147,79 @@ def body_for(upstream: dict, body: dict) -> tuple[dict, dict]:
     raise ConfigureError(f"unsupported body_format: {fmt}")
 
 
-def request(
-    client: httpx.Client, method: str, url: str, upstream: dict, **kwargs
+async def request(
+    client: httpx.AsyncClient,
+    log: logging.LoggerAdapter,
+    method: str,
+    url: str,
+    upstream: dict,
+    **kwargs,
 ) -> httpx.Response:
     """HTTP request with explicit-schedule retry on transient failures.
 
     Sleep schedule is RETRY_BACKOFFS[attempt-1] between attempts, so a
     failure on the first try waits 10s before retrying (covers post-deploy
     restart races), and a stubborn outage gets ~7.5 min of total budget
-    before we give up."""
+    before we give up. On final give-up an ERROR is logged naming the
+    attempt count and elapsed wall time, so an exhausted retry is never
+    silent."""
     headers = {**auth_headers(upstream), **kwargs.pop("headers", {})}
-    last_exc: Exception | None = None
     n_attempts = len(RETRY_BACKOFFS) + 1
+    t0 = time.monotonic()
     for attempt in range(n_attempts):
+        is_last = attempt == n_attempts - 1
         try:
-            resp = client.request(method, url, headers=headers, **kwargs)
-            if resp.status_code in TRANSIENT_STATUS and attempt < n_attempts - 1:
-                time.sleep(RETRY_BACKOFFS[attempt])
-                continue
-            return resp
+            resp = await client.request(method, url, headers=headers, **kwargs)
         except httpx.TransportError as e:
-            last_exc = e
-            if attempt < n_attempts - 1:
-                time.sleep(RETRY_BACKOFFS[attempt])
-                continue
-            raise
-    assert last_exc
-    raise last_exc
+            if is_last:
+                elapsed = int(time.monotonic() - t0)
+                log.error(
+                    "gave up after %d attempts / %ds: %s %s: %s: %s",
+                    n_attempts, elapsed, method, url, type(e).__name__, e,
+                )
+                raise
+            backoff = RETRY_BACKOFFS[attempt]
+            log.warning(
+                "attempt %d/%d %s %s failed (%s: %s); retrying in %ds",
+                attempt + 1, n_attempts, method, url, type(e).__name__, e, backoff,
+            )
+            await asyncio.sleep(backoff)
+            continue
+        if resp.status_code in TRANSIENT_STATUS:
+            if is_last:
+                # Give-up surfaced explicitly; the caller still turns the
+                # 5xx into a resource-level failure (complementary signal).
+                elapsed = int(time.monotonic() - t0)
+                log.error(
+                    "gave up after %d attempts / %ds: %s %s → HTTP %d (transient)",
+                    n_attempts, elapsed, method, url, resp.status_code,
+                )
+                return resp
+            backoff = RETRY_BACKOFFS[attempt]
+            log.warning(
+                "attempt %d/%d %s %s → HTTP %d (transient); retrying in %ds",
+                attempt + 1, n_attempts, method, url, resp.status_code, backoff,
+            )
+            await asyncio.sleep(backoff)
+            continue
+        return resp
+    raise AssertionError("unreachable: loop always returns or raises")
 
 
-def healthcheck(client: httpx.Client, name: str, upstream: dict) -> bool:
+async def healthcheck(
+    client: httpx.AsyncClient, log: logging.LoggerAdapter, upstream: dict
+) -> bool:
     path = upstream.get("healthcheck_path")
     if not path:
         return True
     url = f"{upstream['base_url']}{path}"
     try:
-        resp = request(client, "GET", url, upstream)
+        resp = await request(client, log, "GET", url, upstream)
     except httpx.HTTPError as e:
-        print(f"[api-configure] {name}: healthcheck {url} failed: {e}",
-              file=sys.stderr)
+        log.warning("healthcheck %s failed: %s", url, e)
         return False
     if not resp.is_success:
-        print(f"[api-configure] {name}: healthcheck {url} → HTTP {resp.status_code}",
-              file=sys.stderr)
+        log.warning("healthcheck %s → HTTP %d", url, resp.status_code)
         return False
     return True
 
@@ -154,15 +237,19 @@ def with_query(url: str, params: dict | None) -> str:
     return f"{url}{sep}{qs}"
 
 
-def upsert_resource(
-    client: httpx.Client, name: str, upstream: dict, endpoint: str, resource: dict
+async def upsert_resource(
+    client: httpx.AsyncClient,
+    log: logging.LoggerAdapter,
+    upstream: dict,
+    endpoint: str,
+    resource: dict,
 ) -> None:
     """REST-list upsert: GET list, match by name, PUT-by-id or POST."""
     base = f"{upstream['base_url']}/api/{upstream['api_version']}/{endpoint}"
     rname = resource.get("name") or "<unnamed>"
     extra_q = upstream.get("extra_mutate_query")
 
-    list_resp = request(client, "GET", base, upstream)
+    list_resp = await request(client, log, "GET", base, upstream)
     list_resp.raise_for_status()
     match = find_by_name(list_resp.json(), rname)
     body_kwargs, body_headers = body_for(upstream, resource)
@@ -173,10 +260,12 @@ def upsert_resource(
     else:
         url = with_query(base, extra_q)
         method = "POST"
-    resp = request(client, method, url, upstream, headers=body_headers, **body_kwargs)
+    resp = await request(
+        client, log, method, url, upstream, headers=body_headers, **body_kwargs
+    )
     if resp.is_success:
-        print(f"  {method:4s} {endpoint:24s} name={rname}"
-              f"{' id=' + str(match['id']) if match else ''}")
+        log.info("%s %s name=%s%s", method, endpoint, rname,
+                 f" id={match['id']}" if match else "")
     else:
         try:
             err = resp.json()
@@ -185,8 +274,12 @@ def upsert_resource(
         raise ConfigureError(f"{method} {url} → HTTP {resp.status_code}: {err}")
 
 
-def post_resource(
-    client: httpx.Client, name: str, upstream: dict, endpoint: str, body: dict
+async def post_resource(
+    client: httpx.AsyncClient,
+    log: logging.LoggerAdapter,
+    upstream: dict,
+    endpoint: str,
+    body: dict,
 ) -> None:
     """Bare POST — for RPC-style endpoints (no list, no name-keyed upsert)."""
     extra_q = upstream.get("extra_mutate_query")
@@ -195,9 +288,11 @@ def post_resource(
         extra_q,
     )
     body_kwargs, body_headers = body_for(upstream, body)
-    resp = request(client, "POST", url, upstream, headers=body_headers, **body_kwargs)
+    resp = await request(
+        client, log, "POST", url, upstream, headers=body_headers, **body_kwargs
+    )
     if resp.is_success:
-        print(f"  POST {endpoint:24s}")
+        log.info("POST %s", endpoint)
     else:
         try:
             err = resp.json()
@@ -276,12 +371,18 @@ def step_extract(resp: httpx.Response, extract: dict | None, ctx: dict) -> bool:
     return True
 
 
-def run_step(client: httpx.Client, name: str, step: dict, ctx: dict,
-             upstream: dict) -> bool:
+async def run_step(
+    client: httpx.AsyncClient,
+    log: logging.LoggerAdapter,
+    step: dict,
+    ctx: dict,
+    upstream: dict,
+) -> bool:
     """Execute one step; return True to continue the sequence, False to
     stop. Honors success_when / extract / on_success / on_failure /
     retry_budget_seconds. Raises ConfigureError if the step fails and
-    on_failure is the default (raise)."""
+    on_failure is the default (raise) — and logs an ERROR naming the
+    exhausted budget before it does."""
     step_name = step.get("name") or step["request"].get("url", "?")
     budget_s = step.get("retry_budget_seconds", 0)
     deadline = time.monotonic() + budget_s if budget_s > 0 else None
@@ -291,21 +392,25 @@ def run_step(client: httpx.Client, name: str, step: dict, ctx: dict,
         req = substitute(step["request"], ctx)
         method, url, kwargs = step_request_kwargs(req)
         # Upstream-level auth applies to steps too (mirrors request());
-        # a step's own headers win on collision.
+        # a step's own headers win on collision. Dropping this silently
+        # breaks trusted-header upstreams (e.g. open-webui's Remote-Email
+        # signin → 401 → retry-budget churn).
         kwargs["headers"] = {**auth_headers(upstream),
                              **kwargs.get("headers", {})}
         try:
-            resp = client.request(method, url, **kwargs)
+            resp = await client.request(method, url, **kwargs)
         except httpx.TransportError as e:
             last_summary = f"transport error: {e}"
             if deadline is None or time.monotonic() >= deadline:
                 break
-            time.sleep(poll_s)
+            log.warning("[%s] %s; retrying in %ds (within budget)",
+                        step_name, last_summary, poll_s)
+            await asyncio.sleep(poll_s)
             continue
         body_ok = step_response_ok(resp, step.get("success_when"))
         extract_ok = body_ok and step_extract(resp, step.get("extract"), ctx)
         if body_ok and extract_ok:
-            print(f"  [{step_name}] ok (HTTP {resp.status_code})")
+            log.info("[%s] ok (HTTP %d)", step_name, resp.status_code)
             return step.get("on_success", "continue") != "stop"
         last_summary = (
             f"HTTP {resp.status_code} body={resp.text[:200]!r} "
@@ -313,17 +418,19 @@ def run_step(client: httpx.Client, name: str, step: dict, ctx: dict,
         )
         if deadline is None or time.monotonic() >= deadline:
             break
-        time.sleep(poll_s)
-    # Failure path.
+        log.warning("[%s] not ready (%s); retrying in %ds (within budget)",
+                    step_name, last_summary, poll_s)
+        await asyncio.sleep(poll_s)
+    # Failure path: retry budget (if any) is exhausted.
     if step.get("on_failure") == "continue":
-        print(f"  [{step_name}] failed (continuing): {last_summary}",
-              file=sys.stderr)
+        log.warning("[%s] failed (continuing): %s", step_name, last_summary)
         return True
+    log.error("[%s] failed after retry budget: %s", step_name, last_summary)
     raise ConfigureError(f"[{step_name}] {last_summary}")
 
 
-def apply_steps(
-    client: httpx.Client, name: str, upstream: dict, steps: list
+async def apply_steps(
+    client: httpx.AsyncClient, log: logging.LoggerAdapter, upstream: dict, steps: list
 ) -> None:
     """Execute an ordered sequence of HTTP steps. ctx starts with $base_url
     + a small set of time vars pre-bound; steps' extract.store_as populate
@@ -340,9 +447,9 @@ def apply_steps(
         "past_30d_ns": now_ns - 30 * 24 * 3600 * 10**9,
     }
     for i, step in enumerate(steps, start=1):
-        print(f"[api-configure] {name} step {i}/{len(steps)}: "
-              f"{step.get('name') or step['request'].get('url', '?')}")
-        cont = run_step(client, name, step, ctx, upstream)
+        log.info("step %d/%d: %s", i, len(steps),
+                 step.get("name") or step["request"].get("url", "?"))
+        cont = await run_step(client, log, step, ctx, upstream)
         if not cont:
             return
 
@@ -350,67 +457,93 @@ def apply_steps(
 # ---------------------------------------------------------------------------
 
 
-def apply_upstream(
-    client: httpx.Client, name: str, upstream: dict, resources: dict
+async def apply_upstream(
+    client: httpx.AsyncClient,
+    log: logging.LoggerAdapter,
+    upstream: dict,
+    resources: dict,
 ) -> int:
-    """Apply all upserts/posts/steps for one upstream. Returns count of failures."""
+    """Apply all upserts/posts/steps for one upstream, in order. Returns
+    count of failures (does not raise — the caller's TaskGroup must not be
+    cross-cancelled by one upstream's failure)."""
     failures = 0
     if resources.get("steps"):
-        print(f"[api-configure] {name} steps ({len(resources['steps'])})")
+        log.info("steps (%d)", len(resources["steps"]))
         try:
-            apply_steps(client, name, upstream, resources["steps"])
+            await apply_steps(client, log, upstream, resources["steps"])
         except (httpx.HTTPError, ConfigureError) as e:
-            print(f"  FAILED: {e}", file=sys.stderr)
+            log.error("steps FAILED: %s", e)
             failures += 1
     for endpoint, items in (resources.get("upserts") or {}).items():
         if not isinstance(items, list):
             items = [items]
-        print(f"[api-configure] {name} /{endpoint} (upsert, {len(items)} item(s))")
+        log.info("/%s (upsert, %d item(s))", endpoint, len(items))
         for r in items:
             try:
-                upsert_resource(client, name, upstream, endpoint, r)
+                await upsert_resource(client, log, upstream, endpoint, r)
             except (httpx.HTTPError, ConfigureError) as e:
-                print(f"  FAILED name={r.get('name', '<unnamed>')}: {e}",
-                      file=sys.stderr)
+                log.error("upsert /%s name=%s FAILED: %s",
+                          endpoint, r.get("name", "<unnamed>"), e)
                 failures += 1
     for endpoint, body in (resources.get("posts") or {}).items():
-        print(f"[api-configure] {name} /{endpoint} (POST)")
+        log.info("/%s (POST)", endpoint)
         try:
-            post_resource(client, name, upstream, endpoint, body)
+            await post_resource(client, log, upstream, endpoint, body)
         except (httpx.HTTPError, ConfigureError) as e:
-            print(f"  FAILED: {e}", file=sys.stderr)
+            log.error("post /%s FAILED: %s", endpoint, e)
             failures += 1
     return failures
 
 
-def main(argv: list[str]) -> int:
+async def run_flow(name: str, upstream: dict, resources: dict) -> FlowResult:
+    """One upstream's whole reconcile: its own AsyncClient (isolated cookie
+    jar), healthcheck gate, then sequential apply. Exception-firewalled so
+    nothing escapes into the TaskGroup and cross-cancels sibling flows."""
+    flog = flow_log(name)
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            if not await healthcheck(client, flog, upstream):
+                flog.warning("skipped (healthcheck failed)")
+                return FlowResult(failures=0, skipped=True)
+            failures = await apply_upstream(client, flog, upstream, resources)
+            return FlowResult(failures=failures, skipped=False)
+    except Exception as e:  # firewall: a flow must never raise out
+        flog.error("flow aborted (unexpected %s): %s", type(e).__name__, e)
+        return FlowResult(failures=1, skipped=False)
+
+
+async def main(argv: list[str]) -> int:
     if len(argv) != 3:
         print(__doc__, file=sys.stderr)
         return 2
+    setup_logging()
+    mlog = flow_log("api-config")
     upstreams = yaml.safe_load(Path(argv[1]).read_text()) or {}
     resources = yaml.safe_load(Path(argv[2]).read_text()) or {}
-    failures = 0
-    skipped = 0
-    with httpx.Client(timeout=30.0) as client:
+
+    tasks: dict[str, asyncio.Task] = {}
+    skipped_no_upstream = 0
+    async with asyncio.TaskGroup() as tg:
         for name in sorted(resources):
             if name not in upstreams:
-                print(f"[api-configure] {name}: no matching upstream entry, skipping",
-                      file=sys.stderr)
-                skipped += 1
+                flow_log(name).warning("no matching upstream entry, skipping")
+                skipped_no_upstream += 1
                 continue
-            upstream = upstreams[name]
-            if not healthcheck(client, name, upstream):
-                skipped += 1
-                continue
-            failures += apply_upstream(client, name, upstream, resources[name])
+            tasks[name] = tg.create_task(
+                run_flow(name, upstreams[name], resources[name])
+            )
+
+    results = {name: t.result() for name, t in tasks.items()}
+    failures = sum(r.failures for r in results.values())
+    skipped = skipped_no_upstream + sum(1 for r in results.values() if r.skipped)
+
     if skipped:
-        print(f"[api-configure] {skipped} upstream(s) skipped (healthcheck/missing)",
-              file=sys.stderr)
+        mlog.warning("%d upstream(s) skipped (healthcheck/missing)", skipped)
     if failures:
-        print(f"[api-configure] {failures} failure(s)", file=sys.stderr)
+        mlog.error("%d failure(s)", failures)
         return 1
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    sys.exit(asyncio.run(main(sys.argv)))

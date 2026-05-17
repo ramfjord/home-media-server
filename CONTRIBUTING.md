@@ -57,7 +57,7 @@ don't need to touch the template to add entries.
 
 ## Per-service systemd drop-ins
 
-The default `__service__.service.elp` template generates a `Type=simple` + `Restart=on-failure` unit suitable for long-running containers. To override directives without forking the template, set `systemd_override:` in `service.yml.elp` to a literal drop-in body — it's emitted to `<svc>.service.d/override.conf` and composed by systemd at load time. Field values still get ELP-evaluated, so `<%= compose_file %>` works. See `services/api-config/service.yml.elp` for the canonical use (oneshot reconcile job).
+The default `__service__.service.elp` template generates a `Type=simple` + `Restart=on-failure` unit suitable for long-running containers. To override directives without forking the template, set `systemd_override:` in `service.yml.elp` to a literal drop-in body — it's emitted to `<svc>.service.d/override.conf` and composed by systemd at load time. To replace an inherited `ExecStart` (a list-valued directive), reset it with an empty `ExecStart=` line before the new one. ELP tags in the body render in the manifest's **top-level scope**: globals like `<%= install_base %>` resolve, but per-service and derived fields (`compose_file`, `name`) do **not** bind there — build paths from a global plus the literal service name. See `services/api-config/service.yml.elp` for the canonical use (oneshot reconcile job, ExecStart→`compose run --rm` so the exit code propagates).
 
 ## Gating a service behind the auth gateway: `gateway_auth:`
 
@@ -120,7 +120,8 @@ make all               # Render all .elp templates → config/
 make clean             # Remove config/
 make distclean         # clean + remove bin/ and lisp/.qlot/ (full from-scratch state)
 make check             # Validate prometheus, alertmanager, docker-compose syntax
-make test              # Run unit tests + golden renderer tests
+make test              # api-config pytest + unit tests + golden renderer tests
+make test-api-config   # just the api-config Python suite (skips if pytest absent)
 make install           # check + render + rsync to $TARGET; path units pick up changes
 make systemctl-enable  # enable mediaserver-network, mediaserver.target, all path units, cert timer
 make systemctl-{start,stop,restart,status,disable}

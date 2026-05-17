@@ -48,3 +48,8 @@ tools/api-config/.image-built
 # live under <install_base>/certs/ on the deploy target. Hard-block
 # to keep keys out of commits.
 services/caddy/certs/
+
+# Python bytecode / pytest cache (api-config tooling)
+__pycache__/
+*.pyc
+.pytest_cache/
