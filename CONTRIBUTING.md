@@ -105,7 +105,13 @@ To validate the dev container end-to-end from a clean slate: `make distclean && 
 
 ## Debugging a running stack
 
-Prometheus runs on the deploy host (the `TARGET`) and is reachable directly over the tailnet — `curl http://$TARGET:9090/api/v1/query?query=...` from any tailnet-connected machine, no port-forwarding needed. Same goes for the other monitoring services on their documented ports. When something looks wrong, querying prometheus directly is usually faster than ssh-ing in to read logs.
+No service is host-published except caddy (443). Monitoring services are not on `$TARGET:<port>`; they are reached through caddy over the tailnet at `https://<tailnet-fqdn>/<route-prefix>/...`, un-gated by design (see services/prometheus/README.md), from a tailnet-connected machine. The SNI/Host must be the tailnet FQDN — that is caddy's only site block and cert. Each service keeps its route-prefix in the path, e.g.:
+
+```sh
+curl -s "https://<tailnet-fqdn>/prometheus/api/v1/query?query=up"
+```
+
+When something looks wrong, querying Prometheus this way is usually faster than ssh-ing in to read logs. From a non-tailnet machine (e.g. ssh'd onto the host itself), hit caddy with `curl -sk --resolve <fqdn>:443:127.0.0.1 https://<fqdn>/prometheus/...`, or curl the Prometheus container IP directly at `http://<ip>:9090/prometheus/...`.
 
 ## Make targets
 
