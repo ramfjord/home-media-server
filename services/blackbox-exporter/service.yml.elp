@@ -14,6 +14,8 @@ docker_config:
   - "--web.external-url=https://<%= hostname %>/blackbox-exporter"
   - "--web.route-prefix=/blackbox-exporter"
   volumes:
-  - "<%= install_base %>/config/prometheus/blackbox.yml:/etc/blackbox-exporter/blackbox.yml:ro"
+  # Kept in this service's own tree so its .path watcher reloads it
+  # (a watcher only sees config/<its-own-name>/).
+  - "<%= install_base %>/config/blackbox-exporter/blackbox.yml:/etc/blackbox-exporter/blackbox.yml:ro"
   restart: unless-stopped
 order: 110

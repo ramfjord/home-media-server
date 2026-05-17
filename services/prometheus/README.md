@@ -54,7 +54,8 @@ Both built by [scrape_configs.yaml.elp](scrape_configs/scrape_configs.yaml.elp):
 ### Routing-regression coverage (formerly a blind spot)
 
 `public_probe_<svc>` uses the `http_basic` blackbox module
-([blackbox.yml.elp](blackbox.yml.elp)) for un-gated services, which
+([blackbox.yml.elp](../blackbox-exporter/blackbox.yml.elp)) for
+un-gated services, which
 has **no body assertion and no `valid_status_codes` override** —
 `probe_success` means only "response was 2xx." (Gated services use
 `http_gated` instead — see "Gated services" below.)
