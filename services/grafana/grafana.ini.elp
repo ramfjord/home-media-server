@@ -1,3 +1,5 @@
-[auth.anonymous]
-enabled = true
-org_role = Admin
+# Anonymous auth (enabled / org_role / disable_login_form) is set via
+# GF_AUTH_* env in service.yml.elp — single source of truth. Do not
+# re-declare [auth.anonymous] here: env overrides ini, so a stale
+# org_role here would be a silent privilege footgun if the env is ever
+# dropped.

@@ -6,7 +6,11 @@ port: 3000
 # Grafana has no runtime config reload — it ignores SIGHUP and has no
 # admin-API equivalent. Falling through to compose-reload (systemctl
 # restart) is the only way config changes take effect.
-scrape_target: true
+# serve_from_sub_path moves /metrics under /grafana and 301-redirects
+# bare /metrics to the external URL — which is now Authelia-gated, so
+# the scrape must hit the sub-path directly to stay off the gated path.
+scrape_target:
+  metrics_path: /grafana/metrics
 # Gated: humans reach Grafana only through Caddy→Authelia (the SSO they
 # already use), no Grafana account of their own. Prometheus and
 # Alertmanager stay un-gated as the gateway-debug break-glass; Grafana
