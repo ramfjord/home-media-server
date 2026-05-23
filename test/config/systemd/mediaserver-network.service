@@ -7,7 +7,9 @@ Requires=docker.service
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/bin/sh -c '/usr/bin/docker network inspect mediaserver >/dev/null 2>&1 || /usr/bin/docker network create --driver bridge mediaserver'
-ExecStop=/usr/bin/docker network rm mediaserver
+# No ExecStop: removing the network on shutdown forces a new network ID on
+# next boot, but attached containers still reference the old ID and fail to
+# start. User-defined networks persist across reboots — leave them alone.
 
 [Install]
 WantedBy=multi-user.target
