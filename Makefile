@@ -77,7 +77,7 @@ distclean: clean
 
 # Order-only directory creation. One mkdir per dir, never repeated.
 $(DIRS):
-	mkdir -p $@
+	@mkdir -p $@
 
 # --- Render rules ---
 
