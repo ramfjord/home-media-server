@@ -81,26 +81,32 @@ $(DIRS):
 
 # --- Render rules ---
 
-all: $(ALL_OUTPUTS)
+# Static (non-.elp) files under services/ and targets/debian/ are rsynced into
+# config/ as-is. Listed as explicit prereqs of the manifest so a hand-edit to
+# a static file triggers a rebuild.
+STATIC_SOURCES := $(shell find services targets/debian -type f -not -name '*.elp' 2>/dev/null)
+
+all: config/.manifest
+
+# Manifest = files this deploy ships. Enumerated via rsync's own dry-run lister
+# so --exclude-from gives byte-identical semantics to the real `make sync` —
+# excluded files are unmanaged on both sides (not shipped, not subject to
+# manifest-diff deletion on the host).
+#
+# Empty rendered files (fanout templates that don't apply to a service — e.g.
+# <svc>-reload.service when sighup_reload is unset) stay on disk so make's
+# incremental logic sees the targets as up-to-date. They're filtered out of
+# the manifest here (--min-size=1, find -not -empty) and out of `make sync`
+# the same way, so they never ship and can't shadow host-installed unit files.
+config/.manifest config/systemd/.mediaserver.manifest &: $(ALL_OUTPUTS) $(STATIC_SOURCES)
 	@echo ""
 	@rsync -ac --exclude='*.elp' --exclude='/manifest.yaml' services/ config/
 	@rsync -ac --exclude='*.elp' --exclude='*__service__*' targets/debian/ config/
-	@# Drop empty rendered files. Fanout templates that don't apply to a
-	@# service (e.g. <svc>-reload.service when sighup_reload is unset)
-	@# render to whitespace; without this, those zero-byte files ship and
-	@# land as no-op stubs in /etc/systemd/system/. Harmless when names
-	@# are project-local, but they'd shadow upstream package units for
-	@# host-installed services.
-	@find config -type f -empty -delete
-	@# Manifest = files this deploy ships. Enumerated via rsync's own
-	@# dry-run lister so --exclude-from gives byte-identical semantics to
-	@# the real sync below — excluded files are unmanaged on both sides
-	@# (not shipped, not subject to manifest-diff deletion on the host).
-	@rsync -an --out-format='%n' --exclude-from=config/.sync-exclude \
+	@rsync -an --out-format='%n' --min-size=1 --exclude-from=config/.sync-exclude \
 	  --exclude=/.manifest --exclude=/.sync-exclude --exclude='systemd/***' \
 	  config/ /tmp/.mediaserver-manifest-probe/ \
 	  | grep -v '/$$' | grep -v '^$$' | sort > config/.manifest
-	@cd config/systemd && find . -type f -not -name .mediaserver.manifest -printf '%P\n' | sort > .mediaserver.manifest
+	@cd config/systemd && find . -type f -not -empty -not -name .mediaserver.manifest -printf '%P\n' | sort > .mediaserver.manifest
 
 # Per-service ELPs in services/. Today no per-service template references
 # its own service's fields at file-scope — bare-symbol fields in these
@@ -181,7 +187,7 @@ endif
 # file is consumed at manifest-build time above, so excluded paths are
 # unmanaged on both sides — never shipped, never manifest-diffed for deletion.
 sync: all
-	@rsync -acv --delete --rsync-path="sudo rsync" --mkpath --no-owner --no-group \
+	@rsync -acv --delete --min-size=1 --rsync-path="sudo rsync" --mkpath --no-owner --no-group \
 	  --exclude-from=config/.sync-exclude --exclude=/.sync-exclude \
 	  config/ $(TARGET):/opt/mediaserver/staging/
 	@ssh $(TARGET) "cd /opt/mediaserver/staging ; sudo make chownall"
