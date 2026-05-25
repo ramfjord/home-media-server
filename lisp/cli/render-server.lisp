@@ -44,12 +44,13 @@
     (config-cache-entry-plist entry)))
 
 (defun render-from-params (params)
-  "Render the template at SRC against the optional SERVICE, writing
-   output to DST. Opens DST directly so the mmap-source write(2) fast
-   path in elp can fire — rendered content never goes through the
-   socket."
+  "Render the template at SRC against the optional SERVICE, return
+   the rendered text as a string. elp/server forwards the return
+   value to the HTTP response body, so the client gets the rendered
+   template directly and can redirect to its target file. The full
+   render completes before any bytes leave the daemon, so HTTP status
+   accurately reflects success or failure."
   (let* ((src (cdr (assoc "src" params :test #'string=)))
-         (dst (cdr (assoc "dst" params :test #'string=)))
          (svc-name (cdr (assoc "service" params :test #'string=)))
          (manifest (or (cdr (assoc "manifest" params :test #'string=))
                        "services/manifest.yaml"))
@@ -58,13 +59,10 @@
                 (or (find svc-name (getf cfg :services)
                           :key (lambda (s) (getf s :name)) :test #'equal)
                     (error "service not found: ~A" svc-name)))))
-    (unless (and src dst)
-      (error "src and dst are required"))
-    (with-open-file (out dst :direction :output
-                             :if-exists :supersede
-                             :if-does-not-exist :create)
-      (let ((*standard-output* out)
-            (*package* (find-package :mediaserver)))
+    (unless src
+      (error "src is required"))
+    (with-output-to-string (out)
+      (let ((*package* (find-package :mediaserver)))
         (apply #'elp:render (elp:filepath-source (probe-file src)) out
                (mediaserver::service-render-context svc cfg))))))
 

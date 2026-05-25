@@ -136,16 +136,16 @@ config/.manifest config/systemd/.mediaserver.manifest &: $(ALL_OUTPUTS) $(STATIC
 # template wants its file-top fields bound, add `<%- (for-service :NAME -%>`
 # at the top and `<%- ) -%>` at the bottom; no Makefile change required.
 config/%: services/%.elp services/manifest.yaml | render-server $$(@D)/
-	@curl -fsS --data-urlencode src=$(CURDIR)/$< --data-urlencode dst=$(CURDIR)/$@ \
+	@curl -fsS --data-urlencode src=$(CURDIR)/$< \
 	    --data-urlencode manifest=$(CURDIR)/services/manifest.yaml \
-	    $(RENDER_URL)/render >/dev/null \
+	    $(RENDER_URL)/render > $@ \
 	  && printf . || (rm -f $@; echo; echo "FAIL: $<" >&2; exit 1)
 
 # Singleton ELPs under targets/debian/ (no service in path).
 config/%: targets/debian/%.elp services/manifest.yaml | render-server $$(@D)/
-	@curl -fsS --data-urlencode src=$(CURDIR)/$< --data-urlencode dst=$(CURDIR)/$@ \
+	@curl -fsS --data-urlencode src=$(CURDIR)/$< \
 	    --data-urlencode manifest=$(CURDIR)/services/manifest.yaml \
-	    $(RENDER_URL)/render >/dev/null \
+	    $(RENDER_URL)/render > $@ \
 	  && printf . || (rm -f $@; echo; echo "FAIL: $<" >&2; exit 1)
 
 # Fanout: each `__service__`-bearing template expands to one explicit rule
@@ -158,7 +158,7 @@ config/%: targets/debian/%.elp services/manifest.yaml | render-server $$(@D)/
 # lost in the dot-stream), and the recipe exits non-zero (so make halts
 # / parallel jobs report the failure).
 $(foreach elp,$(FANOUT_ELPS),$(foreach svc,$(ALL_SERVICES),$(eval \
-config/$(subst __service__,$(svc),$(patsubst targets/debian/%.elp,%,$(elp))): $(elp) services/manifest.yaml | render-server $$$$(@D)/ ; @curl -fsS --data-urlencode src=$(CURDIR)/$$< --data-urlencode dst=$(CURDIR)/$$@ --data-urlencode manifest=$(CURDIR)/services/manifest.yaml --data-urlencode service=$(svc) $(RENDER_URL)/render >/dev/null && printf . || (rm -f $$@; echo; echo "FAIL: $$<" >&2; exit 1))))
+config/$(subst __service__,$(svc),$(patsubst targets/debian/%.elp,%,$(elp))): $(elp) services/manifest.yaml | render-server $$$$(@D)/ ; @curl -fsS --data-urlencode src=$(CURDIR)/$$< --data-urlencode manifest=$(CURDIR)/services/manifest.yaml --data-urlencode service=$(svc) $(RENDER_URL)/render > $$@ && printf . || (rm -f $$@; echo; echo "FAIL: $$<" >&2; exit 1))))
 
 # --- Pre-deploy Verification ---
 
