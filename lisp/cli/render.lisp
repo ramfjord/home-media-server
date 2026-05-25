@@ -37,7 +37,7 @@
                              :key (lambda (s) (getf s :name)) :test #'equal)
                        (error "service not found: ~A" service-name))))
          (*package* (find-package :mediaserver)))
-    (apply #'elp:render (probe-file template) *standard-output*
+    (apply #'elp:render (elp:filepath-source (probe-file template)) *standard-output*
            (mediaserver::service-render-context svc cfg))))
 
 (defun command ()

@@ -40,7 +40,7 @@
   (with-output-to-string (s)
     (let ((*package* (find-package :mediaserver)))
       (apply #'elp:render
-             (probe-file elp-path)
+             (elp:filepath-source (probe-file elp-path))
              s
              (manifest-render-context-from services globals)))))
 

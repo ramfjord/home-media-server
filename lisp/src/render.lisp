@@ -13,7 +13,7 @@
    the rendered string."
   (with-output-to-string (s)
     (let ((*package* (find-package :mediaserver)))
-      (apply #'elp:render (probe-file path) s context))))
+      (apply #'elp:render (elp:filepath-source (probe-file path)) s context))))
 
 (defun find-service-by-name (key services-list)
   "Look up the service named KEY (a keyword like :radarr) in

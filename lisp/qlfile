@@ -1,4 +1,5 @@
-git elp https://github.com/ramfjord/elp.git
+local elp ../elp
+ql hunchentoot
 git swank-lsp https://github.com/ramfjord/swank-lsp.git
 git cl-scope-resolver https://github.com/ramfjord/cl-scope-resolver.git
 git jsonrpc https://github.com/ramfjord/jsonrpc.git :branch fix/byte-counted-content-length-binary

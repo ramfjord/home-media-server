@@ -16,6 +16,7 @@ cd lisp
 sbcl --non-interactive --no-sysinit --no-userinit \
   --load .qlot/setup.lisp \
   --eval "(push (truename \"$PWD/\") asdf:*central-registry*)" \
+  --eval "(push (truename \"$ROOT/elp/\") asdf:*central-registry*)" \
   --eval '(ql:quickload :mediaserver)' \
   --eval "(sb-ext:save-lisp-and-die #p\"$ROOT/bin/$NAME\"
             :toplevel #'mediaserver/$NAME:main

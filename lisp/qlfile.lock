@@ -3,9 +3,12 @@
   :initargs (:distribution "https://beta.quicklisp.org/dist/quicklisp.txt" :%version :latest)
   :version "2026-01-01"))
 ("elp" .
- (:class qlot/source/git:source-git
-  :initargs (:remote-url "https://github.com/ramfjord/elp.git")
-  :version "git-0ee46566c729673ddc57b075fb1fe64afc82210d"))
+ (:class qlot/source/local:source-local
+  :initargs (:path "../elp")))
+("hunchentoot" .
+ (:class qlot/source/ql:source-ql
+  :initargs (:%version :latest)
+  :version "ql-2024-10-12"))
 ("swank-lsp" .
  (:class qlot/source/git:source-git
   :initargs (:remote-url "https://github.com/ramfjord/swank-lsp.git")

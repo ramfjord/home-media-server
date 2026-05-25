@@ -35,7 +35,28 @@ FANOUT_OUTPUTS := $(patsubst targets/debian/%.elp,config/%,$(call fanout_paths,$
 ALL_OUTPUTS := $(SERVICE_OUTPUTS) $(SINGLETON_OUTPUTS) $(FANOUT_OUTPUTS)
 DIRS := $(sort $(dir $(ALL_OUTPUTS)))
 
-.PHONY: clean distclean check test test-api-config sync install preview all cert $(addprefix systemctl-,start stop restart enable disable status)
+.PHONY: clean distclean check test test-api-config sync install preview all cert render-server $(addprefix systemctl-,start stop restart enable disable status)
+
+# Render daemon. Long-lived bin/render-server listens on :7890 and renders
+# templates on demand — eliminating the per-template SBCL core load that
+# dominates `make all`. Liveness gate is pure shell (curl ping + binary
+# mtime vs pidfile mtime), so the happy path never spawns SBCL.
+RENDER_URL := http://127.0.0.1:7890
+
+# `curl --retry-connrefused` handles the boot wait without a sleep loop —
+# polls every 0.1s up to ~5s while the daemon comes up.
+render-server: bin/render-server
+	@if curl -fsS $(RENDER_URL)/health >/dev/null 2>&1 \
+	    && [ ! bin/render-server -nt lisp/.render-server.pid ]; then :; \
+	  else \
+	    if [ -f lisp/.render-server.pid ]; then \
+	      kill "$$(cat lisp/.render-server.pid)" 2>/dev/null || true; \
+	    fi; \
+	    (setsid bin/render-server </dev/null >/dev/null 2>&1 &); \
+	    curl -fs --retry 50 --retry-delay 0 --retry-connrefused \
+	      --retry-all-errors $(RENDER_URL)/health >/dev/null 2>&1 \
+	      || (echo "render-server failed to start" >&2; exit 1); \
+	  fi
 
 # Lisp binaries. One CLI entry point per file in lisp/cli/; each
 # produces bin/<name>. All Lisp sources, the .asd, and qlot's state
@@ -114,12 +135,18 @@ config/.manifest config/systemd/.mediaserver.manifest &: $(ALL_OUTPUTS) $(STATIC
 # per-iteration scope. So no --service kwarg is needed here. If a future
 # template wants its file-top fields bound, add `<%- (for-service :NAME -%>`
 # at the top and `<%- ) -%>` at the bottom; no Makefile change required.
-config/%: services/%.elp bin/render services/manifest.yaml | $$(@D)/
-	@bin/render $< > $@ && printf . || (rm -f $@; echo; echo "FAIL: $<" >&2; exit 1)
+config/%: services/%.elp services/manifest.yaml | render-server $$(@D)/
+	@curl -fsS --data-urlencode src=$(CURDIR)/$< --data-urlencode dst=$(CURDIR)/$@ \
+	    --data-urlencode manifest=$(CURDIR)/services/manifest.yaml \
+	    $(RENDER_URL)/render >/dev/null \
+	  && printf . || (rm -f $@; echo; echo "FAIL: $<" >&2; exit 1)
 
 # Singleton ELPs under targets/debian/ (no service in path).
-config/%: targets/debian/%.elp bin/render services/manifest.yaml | $$(@D)/
-	@bin/render $< > $@ && printf . || (rm -f $@; echo; echo "FAIL: $<" >&2; exit 1)
+config/%: targets/debian/%.elp services/manifest.yaml | render-server $$(@D)/
+	@curl -fsS --data-urlencode src=$(CURDIR)/$< --data-urlencode dst=$(CURDIR)/$@ \
+	    --data-urlencode manifest=$(CURDIR)/services/manifest.yaml \
+	    $(RENDER_URL)/render >/dev/null \
+	  && printf . || (rm -f $@; echo; echo "FAIL: $<" >&2; exit 1)
 
 # Fanout: each `__service__`-bearing template expands to one explicit rule
 # per service. Inline eval — no define needed since the rule fits on one
@@ -131,7 +158,7 @@ config/%: targets/debian/%.elp bin/render services/manifest.yaml | $$(@D)/
 # lost in the dot-stream), and the recipe exits non-zero (so make halts
 # / parallel jobs report the failure).
 $(foreach elp,$(FANOUT_ELPS),$(foreach svc,$(ALL_SERVICES),$(eval \
-config/$(subst __service__,$(svc),$(patsubst targets/debian/%.elp,%,$(elp))): $(elp) bin/render services/manifest.yaml | $$$$(@D)/ ; @bin/render --service $(svc) $$< > $$@ && printf . || (rm -f $$@; echo; echo "FAIL: $$<" >&2; exit 1))))
+config/$(subst __service__,$(svc),$(patsubst targets/debian/%.elp,%,$(elp))): $(elp) services/manifest.yaml | render-server $$$$(@D)/ ; @curl -fsS --data-urlencode src=$(CURDIR)/$$< --data-urlencode dst=$(CURDIR)/$$@ --data-urlencode manifest=$(CURDIR)/services/manifest.yaml --data-urlencode service=$(svc) $(RENDER_URL)/render >/dev/null && printf . || (rm -f $$@; echo; echo "FAIL: $$<" >&2; exit 1))))
 
 # --- Pre-deploy Verification ---
 

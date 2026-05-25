@@ -53,3 +53,4 @@ services/caddy/certs/
 __pycache__/
 *.pyc
 .pytest_cache/
+lisp/.render-server.pid
