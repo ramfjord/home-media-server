@@ -43,24 +43,18 @@
           mediaserver:*known-fields* (config-cache-entry-known-fields entry))
     (config-cache-entry-plist entry)))
 
-(defun render-from-params (params)
-  "Render the template at SRC against the optional SERVICE, return
-   the rendered text as a string. elp/server forwards the return
-   value to the HTTP response body, so the client gets the rendered
-   template directly and can redirect to its target file. The full
-   render completes before any bytes leave the daemon, so HTTP status
-   accurately reflects success or failure."
-  (let* ((src (cdr (assoc "src" params :test #'string=)))
-         (svc-name (cdr (assoc "service" params :test #'string=)))
-         (manifest (or (cdr (assoc "manifest" params :test #'string=))
-                       "services/manifest.yaml"))
+(defun render-handler ()
+  "Render the template at param SRC against the optional SERVICE,
+   return the rendered text. elp/server forwards the return value
+   as the HTTP response body."
+  (let* ((src (or (hunchentoot:post-parameter "src") (error "src is required")))
+         (svc-name (hunchentoot:post-parameter "service"))
+         (manifest (or (hunchentoot:post-parameter "manifest") "services/manifest.yaml"))
          (cfg (ensure-config manifest))
          (svc (when (and svc-name (plusp (length svc-name)))
                 (or (find svc-name (getf cfg :services)
                           :key (lambda (s) (getf s :name)) :test #'equal)
                     (error "service not found: ~A" svc-name)))))
-    (unless src
-      (error "src is required"))
     (with-output-to-string (out)
       (let ((*package* (find-package :mediaserver)))
         (apply #'elp:render (elp:filepath-source (probe-file src)) out
@@ -77,5 +71,6 @@
   ;; (under `make render-server`), the manifest may not exist yet
   ;; because `make clean` removes it. The first /render request's
   ;; make prereq chain guarantees the manifest by the time curl fires.
-  (elp.server:start-render-server :port *port* :handler #'render-from-params)
+  (setf elp.server:*render-handler* #'render-handler)
+  (elp.server:start-render-server :port *port*)
   (loop (sleep 3600)))
