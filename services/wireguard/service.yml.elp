@@ -2,7 +2,9 @@
 name: wireguard
 partof: vpn
 desc: VPN container
-user: root  # needs NET_ADMIN cap and to manage routing; image runs as root
+user: root  # container runs as root: NET_ADMIN cap needs UID 0 to use
+host_config_owner: 911  # but lscr.io's s6-init chowns /config to UID 911
+host_config_group: 911  # (abc user); matching avoids rsync IN_ATTRIB churn
 docker_config:
   image: lscr.io/linuxserver/wireguard:latest
   cap_add:
