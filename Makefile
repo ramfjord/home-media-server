@@ -214,9 +214,12 @@ endif
 # file is consumed at manifest-build time above, so excluded paths are
 # unmanaged on both sides — never shipped, never manifest-diffed for deletion.
 sync: all
-	@rsync -acv --delete --min-size=1 --rsync-path="sudo rsync" --mkpath --no-owner --no-group \
+	@# -i (itemize-changes) emits one structured line per change. Filter
+	@# to actual file sends (<f code = sending file to remote) so the
+	@# .env churn (*deleting) and dir-metadata updates (.d) stay hidden.
+	@rsync -aci --delete --min-size=1 --rsync-path="sudo rsync" --mkpath --no-owner --no-group \
 	  --exclude-from=config/.sync-exclude --exclude=/.sync-exclude \
-	  config/ $(TARGET):/opt/mediaserver/staging/
+	  config/ $(TARGET):/opt/mediaserver/staging/ | { grep -E '^<f' || true; }
 	@ssh $(TARGET) "cd /opt/mediaserver/staging ; sudo make chownall"
 
 # Stage the bundle on the target like install:, but invoke deploy.sh in preview mode
