@@ -85,12 +85,6 @@ ssh-copy-id <user>@<target>
 
 (Or scope tighter to `/usr/bin/rsync, /usr/bin/systemctl, /usr/bin/make` if you prefer.)
 
-**`script/install-host-config.sh` has been run against it** — one-time, lays down `/etc/sysctl.d/` and `/etc/docker/daemon.json`:
-
-```bash
-script/install-host-config.sh <target>
-```
-
 **Tailscale is installed and authenticated on the target.** Caddy serves HTTPS for everything at `https://<tailnet-fqdn>/<service>` and gets its cert from `tailscale cert`. Without an authenticated tailscaled, the first `make install` will fail at the cert-bootstrap step.
 
 ```bash

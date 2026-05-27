@@ -119,15 +119,17 @@ all: config/.manifest
 # incremental logic sees the targets as up-to-date. They're filtered out of
 # the manifest here (--min-size=1, find -not -empty) and out of `make sync`
 # the same way, so they never ship and can't shadow host-installed unit files.
-config/.manifest config/systemd/.mediaserver.manifest &: $(ALL_OUTPUTS) $(STATIC_SOURCES)
+config/.manifest config/systemd/.mediaserver.manifest config/etc/.manifest &: $(ALL_OUTPUTS) $(STATIC_SOURCES)
 	@echo ""
 	@rsync -ac --exclude='*.elp' --exclude='/manifest.yaml' services/ config/
 	@rsync -ac --exclude='*.elp' --exclude='*__service__*' targets/debian/ config/
 	@rsync -an --out-format='%n' --min-size=1 --exclude-from=config/.sync-exclude \
-	  --exclude=/.manifest --exclude=/.sync-exclude --exclude='systemd/***' \
+	  --exclude=/.manifest --exclude=/.sync-exclude \
+	  --exclude='systemd/***' --exclude='etc/***' \
 	  config/ /tmp/.mediaserver-manifest-probe/ \
 	  | grep -v '/$$' | grep -v '^$$' | sort > config/.manifest
 	@cd config/systemd && find . -type f -not -empty -not -name .mediaserver.manifest -printf '%P\n' | sort > .mediaserver.manifest
+	@mkdir -p config/etc && cd config/etc && find . -type f -not -empty -not -name .manifest -printf '%P\n' | sort > .manifest
 
 # Per-service ELPs in services/. Today no per-service template references
 # its own service's fields at file-scope — bare-symbol fields in these

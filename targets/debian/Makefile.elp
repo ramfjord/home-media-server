@@ -24,7 +24,7 @@ chownall:
 # First deploy ever — baseline doesn't exist. Materialize an empty file so
 # the diff below sees nothing-to-remove. The next rsync overwrites it with
 # the real manifest, so this rule fires only once per host.
-$(INSTALL_BASE)/config/.manifest /etc/systemd/system/.mediaserver.manifest:
+$(INSTALL_BASE)/config/.manifest /etc/systemd/system/.mediaserver.manifest /etc/.mediaserver.manifest:
 	@mkdir -p $(@D) && : > $@
 
 # <name>.manifest.removed = files present in the previous deploy's manifest
@@ -39,8 +39,9 @@ $(INSTALL_BASE)/config/.manifest /etc/systemd/system/.mediaserver.manifest:
 # (-F fixed-string) a line in (-f) `new`.
 config.manifest.removed:  .manifest                      $(INSTALL_BASE)/config/.manifest
 systemd.manifest.removed: systemd/.mediaserver.manifest  /etc/systemd/system/.mediaserver.manifest
+etc.manifest.removed:     etc/.manifest                  /etc/.mediaserver.manifest
 
-config.manifest.removed systemd.manifest.removed:
+config.manifest.removed systemd.manifest.removed etc.manifest.removed:
 	@grep -Fxv -f $< $(word 2,$^) | sed 's|^|$(dir $(word 2,$^))|' > $@
 
 # --inplace on the config-side rsync is load-bearing for path-unit dispatch.
@@ -54,19 +55,42 @@ config.manifest.removed systemd.manifest.removed:
 #
 # The systemd-side rsync stays default (atomic rename) — `daemon-reload` at
 # the end picks up unit-file changes regardless of inotify semantics.
-preview: chownall config.manifest.removed systemd.manifest.removed
-	@rsync -ac --no-times --inplace --dry-run --itemize-changes --exclude=systemd --exclude='*.manifest.removed' "$(STAGING)/" "$(INSTALL_BASE)/config/"
+preview: chownall config.manifest.removed systemd.manifest.removed etc.manifest.removed
+	@rsync -ac --no-times --inplace --dry-run --itemize-changes --exclude=systemd --exclude=etc --exclude='*.manifest.removed' "$(STAGING)/" "$(INSTALL_BASE)/config/"
 	@rsync -ac --no-times --dry-run --itemize-changes "$(STAGING)/systemd/" /etc/systemd/system/
+	@for f in $(ETC_FILES); do cmp -s "$(STAGING)$$f" "$$f" 2>/dev/null || echo "$$f differs"; done
 	@echo "=== files that would be removed from $(INSTALL_BASE)/config/ ==="
 	@cat config.manifest.removed
 	@echo "=== unit files that would be removed from /etc/systemd/system/ ==="
 	@cat systemd.manifest.removed
+	@echo "=== /etc/ files that would be removed ==="
+	@cat etc.manifest.removed
 
-deploy-files: chownall config.manifest.removed systemd.manifest.removed
-	@rsync -ac --no-times --inplace --exclude=systemd --exclude='*.manifest.removed' "$(STAGING)/" "$(INSTALL_BASE)/config/"
+# /etc/ files get one explicit rule per file, with `cmp -s` gating both
+# the file copy and the reload side-effect. Make fires the recipe on every
+# install (since staging mtime advances each render), but `cmp` short-
+# circuits to a no-op when bytes are identical. Adding a new /etc/ file
+# means adding a rule here — that's the intent: every /etc/ entry needs
+# a deliberate decision about what reload it triggers.
+ETC_FILES := /etc/docker/daemon.json
+
+/etc/docker/daemon.json: $(STAGING)/etc/docker/daemon.json
+	@cmp -s $< $@ 2>/dev/null || { \
+	  echo "==> $@ changed, restarting docker + recreating containers"; \
+	  install -m 0644 -o root -g root $< $@; \
+	  systemctl restart docker; \
+<%- (loop-services (service-where dockerized) -%>
+	  docker compose -f <%= compose_file %> up -d --force-recreate <%= name %>; \
+<%- ) -%>
+	  true; \
+	}
+
+deploy-files: chownall config.manifest.removed systemd.manifest.removed etc.manifest.removed $(ETC_FILES)
+	@rsync -ac --no-times --inplace --exclude=systemd --exclude=etc --exclude='*.manifest.removed' "$(STAGING)/" "$(INSTALL_BASE)/config/"
 	@rsync -ac --no-times "$(STAGING)/systemd/" /etc/systemd/system/
 	@xargs -r rm -f < config.manifest.removed
 	@xargs -r rm -f < systemd.manifest.removed
+	@xargs -r rm -f < etc.manifest.removed
 	@systemctl daemon-reload
 
 # Real file target: if the cert is on disk, this is up-to-date and

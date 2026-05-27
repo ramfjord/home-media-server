@@ -59,6 +59,17 @@ don't need to touch the template to add entries.
 
 The default `__service__.service.elp` template generates a `Type=simple` + `Restart=on-failure` unit suitable for long-running containers. To override directives without forking the template, set `systemd_override:` in `service.yml.elp` to a literal drop-in body — it's emitted to `<svc>.service.d/override.conf` and composed by systemd at load time. To replace an inherited `ExecStart` (a list-valued directive), reset it with an empty `ExecStart=` line before the new one. ELP tags in the body render in the manifest's **top-level scope**: globals like `<%= install_base %>` resolve, but per-service and derived fields (`compose_file`, `name`) do **not** bind there — build paths from a global plus the literal service name. See `services/api-config/service.yml.elp` for the canonical use (oneshot reconcile job, ExecStart→`compose run --rm` so the exit code propagates).
 
+## Adding a file under `/etc/`
+
+`/etc/` files (currently just `/etc/docker/daemon.json`, rendered from `targets/debian/etc/docker/daemon.json.elp`) live outside the per-service `/opt/mediaserver/config/` tree, so the deploy pipeline treats them differently: each `/etc/` file gets an **explicit per-file rule** in `targets/debian/Makefile.elp` declaring (a) where the rendered staging copy lands and (b) what reload to fire when it changes. The rule uses `cmp -s` so the reload only triggers on actual content change, not just an mtime bump from the render step.
+
+To add a new `/etc/` file:
+
+1. Drop the template at `targets/debian/etc/<path>.elp` — it renders into `config/etc/<path>` via the existing singleton-template machinery.
+2. In `targets/debian/Makefile.elp`, add a target for the install path (`/etc/<path>`) and append it to `ETC_FILES`. The recipe should `cmp -s` staging vs. installed, and on diff: `install` the file *and* fire whatever reload is needed (systemctl restart, sysctl --system, signal, etc.). See the `/etc/docker/daemon.json` rule for the canonical shape.
+
+Why per-file rather than bulk rsync: every `/etc/` file has its own reload semantics, and getting them wrong is expensive (a docker restart bounces every container). Forcing one rule per file makes the reload decision explicit in the same place the file is declared.
+
 ## Gating a service behind the auth gateway: `gateway_auth:`
 
 A service opts into the single sign-on gateway by declaring

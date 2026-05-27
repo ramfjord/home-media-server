@@ -87,6 +87,15 @@
                :single-quoted-scalar-style
                :plain-scalar-style)))
 
+;;; JSON emission — same plist-tree shape, JSON output.
+;;; Used by templates that produce JSON config files (e.g. docker daemon.json).
+
+(defun plist-tree->json-string (x)
+  "Encode plist tree X as a JSON string. Plists become objects, lists
+   become arrays, atoms pass through to yason."
+  (with-output-to-string (s)
+    (yason:encode (plist-tree->dict x) s)))
+
 ;;; Manifest emission.
 
 (defun emit-manifest (cfg stream)
