@@ -9,15 +9,21 @@ desc: qBittorrent metrics exporter
 use_vpn: true
 scrape_target:
   host: wireguard
-  port: 8000
+  port: 8090
   service: qbittorrent
 docker_config:
-  image: esanchezm/prometheus-qbittorrent-exporter:latest
+  # martabal: Go binary (~10MB image, ~3MB resident). Adds per-torrent,
+  # per-tracker, per-tag metrics — the esanchezm exporter only had
+  # category-level aggregates. ENABLE_HIGH_CARDINALITY exposes
+  # qbittorrent_torrent_info{name,...} and per-torrent dl/ul speed —
+  # cheap at our ~100-torrent scale, would matter past ~5k.
+  image: ghcr.io/martabal/qbittorrent-exporter:latest
   environment:
-  - QBITTORRENT_HOST=localhost
-  - QBITTORRENT_PORT=8080
-  # No creds: qbit's LocalHostAuth=false makes localhost auth-bypass.
-  # The lib's auth path is buggy anyway (RecursionError → self-ban),
-  # so the cleanest fix is not to log in at all.
+  - QBITTORRENT_BASE_URL=http://localhost:8080
+  # No creds — qbit's LocalHostAuth=false accepts any login from
+  # localhost. martabal still POSTs /api/v2/auth/login at startup with
+  # its built-in defaults (admin/adminadmin); qbit replies "Ok." either
+  # way and the cookie works for every subsequent call.
+  - ENABLE_HIGH_CARDINALITY=true
   restart: unless-stopped
 order: 180
