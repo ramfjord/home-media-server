@@ -20,6 +20,7 @@ groups:
         partof: streaming
         service: disk
       annotations:
+        summary: '{{ $labels.mountpoint }} ({{ $labels.device }}): {{ with query (printf `node_filesystem_size_bytes{instance="%s",mountpoint="%s"} - node_filesystem_avail_bytes{instance="%s",mountpoint="%s"}` $labels.instance $labels.mountpoint $labels.instance $labels.mountpoint) }}{{ . | first | value | humanize1024 }}B{{ end }}/{{ with query (printf `node_filesystem_size_bytes{instance="%s",mountpoint="%s"}` $labels.instance $labels.mountpoint) }}{{ . | first | value | humanize1024 }}B{{ end }}, full in {{ with query (printf `-node_filesystem_avail_bytes{instance="%s",mountpoint="%s"} / deriv(node_filesystem_avail_bytes{instance="%s",mountpoint="%s"}[6h]) / 86400` $labels.instance $labels.mountpoint $labels.instance $labels.mountpoint) }}{{ . | first | value | printf "%.2f" }}d{{ end }}'
         description: "Volume {{ $labels.mountpoint }} on {{ $labels.instance }} is projected to fill within 5 days based on the last 6h of usage"
 
     # Disabled - media mount not reported by node_exporter
