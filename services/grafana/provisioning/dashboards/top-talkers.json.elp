@@ -7,35 +7,8 @@
   "schemaVersion": 38,
   "version": 0,
   "refresh": "30s",
-  "time": { "from": "now-6h", "to": "now" },
+  "time": { "from": "now-24h", "to": "now" },
   "panels": [
-    {
-      "id": 1,
-      "type": "timeseries",
-      "title": "Log lines/s by service (top 10)",
-      "description": "Backs the ServiceLogSpike alert. A service drifting above its usual band here is the same signal the alert uses.",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 0 },
-      "targets": [
-        {
-          "expr": "topk(10, sum by (service) (rate(loki_process_custom_log_lines_total[5m])))",
-          "legendFormat": "{{service}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "logs/s",
-          "min": 0,
-          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      }
-    },
     {
       "id": 2,
       "type": "timeseries",
@@ -61,6 +34,106 @@
       "options": {
         "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] },
         "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Log bytes/s by service (top 10)",
+      "description": "Bytes/sec of journald entries via Loki. Catches verbose-but-not-numerous logs (large structured-JSON lines) that the lines/s panel undercounts — e.g. authelia forward-auth spam.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (service) (bytes_rate({job=\"alloy\"}[5m])))",
+          "legendFormat": "{{service}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Free bytes per filesystem",
+      "description": "node_filesystem_avail_bytes per mount. The slope of these lines is what the days-to-full prediction is built on.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 10 },
+      "targets": [
+        {
+          "expr": "node_filesystem_avail_bytes{fstype=~\"ext4|xfs|btrfs|zfs|vfat|exfat|ntfs|fuseblk\"}",
+          "legendFormat": "{{mountpoint}} ({{device}})",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["last", "min"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Days to full",
+      "description": "Same predict_linear basis as the VolumeFillingUp alert: -avail / deriv(avail[$__range]) / 86400. The deriv window tracks the dashboard time picker — change the time range to re-cast the projection over a different window. Negative values (avail growing) display as 'growing'; >365d (or stable) displays as 'stable'.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
+      "targets": [
+        {
+          "expr": "-node_filesystem_avail_bytes{fstype=~\"ext4|xfs|btrfs|zfs|vfat|exfat|ntfs|fuseblk\"} / deriv(node_filesystem_avail_bytes{fstype=~\"ext4|xfs|btrfs|zfs|vfat|exfat|ntfs|fuseblk\"}[$__range]) / 86400",
+          "legendFormat": "{{mountpoint}} ({{device}})",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "d",
+          "decimals": 1,
+          "mappings": [
+            { "type": "special", "options": { "match": "nan",     "result": { "text": "stable",  "color": "green", "index": 0 } } },
+            { "type": "special", "options": { "match": "inf",     "result": { "text": "stable",  "color": "green", "index": 1 } } },
+            { "type": "special", "options": { "match": "neg-inf", "result": { "text": "stable",  "color": "green", "index": 2 } } },
+            { "type": "range",   "options": { "from": -1e308, "to": 0,     "result": { "text": "growing", "color": "green", "index": 3 } } },
+            { "type": "range",   "options": { "from": 365,    "to": 1e308, "result": { "text": "stable",  "color": "green", "index": 4 } } }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",    "value": null },
+              { "color": "orange", "value": 5 },
+              { "color": "green",  "value": 30 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value_and_name",
+        "orientation": "horizontal"
       }
     }
   ]

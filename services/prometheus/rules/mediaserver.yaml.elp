@@ -14,14 +14,14 @@ groups:
 
     - alert: VolumeFillingUp
       expr: |
-        predict_linear(node_filesystem_avail_bytes{fstype=~"ext4|xfs|btrfs|zfs|vfat|exfat|ntfs|fuseblk"}[6h], 5 * 24 * 3600) <= 0
+        predict_linear(node_filesystem_avail_bytes{fstype=~"ext4|xfs|btrfs|zfs|vfat|exfat|ntfs|fuseblk"}[24h], 5 * 24 * 3600) <= 0
         and node_filesystem_avail_bytes{fstype=~"ext4|xfs|btrfs|zfs|vfat|exfat|ntfs|fuseblk"} > 0
       labels:
         partof: streaming
         service: disk
       annotations:
-        summary: '{{ $labels.mountpoint }} ({{ $labels.device }}): {{ with query (printf `node_filesystem_size_bytes{instance="%s",mountpoint="%s"} - node_filesystem_avail_bytes{instance="%s",mountpoint="%s"}` $labels.instance $labels.mountpoint $labels.instance $labels.mountpoint) }}{{ . | first | value | humanize1024 }}B{{ end }}/{{ with query (printf `node_filesystem_size_bytes{instance="%s",mountpoint="%s"}` $labels.instance $labels.mountpoint) }}{{ . | first | value | humanize1024 }}B{{ end }}, full in {{ with query (printf `-node_filesystem_avail_bytes{instance="%s",mountpoint="%s"} / deriv(node_filesystem_avail_bytes{instance="%s",mountpoint="%s"}[6h]) / 86400` $labels.instance $labels.mountpoint $labels.instance $labels.mountpoint) }}{{ . | first | value | printf "%.2f" }}d{{ end }}'
-        description: "Volume {{ $labels.mountpoint }} on {{ $labels.instance }} is projected to fill within 5 days based on the last 6h of usage"
+        summary: '{{ $labels.mountpoint }} ({{ $labels.device }}): {{ with query (printf `node_filesystem_size_bytes{instance="%s",mountpoint="%s"} - node_filesystem_avail_bytes{instance="%s",mountpoint="%s"}` $labels.instance $labels.mountpoint $labels.instance $labels.mountpoint) }}{{ . | first | value | humanize1024 }}B{{ end }}/{{ with query (printf `node_filesystem_size_bytes{instance="%s",mountpoint="%s"}` $labels.instance $labels.mountpoint) }}{{ . | first | value | humanize1024 }}B{{ end }}, full in {{ with query (printf `-node_filesystem_avail_bytes{instance="%s",mountpoint="%s"} / deriv(node_filesystem_avail_bytes{instance="%s",mountpoint="%s"}[24h]) / 86400` $labels.instance $labels.mountpoint $labels.instance $labels.mountpoint) }}{{ . | first | value | printf "%.2f" }}d{{ end }}'
+        description: "Volume {{ $labels.mountpoint }} on {{ $labels.instance }} is projected to fill within 5 days based on the last 24h of usage"
 
     # Disabled - media mount not reported by node_exporter
     # - alert: MediaVolumeUnmounted
