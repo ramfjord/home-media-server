@@ -34,3 +34,24 @@ groups:
         severity: warning
       annotations:
         summary: "{{ $labels.service }}: {{ $value | printf \"%.0f\" }} error-level log entries in 5m"
+
+    # Catches runaway log generation regardless of level — restart
+    # loops, debug spew left on, error storms below the
+    # ServiceLogErrors threshold. Baseline-relative (>=3x its own 6h
+    # rate) so inherently-chatty services (qbittorrent-exporter,
+    # exportarr-*, authelia at ~0.3-0.6/s steady-state) don't trip a
+    # flat threshold while an actual anomaly does. The >1/s absolute
+    # floor stops a service going 0.01->0.1/s (30x but still nothing)
+    # from paging. 30m for: rides out legitimate bursts (bulk imports,
+    # startup chatter).
+    - alert: ServiceLogSpike
+      expr: |
+        sum by (service) (rate(loki_process_custom_log_lines_total[10m])) > 1
+        and
+        sum by (service) (rate(loki_process_custom_log_lines_total[10m]))
+          > 3 * sum by (service) (rate(loki_process_custom_log_lines_total[6h]))
+      for: 30m
+      labels:
+        severity: warning
+      annotations:
+        summary: "{{ $labels.service }}: {{ $value | printf \"%.1f\" }} log lines/s (>=3x its 6h baseline)"
