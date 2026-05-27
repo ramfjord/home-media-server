@@ -1,0 +1,192 @@
+{
+  "id": null,
+  "uid": "qbittorrent",
+  "title": "qBittorrent",
+  "tags": ["mediaserver", "downloading"],
+  "timezone": "",
+  "schemaVersion": 38,
+  "version": 0,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "topN",
+        "type": "custom",
+        "label": "Top N",
+        "query": "5,10,20,50",
+        "current": { "text": "10", "value": "10" },
+        "options": [
+          { "text": "5",  "value": "5"  },
+          { "text": "10", "value": "10", "selected": true },
+          { "text": "20", "value": "20" },
+          { "text": "50", "value": "50" }
+        ]
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Connection",
+      "description": "qbit's view of its own connectivity to the BitTorrent network. 2 = connected, 1 = firewalled (connected but inbound blocked), 0 = disconnected.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "targets": [ { "expr": "qbittorrent_transfer_connection_status", "refId": "A", "instant": true } ],
+      "fieldConfig": { "defaults": {
+        "mappings": [
+          { "type": "value", "options": { "0": { "text": "disconnected", "color": "red",    "index": 0 } } },
+          { "type": "value", "options": { "1": { "text": "firewalled",   "color": "orange", "index": 1 } } },
+          { "type": "value", "options": { "2": { "text": "connected",    "color": "green",  "index": 2 } } }
+        ],
+        "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null } ] }
+      }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "none", "textMode": "value" }
+    },
+    {
+      "id": 2, "type": "stat", "title": "Torrents",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "targets": [ { "expr": "qbittorrent_global_torrents", "refId": "A", "instant": true } ],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "none", "textMode": "value" }
+    },
+    {
+      "id": 3, "type": "stat", "title": "Download rate",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "targets": [ { "expr": "qbittorrent_global_download_speed_bytes", "refId": "A", "instant": true } ],
+      "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "area", "textMode": "value" }
+    },
+    {
+      "id": 4, "type": "stat", "title": "Upload rate",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "targets": [ { "expr": "qbittorrent_global_upload_speed_bytes", "refId": "A", "instant": true } ],
+      "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "area", "textMode": "value" }
+    },
+    {
+      "id": 5, "type": "stat", "title": "Global ratio",
+      "description": "All-time uploaded / all-time downloaded across every torrent qbit has ever seen.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+      "targets": [ { "expr": "qbittorrent_global_ratio", "refId": "A", "instant": true } ],
+      "fieldConfig": { "defaults": { "unit": "none", "decimals": 2,
+        "thresholds": { "mode": "absolute", "steps": [
+          { "color": "red",    "value": null },
+          { "color": "orange", "value": 1 },
+          { "color": "green",  "value": 2 }
+        ] }
+      }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "none", "textMode": "value" }
+    },
+    {
+      "id": 6, "type": "stat", "title": "Free disk space",
+      "description": "qbit's own view of free space on its download volume. Distinct from node_exporter's /-level view; useful when the download dir is on a separate mount.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+      "targets": [ { "expr": "qbittorrent_global_free_space_on_disk_bytes", "refId": "A", "instant": true } ],
+      "fieldConfig": { "defaults": { "unit": "bytes",
+        "thresholds": { "mode": "absolute", "steps": [
+          { "color": "red",    "value": null },
+          { "color": "orange", "value": 50000000000 },
+          { "color": "green",  "value": 200000000000 }
+        ] }
+      }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "none", "textMode": "value" }
+    },
+
+    {
+      "id": 10, "type": "timeseries", "title": "Download speed by torrent (top $topN)",
+      "description": "Stacked area: total area under the curve ≈ total bytes downloaded over the window.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 4 },
+      "targets": [ { "expr": "topk($topN, qbittorrent_torrent_download_speed_bytes > 0)", "legendFormat": "{{name}}", "refId": "A" } ],
+      "fieldConfig": { "defaults": { "unit": "Bps", "min": 0,
+        "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 30, "stacking": { "mode": "normal", "group": "A" } }
+      }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 11, "type": "timeseries", "title": "Seeders per active download (top $topN)",
+      "description": "Number of peers we're pulling from, per torrent. Drops to 0 = swarm dead.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 4 },
+      "targets": [ { "expr": "topk($topN, qbittorrent_torrent_seeders and on(name) qbittorrent_torrent_download_speed_bytes > 0)", "legendFormat": "{{name}}", "refId": "A" } ],
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0,
+        "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 }
+      }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+
+    {
+      "id": 12, "type": "timeseries", "title": "Upload speed by torrent (top $topN)",
+      "description": "Stacked area: total area ≈ total bytes seeded back to the swarm over the window.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 13 },
+      "targets": [ { "expr": "topk($topN, qbittorrent_torrent_upload_speed_bytes > 0)", "legendFormat": "{{name}}", "refId": "A" } ],
+      "fieldConfig": { "defaults": { "unit": "Bps", "min": 0,
+        "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 30, "stacking": { "mode": "normal", "group": "A" } }
+      }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 13, "type": "timeseries", "title": "Leechers per active upload (top $topN)",
+      "description": "Number of peers we're seeding to, per torrent. High = popular item, the seeding is doing work.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 13 },
+      "targets": [ { "expr": "topk($topN, qbittorrent_torrent_leechers and on(name) qbittorrent_torrent_upload_speed_bytes > 0)", "legendFormat": "{{name}}", "refId": "A" } ],
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0,
+        "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 }
+      }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+
+    {
+      "id": 20, "type": "table", "title": "Recently added (top 15)",
+      "description": "Torrents most recently handed to qbit, by added_on timestamp.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 10, "w": 8, "x": 0, "y": 22 },
+      "targets": [ { "expr": "topk(15, qbittorrent_torrent_added_on)", "refId": "A", "instant": true, "format": "table" } ],
+      "transformations": [
+        { "id": "organize", "options": { "excludeByName": { "Time": true, "__name__": true, "instance": true, "job": true, "service": true, "partof": true }, "renameByName": { "name": "Torrent", "Value": "Added" } } },
+        { "id": "sortBy", "options": { "fields": {}, "sort": [ { "field": "Added", "desc": true } ] } }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [
+        { "matcher": { "id": "byName", "options": "Added" }, "properties": [ { "id": "unit", "value": "dateTimeAsIso" } ] }
+      ] },
+      "options": { "showHeader": true }
+    },
+    {
+      "id": 21, "type": "table", "title": "Recently completed (top 15)",
+      "description": "Torrents most recently finished downloading, by completed_on timestamp.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 10, "w": 8, "x": 8, "y": 22 },
+      "targets": [ { "expr": "topk(15, qbittorrent_torrent_completed_on)", "refId": "A", "instant": true, "format": "table" } ],
+      "transformations": [
+        { "id": "organize", "options": { "excludeByName": { "Time": true, "__name__": true, "instance": true, "job": true, "service": true, "partof": true }, "renameByName": { "name": "Torrent", "Value": "Completed" } } },
+        { "id": "sortBy", "options": { "fields": {}, "sort": [ { "field": "Completed", "desc": true } ] } }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [
+        { "matcher": { "id": "byName", "options": "Completed" }, "properties": [ { "id": "unit", "value": "dateTimeAsIso" } ] }
+      ] },
+      "options": { "showHeader": true }
+    },
+    {
+      "id": 22, "type": "table", "title": "Stalled (progress < 100%, 0 B/s)",
+      "description": "Incomplete torrents currently making no progress. Candidates for cancellation in radarr/sonarr so the arr can pick a different release.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 10, "w": 8, "x": 16, "y": 22 },
+      "targets": [ { "expr": "qbittorrent_torrent_progress < 1 and on(name) qbittorrent_torrent_download_speed_bytes == 0", "refId": "A", "instant": true, "format": "table" } ],
+      "transformations": [
+        { "id": "organize", "options": { "excludeByName": { "Time": true, "__name__": true, "instance": true, "job": true, "service": true, "partof": true }, "renameByName": { "name": "Torrent", "Value": "Progress" } } },
+        { "id": "sortBy", "options": { "fields": {}, "sort": [ { "field": "Progress", "desc": false } ] } }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [
+        { "matcher": { "id": "byName", "options": "Progress" }, "properties": [ { "id": "unit", "value": "percentunit" }, { "id": "decimals", "value": 1 } ] }
+      ] },
+      "options": { "showHeader": true }
+    }
+  ]
+}
