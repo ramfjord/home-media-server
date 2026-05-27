@@ -52,6 +52,7 @@ General\Locale=en
 MailNotification\req_auth=true
 WebUI\AuthSubnetWhitelist=0.0.0.0/0
 WebUI\AuthSubnetWhitelistEnabled=true
+WebUI\LocalHostAuth=false
 
 [RSS]
 AutoDownloader\DownloadRepacks=true
@@ -62,6 +63,6 @@ AuthSubnetWhitelist=0.0.0.0/0
 AuthSubnetWhitelistEnabled=true
 Authentication=true
 Enabled=true
-LocalHostAuth=true
+LocalHostAuth=false
 Port=8080
 UpnpLease=0

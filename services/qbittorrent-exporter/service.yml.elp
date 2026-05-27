@@ -2,15 +2,22 @@
 name: qbittorrent-exporter
 partof: downloading
 desc: qBittorrent metrics exporter
+# Share wireguard's netns so we reach qbittorrent on localhost. qbit
+# isn't on mediaserver-network (it's in wireguard's netns via use_vpn),
+# so resolving "qbittorrent" from the bridge fails every poll and
+# dockerd's embedded resolver floods logs. Mirrors wireguard-exporter.
+use_vpn: true
 scrape_target:
+  host: wireguard
   port: 8000
   service: qbittorrent
 docker_config:
   image: esanchezm/prometheus-qbittorrent-exporter:latest
   environment:
-  - QBITTORRENT_HOST=qbittorrent
+  - QBITTORRENT_HOST=localhost
   - QBITTORRENT_PORT=8080
-  - QBITTORRENT_USERNAME=<%= (for-service :qbittorrent admin_username) %>
-  - QBITTORRENT_PASSWORD=<%= (for-service :qbittorrent admin_password) %>
+  # No creds: qbit's LocalHostAuth=false makes localhost auth-bypass.
+  # The lib's auth path is buggy anyway (RecursionError → self-ban),
+  # so the cleanest fix is not to log in at all.
   restart: unless-stopped
 order: 180
