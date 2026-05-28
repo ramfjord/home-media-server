@@ -36,4 +36,15 @@ docker_config:
     # premature green.
     start_period: 30s
   restart: unless-stopped
+# Default Type=simple marks the unit Active the instant docker compose
+# forks, well before the container is healthy. Dependents
+# (network_mode: container:wireguard) clear After=wireguard.service
+# too early and bind to whatever wireguard container is around —
+# which on a stack-wide restart is the about-to-be-recreated one, so
+# they end up in a defunct netns. Block ExecStartPost on container
+# health so the unit stays in 'activating' until wireguard is really
+# up; After=wireguard.service then waits for real readiness.
+systemd_override: |
+  [Service]
+  ExecStartPost=/bin/bash -c 'for i in {1..60}; do docker inspect wireguard --format="{{.State.Status}}/{{.State.Health.Status}}" 2>/dev/null | grep -qx running/healthy && exit 0; sleep 1; done; exit 1'
 order: 0
