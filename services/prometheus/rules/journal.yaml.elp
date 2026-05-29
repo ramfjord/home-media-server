@@ -27,7 +27,7 @@ groups:
     - alert: ServiceLogErrors
       expr: |
         sum by (service) (
-          increase(loki_process_custom_log_lines_total{level=~"error|err|crit|alert|emerg", config_target=~"|api-config"}[5m])
+          increase(loki_process_custom_log_lines_total{level=~"(?i)(error|err|crit|alert|emerg)", config_target=~"|api-config"}[5m])
         ) > 5
       for: 2m
       labels:

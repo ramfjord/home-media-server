@@ -69,6 +69,23 @@ loki.process "enrich" {
 		}
 	}
 
+	// Docker's journald log driver stamps every container stderr line
+	// PRIORITY=err regardless of the app's real level, so the
+	// priority-derived `level` (set in loki.relabel.journal) mislabels
+	// every WARN/INFO line a Go service writes to stderr as error —
+	// inflating ServiceLogErrors for service=docker (blackbox's
+	// redirect-probe WARNs are the loudest source). When the line carries
+	// its own logfmt (`level=warn`) or JSON (`"level":"info"`) token,
+	// trust it and override. Tokenless lines extract nothing, so
+	// stage.labels skips the override and keeps the priority fallback.
+	// Case is preserved; ServiceLogErrors matches level case-insensitively.
+	stage.regex {
+		expression = `(?i)(?:level|lvl)"?[=:]\s*"?(?P<applevel>[a-zA-Z]+)`
+	}
+	stage.labels {
+		values = { level = "applevel" }
+	}
+
 	// Fan out: loki.write stores every line (so noise dropped from the
 	// counter stays greppable in Grafana); loki.process.metrics is a
 	// sink that only ticks the prometheus counters.
