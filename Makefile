@@ -43,8 +43,12 @@ DIRS := $(sort $(dir $(ALL_OUTPUTS)))
 # mtime vs pidfile mtime), so the happy path never spawns SBCL.
 RENDER_URL := http://127.0.0.1:7890
 
-# `curl --retry-connrefused` handles the boot wait without a sleep loop —
-# polls every 0.1s up to ~5s while the daemon comes up.
+# `curl --retry-connrefused` handles the boot wait without a sleep loop.
+# `--retry-max-time` hard-caps total retry wall-clock (curl's retry
+# backoff ignores --retry-delay 0 and balloons to ~10min/retry, so an
+# unbounded loop turns a startup crash into a 20-min hang); --max-time
+# caps any single connected-but-silent attempt. Daemon is healthy in
+# ~1s, so ~15s total is generous headroom that still fails fast.
 render-server: bin/render-server
 	@if curl -fsS $(RENDER_URL)/health >/dev/null 2>&1 \
 	    && [ ! bin/render-server -nt lisp/.render-server.pid ]; then :; \
@@ -53,8 +57,9 @@ render-server: bin/render-server
 	      kill "$$(cat lisp/.render-server.pid)" 2>/dev/null || true; \
 	    fi; \
 	    (setsid bin/render-server </dev/null >/dev/null 2>&1 &); \
-	    curl -fs --retry 50 --retry-delay 0 --retry-connrefused \
-	      --retry-all-errors $(RENDER_URL)/health >/dev/null 2>&1 \
+	    curl -fs --retry 50 --retry-max-time 15 --max-time 5 \
+	      --retry-connrefused --retry-all-errors $(RENDER_URL)/health \
+	      >/dev/null 2>&1 \
 	      || (echo "render-server failed to start" >&2; exit 1); \
 	  fi
 
