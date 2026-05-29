@@ -15,7 +15,16 @@ scrape_target:
     - source_labels: [name]
       target_label: service
 docker_config:
-  image: gcr.io/cadvisor/cadvisor:latest
+  # Pinned (not :latest) so a cadvisor upgrade that renames/drops a
+  # metric we alert on (container_health_state) is a reviewable diff
+  # rather than silent image drift.
+  image: gcr.io/cadvisor/cadvisor:v0.55.1
+  # The image's built-in HEALTHCHECK wgets $CADVISOR_HEALTHCHECK_URL,
+  # which defaults to /healthz — a 404 under --url_base_prefix. Point it
+  # at the prefixed path so the healthcheck matches where cadvisor serves.
+  environment:
+  - TZ=Etc/UTC
+  - CADVISOR_HEALTHCHECK_URL=http://localhost:8080/cadvisor/healthz
   command:
   - "--url_base_prefix=/cadvisor"
   volumes:
