@@ -125,6 +125,18 @@
                         (if (getf s :use_vpn) "wireguard" name)
                         (getf s :port)
                         (getf s :internal_path)))))
+    ;; Route-prefixed services (internal_path set) canonicalize
+    ;; <prefix> -> <prefix>/ with a 301, so both the Homer click and the
+    ;; blackbox probe eat a needless redirect. Slash public_url to skip
+    ;; that hop. (Any app-level root->landing redirect still happens and
+    ;; is still followed; probe_success verified unaffected for every
+    ;; internal_path service.) Plain append: no public_url carries a
+    ;; query string today — switch to quri path-component editing if one
+    ;; ever does. public_path is left unslashed: caddy routes on it.
+    (let ((u (getf s :public_url))
+          (ip (getf s :internal_path)))
+      (when (and u (not (string= ip "")) (not (str:ends-with? "/" u)))
+        (setf (getf s :public_url) (concatenate 'string u "/"))))
     ;; Whether/how this service sits behind the auth gateway. Declared
     ;; per service; which gateway enforces it lives entirely in that
     ;; gateway's own config template, never here — this stays
