@@ -48,6 +48,7 @@ Every web UI is reached at `https://<tailnet-fqdn>/<path>`, with caddy fronting 
 | [Prowlarr](services/prowlarr/) | downloading | `/prowlarr` | Indexer manager feeding Radarr/Sonarr |
 | [qBittorrent](services/qbittorrent/) | downloading | `/qbittorrent` | Torrent client (shares WireGuard's netns) |
 | [Jellyfin](services/jellyfin/) | streaming | `/jellyfin` | Media server with optional GPU transcoding |
+| [Plex](services/plex/) | streaming | `:32400` | Media server, internet-reachable for remote TV clients (plex.tv remote access) |
 | [Vaultwarden](services/vaultwarden/) | security | `/vaultwarden` | Self-hosted Bitwarden-compatible password manager |
 | [Authelia](services/authelia/) | security | `:9091` | Single sign-on / forward-auth portal for the gated web UIs |
 | [Ollama](services/ollama/) | llm | — | Local LLM server (HTTP API on `:11434`, optional GPU) |

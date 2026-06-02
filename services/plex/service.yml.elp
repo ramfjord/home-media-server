@@ -1,0 +1,35 @@
+---
+name: plex
+partof: streaming
+desc: Plex media server (remote access via plex.tv)
+port: 32400
+# Host networking, same rationale as jellyfin: GDM/DLNA discovery
+# broadcasts reach LAN clients (Roku, smart TVs), and Plex binds :32400
+# plus its discovery ports directly on the host. derive.lisp infers
+# `proxied: false` from network_mode: host, so Plex bypasses caddy —
+# its apps talk to :32400 directly, not a reverse proxy.
+#
+# Remote access is plex.tv's job, not ours: the server heartbeats its
+# current public IP to plex.tv, so the churning home IP is a non-issue.
+# Forward :32400 on the router once and clients route themselves.
+docker_config:
+  image: lscr.io/linuxserver/plex:latest
+  network_mode: host
+  volumes:
+  # Migrated from the old bare-metal install (/var/lib/plexmediaserver/
+  # Library). Owned plex:plex (997:989) — the chownall owner defaults to
+  # the service name `plex`, which already resolves to that uid on the
+  # host, so the forced `user: ${SVC_UID}:${SVC_GID}` runs Plex as the
+  # same uid that owns the data. No re-chown.
+  - "<%= install_base %>/config/plex:/config"
+  # Media mapped to /media/... to match the absolute library paths the
+  # migrated Plex DB already stores (/media/Movies, /media/TV) — same
+  # container mapping jellyfin uses. Keeps every migrated library
+  # resolvable without repathing in Plex's UI.
+  - "<%= media_path %>/Movies:/media/Movies:ro"
+  - "<%= media_path %>/TV:/media/TV:ro"
+  environment:
+  - TZ=Etc/UTC
+  - VERSION=docker
+  restart: unless-stopped
+order: 70
