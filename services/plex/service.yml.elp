@@ -3,6 +3,12 @@ name: plex
 partof: streaming
 desc: Plex media server (remote access via plex.tv)
 port: 32400
+# Plex serves its web UI at /web/index.html and hard-401s at /. The
+# Homer tile and the public_probe both target public_url, so point it
+# at the 2xx page — otherwise the probe wedges on the 401 and fires
+# BlackboxProbeFailed. (derive composes http://<hostname>:<port> +
+# this path for host-net services.)
+landing_path: /web/index.html
 # Host networking, same rationale as jellyfin: GDM/DLNA discovery
 # broadcasts reach LAN clients (Roku, smart TVs), and Plex binds :32400
 # plus its discovery ports directly on the host. derive.lisp infers

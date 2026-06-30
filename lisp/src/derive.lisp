@@ -97,8 +97,13 @@
                     ;; dockerized service with a port would also land
                     ;; here, but none exist; revisit the URL shape if
                     ;; one ever does.
+                    ;; Host-net service: reached directly at :port.
+                    ;; landing_path (default "/") lets a service whose
+                    ;; root isn't a 2xx page point the Homer tile and
+                    ;; public_probe at one that is.
                     ((not (getf s :proxied))
-                     (format nil "http://~A:~A/" host (getf s :port)))
+                     (format nil "http://~A:~A~A" host (getf s :port)
+                             (or (getf s :landing_path) "/")))
                     ((= port 443)
                      (format nil "https://~A~A" host path))
                     (t

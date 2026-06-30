@@ -53,9 +53,13 @@ subtree the migrated data uses.
 
 ## Not yet wired (follow-ups)
 
-- **Metrics / health probe.** No Prometheus scrape or blackbox probe
-  yet (Plex exposes no native `/metrics`; a tautulli-style exporter
-  would be the path). Mirrors Jellyfin, which is also unscraped.
+- **No metrics scrape.** Plex exposes no native `/metrics` (a
+  tautulli-style exporter would be the path); like Jellyfin it isn't
+  scraped. It *is* liveness-probed: a tile asset
+  (`homer/assets/tools/plex.png`) makes it `displayable`, so a
+  `public_probe` hits `public_url`. Plex 401s at `/`, so `landing_path`
+  points the probe (and the Homer tile) at `/web/index.html` — a dead
+  Plex web port then fires `BlackboxProbeFailed`.
 - **Transcode scratch.** Transcodes land in `/config` (the data
   volume). A dedicated `/transcode` mount + Plex's "Transcoder
   temporary directory" setting would keep scratch off the data dir.
