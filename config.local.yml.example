@@ -67,6 +67,11 @@ service_overrides:
   # generate with `openssl rand -base64 48`.
   vikunja:
     jwt_secret: "REPLACE_ME"
+    # OIDC client secret (plaintext) for the Authelia login. Authelia
+    # stores the pbkdf2 hash of this same value under
+    # service_overrides.authelia.oidc_vikunja_client_secret_hash — see
+    # services/authelia/README.md "OIDC secrets" to mint the pair.
+    oidc_client_secret: "REPLACE_ME"
   # Ollama: defaults are CPU-only. Uncomment to opt into NVIDIA GPU
   # passthrough. Requires nvidia-container-toolkit on the host. See
   # services/ollama/README.md for VRAM sizing and model selection.

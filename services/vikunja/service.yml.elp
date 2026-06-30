@@ -33,5 +33,32 @@ docker_config:
   # VIKUNJA_SERVICE_SECRET (the old VIKUNJA_SERVICE_JWTSECRET is
   # deprecated and ignored when SECRET is set).
   - "VIKUNJA_SERVICE_SECRET=<%= (for-service :vikunja jwt_secret) %>"
+  # OIDC via Authelia (services/authelia identity_providers.oidc). The
+  # provider id `authelia` matches the redirect_uri path segment in the
+  # Authelia client. authurl is Authelia's issuer — reachable from this
+  # container server-side (discovery/token) and from the browser, same
+  # URL. clientsecret is the plaintext; Authelia stores its pbkdf2 hash.
+  - "VIKUNJA_AUTH_OPENID_ENABLED=true"
+  - "VIKUNJA_AUTH_OPENID_PROVIDERS_AUTHELIA_NAME=Authelia"
+  - "VIKUNJA_AUTH_OPENID_PROVIDERS_AUTHELIA_AUTHURL=https://<%= hostname %>:9091"
+  - "VIKUNJA_AUTH_OPENID_PROVIDERS_AUTHELIA_CLIENTID=vikunja"
+  - "VIKUNJA_AUTH_OPENID_PROVIDERS_AUTHELIA_CLIENTSECRET=<%= (for-service :vikunja oidc_client_secret) %>"
+  - "VIKUNJA_AUTH_OPENID_PROVIDERS_AUTHELIA_SCOPE=openid profile email"
+  # OIDC is the only identity — no local Vikunja accounts to orphan or
+  # reconcile against the Authelia identity. Flip to true to restore the
+  # built-in username/password login as a fallback.
+  - "VIKUNJA_AUTH_LOCAL_ENABLED=false"
   restart: unless-stopped
+# OIDC-only (local login disabled): if Vikunja boots before Authelia is
+# ready it fails to init the provider — and with no local fallback, the
+# stack offers no way in. Authelia restarting lags caddy, returning 502
+# during the window (observed on first deploy). Gate startup on
+# Authelia's docker healthcheck, the same readiness pattern the VPN
+# services use for wireguard. Top-level scope: only globals bind, so
+# the literal service names are hardcoded.
+systemd_override: |
+  [Unit]
+  After=authelia.service
+  [Service]
+  ExecStartPre=/bin/sh -c 'for i in $(seq 1 30); do docker inspect authelia --format="{{.State.Health.Status}}" 2>/dev/null | grep -q healthy && exit 0; sleep 1; done; exit 1'
 order: 95

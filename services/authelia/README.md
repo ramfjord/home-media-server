@@ -28,6 +28,14 @@ service_overrides:
     jwt_secret: "<rand>"
     session_secret: "<rand>"
     storage_encryption_key: "<rand>"
+    # OIDC provider (identity_providers.oidc). Required once any OIDC
+    # client is configured (Vikunja). See "OIDC secrets" below.
+    oidc_hmac_secret: "<rand>"
+    oidc_issuer_key: |
+      -----BEGIN PRIVATE KEY-----
+      ...
+      -----END PRIVATE KEY-----
+    oidc_vikunja_client_secret_hash: "$pbkdf2-sha512$..."
     users:
       - username: thomas
         displayname: Thomas
@@ -52,6 +60,31 @@ install needed):
 # each of the three secrets (≥64 chars; run three times)
 docker run --rm authelia/authelia:4.39.19 authelia crypto rand --length 64 --charset alphanumeric
 ```
+
+### OIDC secrets
+
+Needed once an OIDC client exists (Vikunja). Run against the live
+container (`docker exec authelia ...`) or the pinned image:
+
+```sh
+# oidc_hmac_secret — 72-char random
+authelia crypto rand --length 72 --charset alphanumeric
+
+# oidc_issuer_key — RS256 signing key; paste private.pem as a YAML block
+authelia crypto pair rsa generate -d /tmp/oidc -b 2048 && cat /tmp/oidc/private.pem
+
+# per-client secret: one plaintext, two homes — Authelia stores the
+# hash (below), the client (Vikunja's config.local.yml) stores the
+# plaintext. Generate the plaintext, then hash it:
+authelia crypto rand --length 48 --charset alphanumeric          # → plaintext
+authelia crypto hash generate pbkdf2 --variant sha512 --no-confirm --password '<plaintext>'
+```
+
+A new OIDC client = add a `clients:` entry in
+`configuration.yml.elp` (client_id, redirect_uri, the hashed secret
+here) **and** give the app the matching plaintext. Authelia enforces
+`state` ≥ 8 chars on the authorization request — real client libraries
+comply; only hand-crafted test URLs trip it.
 
 ## Adding / resetting a user
 

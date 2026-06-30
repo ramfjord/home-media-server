@@ -46,6 +46,45 @@ authentication_backend:
 access_control:
   default_policy: 'one_factor'
 
+# OpenID Connect provider. Distinct from forward_auth: forward_auth
+# gates *access* at caddy; OIDC hands an app a verified *identity* so it
+# can key its own accounts to it. An app can use both (forward_auth out
+# front, OIDC inside) — Vikunja does. Provider-level secrets live in
+# config.local.yml: hmac_secret signs OIDC JWTs, the RS256 jwks key
+# signs ID tokens. Both are required by the 4.39 schema to enable OIDC.
+identity_providers:
+  oidc:
+    hmac_secret: '<%= (for-service :authelia oidc_hmac_secret) %>'
+    jwks:
+      - key_id: 'rs256'
+        algorithm: 'RS256'
+        use: 'sig'
+        key: |
+<%= (str:join (string #\Newline)
+              (mapcar (lambda (l) (concatenate 'string "          " l))
+                      (str:lines (string-right-trim '(#\Newline)
+                                   (for-service :authelia oidc_issuer_key))))) %>
+    clients:
+      # Vikunja (services/vikunja): one_factor to match the current user
+      # set — two_factor needs WebAuthn enrolment, not wired yet. The
+      # `authelia` path segment in the redirect_uri is the provider id
+      # Vikunja is configured with. client_secret is the pbkdf2 hash of
+      # the plaintext Vikunja holds (config.local.yml).
+      - client_id: 'vikunja'
+        client_name: 'Vikunja'
+        client_secret: '<%= (for-service :authelia oidc_vikunja_client_secret_hash) %>'
+        public: false
+        authorization_policy: 'one_factor'
+        require_pkce: false
+        redirect_uris:
+          - 'https://<%= hostname %>:8004/auth/openid/authelia'
+        scopes: ['openid', 'profile', 'email']
+        response_types: ['code']
+        grant_types: ['authorization_code']
+        access_token_signed_response_alg: 'none'
+        userinfo_signed_response_alg: 'none'
+        token_endpoint_auth_method: 'client_secret_basic'
+
 session:
   secret: '<%= (for-service :authelia session_secret) %>'
   cookies:

@@ -21,12 +21,31 @@ and what Vikunja puts in outgoing emails.
 
 ## Auth
 
-Gated behind Authelia (`gateway_auth: true`): caddy emits `forward_auth`
-on the `:8004` site and Authelia's global `one_factor` enforces. Vikunja
-keeps its own login as well — Authelia is the outer gate, there's no SSO
-handoff, so a user authenticates twice (Authelia, then Vikunja). That's
-acceptable for a low-traffic personal app; wiring Vikunja's OpenID
-Connect to Authelia would remove the second login but is not done here.
+Two layers, both Authelia, distinct jobs:
+
+- **Perimeter gate** — `gateway_auth: true`: caddy emits `forward_auth`
+  on the `:8004` site, Authelia's global `one_factor` enforces. Nothing
+  reaches Vikunja until you're logged into Authelia.
+- **Identity (SSO)** — Vikunja is an Authelia **OpenID Connect client**
+  (`VIKUNJA_AUTH_OPENID_*`, provider id `authelia`). Vikunja delegates
+  login to Authelia via OIDC, so accounts are keyed to the Authelia
+  identity rather than local Vikunja credentials. Forward auth alone
+  can't do this — Vikunja has no reverse-proxy-header auth mode, so it
+  needs OIDC to *become* logged in, not just gated.
+
+Local username/password login is **disabled**
+(`VIKUNJA_AUTH_LOCAL_ENABLED=false`) so OIDC is the only identity — no
+local accounts to orphan against the Authelia identity. Because of that,
+Vikunja **must** reach Authelia's OIDC discovery at boot or there's no
+way in; a `systemd_override` gates startup on Authelia's docker
+healthcheck (the wireguard-readiness pattern) so a cold boot can't bring
+Vikunja up against an unready Authelia. Flip `VIKUNJA_AUTH_LOCAL_ENABLED`
+to `true` to restore a local fallback.
+
+The OIDC client secret is one logical secret in two homes: Vikunja holds
+the **plaintext** (`config.local.yml` `service_overrides.vikunja.oidc_client_secret`),
+Authelia holds its **pbkdf2 hash** (`service_overrides.authelia.oidc_vikunja_client_secret_hash`).
+See `services/authelia/README.md` → "OIDC secrets" for generation.
 
 ## Secret
 
