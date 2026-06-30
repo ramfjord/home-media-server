@@ -1,0 +1,37 @@
+---
+name: vikunja
+partof: productivity
+desc: Task management / to-do
+port: 3456
+# Vikunja can't serve under a URL subpath without rebuilding its
+# frontend from source (VIKUNJA_FRONTEND_BASE at build time) — the
+# stock image is pre-built for root. So it takes a dedicated caddy
+# site on a host port instead of path-routing under the main FQDN,
+# same shape as vaultwarden/qbittorrent. When changing public_port,
+# update services/caddy/service.yml `ports:` so caddy publishes it.
+public_port: 8004
+public_path: /
+# Gated behind Authelia (caddy emits forward_auth on the 8004 site;
+# Authelia's global one_factor enforces). Vikunja keeps its own login
+# too — Authelia is the outer gate, no SSO handoff.
+gateway_auth: true
+docker_config:
+  image: vikunja/vikunja:latest
+  volumes:
+  # The image presets VIKUNJA_DATABASE_PATH=/db/vikunja.db; persist /db
+  # for the SQLite file and /app/vikunja/files for uploaded attachments.
+  - "<%= install_base %>/config/vikunja/db:/db"
+  - "<%= install_base %>/config/vikunja/files:/app/vikunja/files"
+  environment:
+  # Behind a reverse proxy this is how the frontend learns the API URL
+  # (and it's used in outgoing emails). Must be the browser-facing URL,
+  # scheme + trailing slash. Matches the caddy site at :<public_port>.
+  - "VIKUNJA_SERVICE_PUBLICURL=https://<%= hostname %>:8004/"
+  # Required secret (config.local.yml). Read via for-service so an
+  # absent value fails `make all` instead of silently auto-generating a
+  # per-boot secret that logs everyone out on restart. Env var is
+  # VIKUNJA_SERVICE_SECRET (the old VIKUNJA_SERVICE_JWTSECRET is
+  # deprecated and ignored when SECRET is set).
+  - "VIKUNJA_SERVICE_SECRET=<%= (for-service :vikunja jwt_secret) %>"
+  restart: unless-stopped
+order: 95

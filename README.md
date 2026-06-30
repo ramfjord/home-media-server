@@ -51,6 +51,7 @@ Every web UI is reached at `https://<tailnet-fqdn>/<path>`, with caddy fronting 
 | [Plex](services/plex/) | streaming | `:32400` | Media server, internet-reachable for remote TV clients (plex.tv remote access) |
 | [Vaultwarden](services/vaultwarden/) | security | `/vaultwarden` | Self-hosted Bitwarden-compatible password manager |
 | [Authelia](services/authelia/) | security | `:9091` | Single sign-on / forward-auth portal for the gated web UIs |
+| [Vikunja](services/vikunja/) | productivity | `:8004` | Task management / to-do (dedicated port, Authelia-gated) |
 | [Ollama](services/ollama/) | llm | — | Local LLM server (HTTP API on `:11434`, optional GPU) |
 | [Open WebUI](services/open-webui/) | llm | `:8002` | Chat UI for Ollama |
 | [mcp-grafana](services/mcp-grafana/) | llm | — | Grafana MCP server (dashboards + PromQL + LogQL tools for the LLM) |

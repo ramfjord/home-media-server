@@ -60,6 +60,13 @@ service_overrides:
     admin_username: "Admin"
     admin_email: "admin@example.com"
     admin_password: "REPLACE_ME"
+  # Vikunja's JWT signing secret. Required: read via for-service so a
+  # missing value fails the render fast. If left unset Vikunja would
+  # auto-generate a fresh one each boot, logging every user out on
+  # restart — so pin it here. Any sufficiently long random string;
+  # generate with `openssl rand -base64 48`.
+  vikunja:
+    jwt_secret: "REPLACE_ME"
   # Ollama: defaults are CPU-only. Uncomment to opt into NVIDIA GPU
   # passthrough. Requires nvidia-container-toolkit on the host. See
   # services/ollama/README.md for VRAM sizing and model selection.
