@@ -11,10 +11,10 @@ port: 3456
 # update services/caddy/service.yml `ports:` so caddy publishes it.
 public_port: 8004
 public_path: /
-# Gated behind Authelia (caddy emits forward_auth on the 8004 site;
-# Authelia's global one_factor enforces). Vikunja keeps its own login
-# too — Authelia is the outer gate, no SSO handoff.
-gateway_auth: true
+# Auth is Vikunja's own Authelia OIDC (VIKUNJA_AUTH_OPENID_* below),
+# local login disabled. The :8004 site is a plain reverse proxy, so
+# native clients (mobile app, MCP, CLI, CalDAV) reach /api directly and
+# authenticate with Vikunja's OIDC / API-token auth.
 docker_config:
   image: vikunja/vikunja:latest
   volumes:
