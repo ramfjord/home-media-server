@@ -38,13 +38,20 @@
     (setf (getf s :group)         (getf s :group))
     ;; A service is "displayable" when it's a user-facing surface —
     ;; appears on the dashboard, gets public-probed. Curator-driven:
-    ;; drop a tile asset at services/homer/assets/tools/<name>.png to
-    ;; opt in. Plumbing services (mcpo, mcp-grafana) ship no asset
-    ;; and are auto-excluded. Still requires a port so there's
-    ;; something to link to.
+    ;; drop a tile asset at services/homer/tools/<name>.png to opt in.
+    ;; Plumbing services (mcpo, mcp-grafana) ship no asset and are
+    ;; auto-excluded. Still requires a port so there's something to
+    ;; link to.
+    ;;
+    ;; The path must stay in sync with what the dashboard actually
+    ;; serves: its config dir is mounted at /www/assets, and tile URLs
+    ;; are emitted as "assets/tools/<name>.png", so the file has to land
+    ;; at config/<svc>/tools/ — one level shallower than the intuitive
+    ;; assets/tools/. Rendering to assets/tools/ produces a file the web
+    ;; server never serves, and the only symptom is a broken tile image.
     (setf (getf s :displayable)
           (and (getf s :port)
-               (probe-file (format nil "services/homer/assets/tools/~A.png" name))
+               (probe-file (format nil "services/homer/tools/~A.png" name))
                t))
     ;; How a service is reached from outside. Two modes:
     ;;
