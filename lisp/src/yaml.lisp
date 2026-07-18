@@ -87,6 +87,33 @@
                :single-quoted-scalar-style
                :plain-scalar-style)))
 
+;;; Upstream fix: cl-yaml's emit-scalar (src/emitter.lisp) passes
+;;; (length printed-value) — a CHARACTER count — as libyaml's
+;;; scalar_event length, which is specified in BYTES of the UTF-8
+;;; encoding. CFFI hands libyaml the encoded octets, so any scalar
+;;; containing non-ASCII is truncated by exactly (bytes - chars): a
+;;; string with four em-dashes silently loses its last 8 characters.
+;;;
+;;; It bites manifest values that carry prose, i.e. the `api_resources`
+;;; literal blocks, and it fails silently — the truncation lands at the
+;;; end of the value, so it only became visible once a block ended in
+;;; load-bearing content rather than a trailing comment.
+;;;
+;;; Redefining the function rather than forking cl-yaml keeps the fix in
+;;; one readable place; re-check it after `qlot update cl-yaml`.
+(defun yaml.emitter::emit-scalar (emitter value &rest rest
+                                  &key anchor tag plain-implicit
+                                       quoted-implicit style)
+  (declare (ignorable anchor tag plain-implicit quoted-implicit style))
+  (let ((printed-value (yaml.emitter::print-scalar value)))
+    (apply #'yaml.emitter::scalar-event
+           (yaml.emitter::foreign-event emitter)
+           printed-value
+           (babel:string-size-in-octets printed-value :encoding :utf-8)
+           rest)
+    (libyaml.emitter:emit (yaml.emitter::foreign-emitter emitter)
+                          (yaml.emitter::foreign-event emitter))))
+
 ;;; JSON emission — same plist-tree shape, JSON output.
 ;;; Used by templates that produce JSON config files (e.g. docker daemon.json).
 
