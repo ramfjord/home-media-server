@@ -72,6 +72,19 @@ service_overrides:
     # service_overrides.authelia.oidc_vikunja_client_secret_hash — see
     # services/authelia/README.md "OIDC secrets" to mint the pair.
     oidc_client_secret: "REPLACE_ME"
+  # Audiobookshelf root account, created on first deploy by api-config
+  # (POST /init). api-config logs in as it every deploy to reconcile the
+  # OIDC settings, and it stays valid as the break-glass local login if
+  # OIDC ever breaks — ABS's only other recovery is editing its SQLite
+  # by hand. Generate with `openssl rand -base64 24`.
+  audiobookshelf:
+    admin_username: "admin"
+    admin_password: "REPLACE_ME"
+    # OIDC client secret (plaintext); Authelia stores the pbkdf2 hash of
+    # the same value under
+    # service_overrides.authelia.oidc_audiobookshelf_client_secret_hash —
+    # see services/authelia/README.md "OIDC secrets" to mint the pair.
+    oidc_client_secret: "REPLACE_ME"
   # Ollama: defaults are CPU-only. Uncomment to opt into NVIDIA GPU
   # passthrough. Requires nvidia-container-toolkit on the host. See
   # services/ollama/README.md for VRAM sizing and model selection.

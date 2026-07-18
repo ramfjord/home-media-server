@@ -29,29 +29,36 @@ service_overrides:
     session_secret: "<rand>"
     storage_encryption_key: "<rand>"
     # OIDC provider (identity_providers.oidc). Required once any OIDC
-    # client is configured (Vikunja). See "OIDC secrets" below.
+    # client is configured (Vikunja, Audiobookshelf). See "OIDC secrets"
+    # below. One hash key per client.
     oidc_hmac_secret: "<rand>"
     oidc_issuer_key: |
       -----BEGIN PRIVATE KEY-----
       ...
       -----END PRIVATE KEY-----
     oidc_vikunja_client_secret_hash: "$pbkdf2-sha512$..."
+    oidc_audiobookshelf_client_secret_hash: "$pbkdf2-sha512$..."
     users:
       - username: thomas
         displayname: Thomas
         email: thomas.ramfjord@gmail.com
         password_hash: "$argon2id$v=19$m=65536,t=3,p=4$..."
-        groups: [admins]
+        groups: [admin]
       - username: ruby
         password_hash: "$argon2id$..."
-        groups: [users]
+        groups: [user]
 ```
 
 Per user: `username` and `password_hash` are required;
 `displayname` (defaults to `username`), `email`, and `groups` are
-optional. `groups` is advisory until per-app `access_control` rules
-exist — `access_control` is currently just `default_policy:
-one_factor` (any authenticated user reaches any gated app).
+optional. `access_control` is currently just `default_policy:
+one_factor` (any authenticated user reaches any gated app), so
+`groups` grants no gateway access of its own — but it is **not**
+inert: Audiobookshelf reads the OIDC `groups` claim and maps it onto
+its own role, matching `admin`/`user`/`guest` literally. Hence the
+singular names above. A user whose groups match none of the three is
+denied login to that service (see
+[services/audiobookshelf/README.md](../audiobookshelf/README.md)).
 
 Generate the three secrets with the pinned image (no local Authelia
 install needed):
@@ -179,6 +186,37 @@ for this service. Caddy's `reverse_proxy` default already preserves
   `config/authelia` writable — Authelia writes `db.sqlite3` as root
   and blocks the next `make all`. Use a throwaway dir and
   `--user "$(id -u):$(id -g)"`.
+- **Only `users_database.yml` hot-reloads** (`file.watch: true`).
+  Everything else in `configuration.yml` — notably the OIDC
+  `clients:` list — is read once at boot, so adding an OIDC client
+  takes effect only after Authelia restarts. Until then the client is
+  absent from Authelia's memory and the app's authorize request fails
+  with `invalid_client` / "The requested OAuth 2.0 Client does not
+  exist" while the on-disk config plainly contains it. Confirm the
+  restart landed, not just the file:
+
+  ```sh
+  docker ps --filter name=authelia --format '{{.Status}}'   # uptime < the deploy
+  ```
+
+- Authelia watches three files, so a deploy that touches them together
+  can trip systemd's default `StartLimitBurst=5`/`10s` on
+  `authelia-compose-reload.service`. That unit then sits in
+  `start-limit-hit` **indefinitely**, silently dropping every later
+  config reload. Clear it with `systemctl reset-failed`, and note the
+  path units are `RequiredBy=authelia.service` — restarting the service
+  re-arms them, so an unwedge with pending inotify events can bounce
+  Authelia in a loop until its own start limit trips too. Break the
+  loop by disabling the path units, starting the service, then
+  re-enabling:
+
+  ```sh
+  sudo systemctl stop authelia.path authelia-compose.path
+  sudo systemctl disable authelia.path authelia-compose.path
+  sudo systemctl reset-failed authelia.service authelia-compose-reload.service
+  sudo systemctl start authelia.service
+  sudo systemctl enable --now authelia.path authelia-compose.path
+  ```
 
 ## More
 

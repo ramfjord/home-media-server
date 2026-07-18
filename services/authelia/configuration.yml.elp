@@ -85,6 +85,36 @@ identity_providers:
         userinfo_signed_response_alg: 'none'
         token_endpoint_auth_method: 'client_secret_basic'
 
+      # Audiobookshelf (services/audiobookshelf): path-routed under
+      # /audiobookshelf on the main 443 site, so the callbacks carry that
+      # prefix — ABS emits them that way because its config sets
+      # authOpenIDSubfolderForRedirectURLs. The third URI is the mobile
+      # app's custom scheme: the Android/iOS clients complete the code
+      # flow in-app, which is why ABS is gated by OIDC rather than by
+      # caddy forward_auth. PKCE is on (ABS supports S256).
+      #
+      # `groups` scope: ABS reads the standard groups claim and maps it
+      # onto its own role, which is why the group names in
+      # users_database are `admin`/`user` rather than plurals — ABS
+      # matches them literally. See services/audiobookshelf/README.md.
+      - client_id: 'audiobookshelf'
+        client_name: 'Audiobookshelf'
+        client_secret: '<%= (for-service :authelia oidc_audiobookshelf_client_secret_hash) %>'
+        public: false
+        authorization_policy: 'one_factor'
+        require_pkce: true
+        pkce_challenge_method: 'S256'
+        redirect_uris:
+          - 'https://<%= hostname %>/audiobookshelf/auth/openid/callback'
+          - 'https://<%= hostname %>/audiobookshelf/auth/openid/mobile-redirect'
+          - 'audiobookshelf://oauth'
+        scopes: ['openid', 'profile', 'email', 'groups']
+        response_types: ['code']
+        grant_types: ['authorization_code']
+        access_token_signed_response_alg: 'none'
+        userinfo_signed_response_alg: 'none'
+        token_endpoint_auth_method: 'client_secret_basic'
+
 session:
   secret: '<%= (for-service :authelia session_secret) %>'
   cookies:

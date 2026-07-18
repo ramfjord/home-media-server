@@ -1,0 +1,134 @@
+---
+name: audiobookshelf
+partof: streaming
+desc: Audiobook and podcast server
+port: 80
+# /audiobookshelf is the only subpath Audiobookshelf supports — the value
+# is fixed upstream, not configurable. The server rewrites any request
+# whose path doesn't already start with ROUTER_BASE_PATH to include it,
+# so the browser (via caddy) and api-config (via internal_url) both land
+# correctly. Mirrors the env var below, same shape as radarr's URLBASE.
+internal_path: /audiobookshelf
+healthz: /healthcheck
+group: mediaserver
+docker_config:
+  image: ghcr.io/advplyr/audiobookshelf:latest
+  environment:
+  - ROUTER_BASE_PATH=/audiobookshelf
+  # Scan artifacts (cover art, extracted metadata) live *under* /config
+  # rather than in a second bind mount. A nested bind would be created
+  # by docker as root at container-create — after the deploy's chown -R
+  # has already run over the service dir — leaving ABS unable to write
+  # it on a first deploy. As a plain subdirectory ABS mkdirs it itself,
+  # as the service user, on a tree it already owns.
+  - METADATA_PATH=/config/metadata
+  volumes:
+  - "<%= install_base %>/config/audiobookshelf:/config"
+  - "<%= media_path %>/Audiobooks:/audiobooks"
+  - "<%= media_path %>/Podcasts:/podcasts"
+  restart: unless-stopped
+api_config:
+  # Setup/auth endpoints (/init, /login, /status) sit at the root while
+  # the rest of the API is under /api/*. base_url defaults to
+  # internal_url (http://audiobookshelf:80/audiobookshelf) and the
+  # base-path rewrite makes it correct for both, so neither needs an
+  # override. api_version is documentary — the steps write full paths.
+  api_version: v1
+# Literal block — ELP tags resolve at stage 2. Reconciles the root user
+# and the whole OIDC config every deploy, so Settings → Authentication is
+# config-as-code (and clobbers manual UI edits to those fields).
+api_resources: |
+  steps:
+    - name: init-root-user
+      request:
+        method: POST
+        url: $base_url/init
+        json:
+          newRoot:
+            username: "<%= (for-service :audiobookshelf admin_username) %>"
+            password: "<%= (for-service :audiobookshelf admin_password) %>"
+      success_when:
+        status: 200
+      # ABS returns 500 here once a root user exists — i.e. every deploy
+      # after the first. Benign, and `continue` logs it at WARNING (not
+      # ERROR) so it stays out of the ServiceLogErrors counter, the same
+      # way open-webui's "user exists" 400 does.
+      on_failure: continue
+    - name: login
+      request:
+        method: POST
+        url: $base_url/login
+        json:
+          username: "<%= (for-service :audiobookshelf admin_username) %>"
+          password: "<%= (for-service :audiobookshelf admin_password) %>"
+      # v2.26+ nests the bearer at user.accessToken; the flat "token" key
+      # open-webui matches on no longer exists here. Extraction is a
+      # regex over the whole response body, so the nesting doesn't matter.
+      extract:
+        regex: '"accessToken"\s*:\s*"([^"]+)"'
+        store_as: token
+      success_when:
+        status: 200
+      # Steps get no transport-level retry of their own (unlike upserts),
+      # and this flow can start before ABS has finished its first-boot
+      # migrations. Budget covers the cold-start window.
+      retry_budget_seconds: 180
+    - name: configure-oidc
+      request:
+        method: PATCH
+        url: $base_url/api/auth-settings
+        headers:
+          Authorization: "Bearer $token"
+        # The endpoint URLs must be spelled out: ABS derives nothing from
+        # the issuer server-side — its "Auto-populate" button is a
+        # client-side fetch of the provider's discovery document. These
+        # are Authelia's fixed OIDC paths.
+        json:
+          authOpenIDIssuerURL: "https://<%= hostname %>:<%= (for-service :authelia public_port) %>"
+          authOpenIDAuthorizationURL: "https://<%= hostname %>:<%= (for-service :authelia public_port) %>/api/oidc/authorization"
+          authOpenIDTokenURL: "https://<%= hostname %>:<%= (for-service :authelia public_port) %>/api/oidc/token"
+          authOpenIDUserInfoURL: "https://<%= hostname %>:<%= (for-service :authelia public_port) %>/api/oidc/userinfo"
+          authOpenIDJwksURL: "https://<%= hostname %>:<%= (for-service :authelia public_port) %>/jwks.json"
+          authOpenIDTokenSigningAlgorithm: RS256
+          authOpenIDClientID: audiobookshelf
+          authOpenIDClientSecret: "<%= (for-service :audiobookshelf oidc_client_secret) %>"
+          authOpenIDButtonText: "Login with Authelia"
+          # Authelia is the identity; match its username to an ABS user so
+          # the Authelia login and any pre-existing ABS account converge.
+          authOpenIDMatchExistingBy: username
+          authOpenIDAutoRegister: true
+          # ABS reconciles user.type from this claim on every login,
+          # matching group names literally against admin/user/guest
+          # (lowercased, in that priority order). Authelia's groups are
+          # named to match. Setting this also appends the claim name to
+          # ABS's requested scope, hence `groups` on the Authelia client.
+          #
+          # Sharp edge: a user whose groups contain none of those three
+          # is DENIED login (OidcAuthStrategy throws), as is a user with
+          # the claim absent entirely. Every Authelia user therefore
+          # needs one of admin/user/guest to use this service.
+          authOpenIDGroupClaim: groups
+          # Path prefix ABS prepends when it builds its OIDC redirect
+          # URIs (`${this}/auth/openid/callback`) — a string, not a
+          # flag; '' means "no subfolder". Required here: without it ABS
+          # advertises callbacks at the host root, which caddy doesn't
+          # route and Authelia rejects as a redirect_uri mismatch.
+          authOpenIDSubfolderForRedirectURLs: "<%= (for-service :audiobookshelf internal_path) %>"
+          authOpenIDMobileRedirectURIs:
+          - "audiobookshelf://oauth"
+          # false: keep ABS's own login page reachable rather than
+          # bouncing straight to Authelia — see README, break-glass.
+          authOpenIDAutoLaunch: false
+          # `local` stays enabled deliberately. If OIDC breaks, ABS's
+          # documented recovery is hand-editing its SQLite DB; the root
+          # account (password in config.local.yml) avoids that.
+          authActiveAuthMethods:
+          - local
+          - openid
+order: 71  # after jellyfin/plex (70), before api-config (200)
+
+# Deliberately NOT gateway_auth. Caddy forward_auth would 302 the ABS
+# mobile apps to Authelia on every /api call and they can't complete the
+# flow — the same breakage that made vikunja drop its gate. Auth is ABS's
+# own Authelia OIDC (configure-oidc above), which the apps handle
+# natively via the audiobookshelf://oauth redirect.

@@ -49,6 +49,7 @@ Every web UI is reached at `https://<tailnet-fqdn>/<path>`, with caddy fronting 
 | [qBittorrent](services/qbittorrent/) | downloading | `/qbittorrent` | Torrent client (shares WireGuard's netns) |
 | [Jellyfin](services/jellyfin/) | streaming | `/jellyfin` | Media server with optional GPU transcoding |
 | [Plex](services/plex/) | streaming | `:32400` | Media server, internet-reachable for remote TV clients (plex.tv remote access) |
+| [Audiobookshelf](services/audiobookshelf/) | streaming | `/audiobookshelf` | Audiobook and podcast server (Authelia OIDC, native mobile apps) |
 | [Vaultwarden](services/vaultwarden/) | security | `/vaultwarden` | Self-hosted Bitwarden-compatible password manager |
 | [Authelia](services/authelia/) | security | `:9091` | Single sign-on / forward-auth portal for the gated web UIs |
 | [Vikunja](services/vikunja/) | productivity | `:8004` | Task management / to-do (dedicated port, Authelia-gated) |
