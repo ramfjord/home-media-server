@@ -18,7 +18,18 @@ chownall:
            (host-owner (or (getf service :host_config_owner) owner))
            (host-grp   (or (getf service :host_config_group) grp))) -%>
 	@chown -R <%= host-owner %>:<%= host-grp %> <%= name %>/
-	@printf 'SVC_UID=%s\nSVC_GID=%s\n' "$$(id -u <%= owner %>)" "<%= gid %>" > <%= name %>/.env
+<%# SVC_PUID = the host_config_owner's numeric uid, i.e. the user that   -%>
+<%# owns /config. Identical to SVC_UID unless host_config_owner differs  -%>
+<%# from user. Needed by images that cannot start non-root (their s6     -%>
+<%# run script calls s6-applyuidgid, which needs CAP_SETGID) and so run  -%>
+<%# as `user: root` while dropping privileges themselves via PUID/PGID:  -%>
+<%# SVC_UID is 0 for those, so it can't name the target user. See        -%>
+<%# CONTRIBUTING.md "Images that cannot start as a non-root user".       -%>
+<%#                                                                     -%>
+<%# host_config_owner may be a bare numeric uid (wireguard uses 911, an -%>
+<%# id with no host passwd entry), which `id -u` cannot resolve — fall  -%>
+<%# back to the literal so it passes through unchanged.                 -%>
+	@printf 'SVC_UID=%s\nSVC_GID=%s\nSVC_PUID=%s\n' "$$(id -u <%= owner %>)" "<%= gid %>" "$$(id -u <%= host-owner %> 2>/dev/null || echo <%= host-owner %>)" > <%= name %>/.env
 <%- )) -%>
 
 # First deploy ever — baseline doesn't exist. Materialize an empty file so

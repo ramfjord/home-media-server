@@ -59,6 +59,40 @@ don't need to touch the template to add entries.
 
 The default `__service__.service.elp` template generates a `Type=simple` + `Restart=on-failure` unit suitable for long-running containers. To override directives without forking the template, set `systemd_override:` in `service.yml.elp` to a literal drop-in body — it's emitted to `<svc>.service.d/override.conf` and composed by systemd at load time. To replace an inherited `ExecStart` (a list-valued directive), reset it with an empty `ExecStart=` line before the new one. ELP tags in the body render in the manifest's **top-level scope**: globals like `<%= install_base %>` resolve, but per-service and derived fields (`compose_file`, `name`) do **not** bind there — build paths from a global plus the literal service name. See `services/api-config/service.yml.elp` for the canonical use (oneshot reconcile job, ExecStart→`compose run --rm` so the exit code propagates).
 
+## Images that cannot start as a non-root user
+
+Services normally run as their own host user: the compose template emits
+`user: ${SVC_UID}:${SVC_GID}`, and the deploy writes those into
+`config/<svc>/.env` from the `user:` and `group:` fields.
+
+Some images reject that. The tell is an s6 supervisor crash-loop with
+`s6-applyuidgid: fatal: unable to set supplementary group list: Operation
+not permitted` — the image's service `run` script calls `s6-applyuidgid`
+unconditionally, which needs `CAP_SETGID` and therefore a root start.
+(Most lscr.io images use the newer pattern and are fine; `lazylibrarian`
+is the one that isn't.)
+
+For those, start as root and let the image drop privileges itself:
+
+```yaml
+user: root                       # -> SVC_UID=0, container starts as root
+host_config_owner: lazylibrarian # -> chowns /config, supplies SVC_PUID
+docker_config:
+  environment:
+  - PUID=${SVC_PUID}
+  - PGID=${SVC_GID}
+```
+
+`SVC_PUID` is `host_config_owner`'s numeric uid, written to `.env`
+alongside `SVC_UID`/`SVC_GID`. It exists because `user: root` forces
+`SVC_UID=0`, which can no longer name the user to drop *to*. Where
+`host_config_owner` is unset it equals `SVC_UID`, so every other service
+is unaffected.
+
+Net effect: only container init runs as root; the app process and the
+`/config` files are owned by the service's host user, same as everywhere
+else.
+
 ## Adding a file under `/etc/`
 
 `/etc/` files (currently just `/etc/docker/daemon.json`, rendered from `targets/debian/etc/docker/daemon.json.elp`) live outside the per-service `/opt/mediaserver/config/` tree, so the deploy pipeline treats them differently: each `/etc/` file gets an **explicit per-file rule** in `targets/debian/Makefile.elp` declaring (a) where the rendered staging copy lands and (b) what reload to fire when it changes. The rule uses `cmp -s` so the reload only triggers on actual content change, not just an mtime bump from the render step.

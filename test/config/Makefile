@@ -5,15 +5,15 @@ INSTALL_BASE := /opt/fx-mediaserver
 
 chownall:
 	@chown -R root:$$(id -gn root) fx-wireguard/
-	@printf 'SVC_UID=%s\nSVC_GID=%s\n' "$$(id -u root)" "$$(id -g root)" > fx-wireguard/.env
+	@printf 'SVC_UID=%s\nSVC_GID=%s\nSVC_PUID=%s\n' "$$(id -u root)" "$$(id -g root)" "$$(id -u root 2>/dev/null || echo root)" > fx-wireguard/.env
 	@chown -R fx-caddy:$$(id -gn fx-caddy) fx-caddy/
-	@printf 'SVC_UID=%s\nSVC_GID=%s\n' "$$(id -u fx-caddy)" "$$(id -g fx-caddy)" > fx-caddy/.env
+	@printf 'SVC_UID=%s\nSVC_GID=%s\nSVC_PUID=%s\n' "$$(id -u fx-caddy)" "$$(id -g fx-caddy)" "$$(id -u fx-caddy 2>/dev/null || echo fx-caddy)" > fx-caddy/.env
 	@chown -R fx-sonarr:$$(id -gn fx-sonarr) fx-sonarr/
-	@printf 'SVC_UID=%s\nSVC_GID=%s\n' "$$(id -u fx-sonarr)" "$$(id -g fx-sonarr)" > fx-sonarr/.env
+	@printf 'SVC_UID=%s\nSVC_GID=%s\nSVC_PUID=%s\n' "$$(id -u fx-sonarr)" "$$(id -g fx-sonarr)" "$$(id -u fx-sonarr 2>/dev/null || echo fx-sonarr)" > fx-sonarr/.env
 	@chown -R fx-qbittorrent:$$(id -gn fx-qbittorrent) fx-qbittorrent/
-	@printf 'SVC_UID=%s\nSVC_GID=%s\n' "$$(id -u fx-qbittorrent)" "$$(id -g fx-qbittorrent)" > fx-qbittorrent/.env
+	@printf 'SVC_UID=%s\nSVC_GID=%s\nSVC_PUID=%s\n' "$$(id -u fx-qbittorrent)" "$$(id -g fx-qbittorrent)" "$$(id -u fx-qbittorrent 2>/dev/null || echo fx-qbittorrent)" > fx-qbittorrent/.env
 	@chown -R fx-prometheus:$$(id -gn fx-prometheus) fx-prometheus/
-	@printf 'SVC_UID=%s\nSVC_GID=%s\n' "$$(id -u fx-prometheus)" "$$(id -g fx-prometheus)" > fx-prometheus/.env
+	@printf 'SVC_UID=%s\nSVC_GID=%s\nSVC_PUID=%s\n' "$$(id -u fx-prometheus)" "$$(id -g fx-prometheus)" "$$(id -u fx-prometheus 2>/dev/null || echo fx-prometheus)" > fx-prometheus/.env
 
 # First deploy ever — baseline doesn't exist. Materialize an empty file so
 # the diff below sees nothing-to-remove. The next rsync overwrites it with
