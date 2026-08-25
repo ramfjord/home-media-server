@@ -32,7 +32,7 @@ feed the `inhibit_rules` here:
 | Marker | Window | Inhibits |
 |---|---|---|
 | `StackStarting` | host booted <15m ago | everything (`boot-settle`, no `equal`) |
-| `ServiceStarting` | container created <10m ago | that service only (`service-settle`, `equal: [service]`) |
+| `ServiceStarting` | container created **or** systemd unit started <10m ago | that service only (`service-settle`, `equal: [service]`) |
 
 Both terminate on the `null` receiver — a receiver with no integration
 configs — so they never post to Discord.
@@ -45,27 +45,26 @@ fires and mute nothing. Both windows are sized past 5m for that reason.
 Suppressed is not dropped: an alert muted during a settle window
 notifies once the marker clears, at the next `group_interval`.
 
-**`ServiceStarting` tracks container *creation*, not container start.**
-Its source, cadvisor's `container_start_time_seconds`, reports docker's
-`.Created` — not `.State.StartedAt`. So it fires when a container is
-recreated (a deploy whose config changed, an image pull, `compose up
---force-recreate`) and stays silent when an existing container restarts
-in place.
+**`ServiceStarting` needs two sources because neither covers the
+other.** cadvisor's `container_start_time_seconds` is docker's
+`.Created`, not `.State.StartedAt`, so it moves on container
+*recreate* (the `make install` path) and never on an in-place restart —
+measured on this host, homer's `.Created` age read 90 days through a
+`systemctl restart`. `node_systemd_unit_start_time_seconds` moves
+whenever the unit starts, but a compose-level recreate can leave the
+unit itself running. The rule ORs them.
 
 **Not covered:**
 
-- In-place restarts. `systemctl restart <svc>` that reuses the
-  container, and docker's own `restart: unless-stopped` after a crash,
-  both leave `.Created` untouched — that noise still reaches Discord.
-- A crash-looping container cannot mute itself indefinitely, for the
-  same reason: restarts don't re-arm the marker. There is no
-  permanently-inhibited-service failure mode here.
-- `SystemdUnitFailed` does not back any of this up. node-exporter runs
-  without `--collector.systemd`, so `node_systemd_unit_state` does not
-  exist on this host and that alert can never fire.
+- Docker's own `restart: unless-stopped` after a crash. It touches
+  neither `.Created` nor the systemd unit, so that noise still reaches
+  Discord. The flip side is that a crash-looping container cannot mute
+  itself indefinitely — there is no permanently-inhibited-service
+  failure mode here.
 
-If cadvisor is down, `ServiceStarting` disappears and nothing is muted
-— the failure direction that keeps alerting.
+If both cadvisor and node-exporter are down, `ServiceStarting`
+disappears and nothing is muted — the failure direction that keeps
+alerting.
 
 ## More
 

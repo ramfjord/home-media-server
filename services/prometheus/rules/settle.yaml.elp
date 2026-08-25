@@ -31,9 +31,19 @@ groups:
     # a container still failing its healthcheck 10m after starting is
     # not settling, it is broken.
     #
-    # Sourced from cadvisor. If cadvisor is down the markers vanish and
+    # Two sources, because neither covers the other. cadvisor's
+    # container_start_time_seconds is docker's .Created, so it moves on
+    # container *recreate* (the `make install` path) and not on an
+    # in-place `systemctl restart`. node_systemd_unit_start_time_seconds
+    # moves whenever the unit starts, but a compose-level recreate can
+    # leave the unit itself running. OR'd, they cover both.
+    #
+    # If either exporter is down its half of the marker vanishes and
     # nothing is muted — the failure direction that keeps alerting.
     - alert: ServiceStarting
-      expr: time() - container_start_time_seconds{service!=""} < 600
+      expr: |
+        (time() - container_start_time_seconds{service!=""} < 600)
+        or
+        (time() - node_systemd_unit_start_time_seconds{service!=""} < 600)
       annotations:
         summary: "{{ $labels.service }} container started {{ $value | printf \"%.0f\" }}s ago — its alerts are muted while it settles"

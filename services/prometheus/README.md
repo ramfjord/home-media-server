@@ -27,7 +27,7 @@ deciding "would a regression here be caught?"
 | `TargetDown` | `up == 0` for 5m — Prometheus can't scrape a target at all | [rules.yaml.elp](rules/rules.yaml.elp) |
 | `BlackboxProbeFailed` | `probe_success == 0` for 5m — an HTTP probe came back non-2xx | [blackbox.yaml.elp](rules/blackbox.yaml.elp) |
 | `BlackboxSslCertificate*` | tailnet cert <20d / <3d / expired | [blackbox.yaml.elp](rules/blackbox.yaml.elp) |
-| `SystemdUnitFailed` | **inert** — node-exporter runs without `--collector.systemd`, so `node_systemd_unit_state` does not exist and this can never fire | [mediaserver.yaml.elp](rules/mediaserver.yaml.elp) |
+| `SystemdUnitFailed` | a unit this repo generates is in `state=failed` for 5m. Scoped to those units only — see [services/node-exporter/README.md](../node-exporter/README.md#systemd-collector) | [mediaserver.yaml.elp](rules/mediaserver.yaml.elp) |
 | `VolumeFillingUp` | `predict_linear` on 24h of `node_filesystem_avail_bytes` projects exhaustion within 5d (won't fire on full-but-stable) | [mediaserver.yaml.elp](rules/mediaserver.yaml.elp) |
 | `ServiceLogErrors` | journald error rate for a unit exceeds threshold | [journal.yaml.elp](rules/journal.yaml.elp) |
 | `Prometheus*` / `Blackbox*Reload*` | self-monitoring: crashloop, config reload failure | [rules.yaml.elp](rules/rules.yaml.elp) |
