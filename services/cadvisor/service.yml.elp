@@ -27,6 +27,28 @@ docker_config:
   - CADVISOR_HEALTHCHECK_URL=http://localhost:8080/cadvisor/healthz
   command:
   - "--url_base_prefix=/cadvisor"
+  # Resource ceiling flags. cadvisor's defaults are tuned for a small
+  # cgroup tree; on this host they cost ~6 of 8 cores steady-state and
+  # leak RSS to >1.5G over a week.
+  #
+  # 1s is the per-container housekeeping floor. 30s matches
+  # prometheus scrape_interval — anything finer is sampled away.
+  - "--housekeeping_interval=30s"
+  # Skip the systemd/raw cgroup tree. Only docker containers are
+  # scraped, and every non-docker slice is dead weight.
+  - "--docker_only=true"
+  # Container labels and env become prometheus labels by default,
+  # multiplying series per container. name/alias/image still emit.
+  - "--store_container_labels=false"
+  # Allowlist, not a denylist: overrides --disable_metrics entirely, so
+  # a new default-on family in a future image cannot silently reappear.
+  # Covers everything consumed here (container_cpu_usage_seconds_total,
+  # container_memory_*, container_network_*, container_fs_writes_bytes_total);
+  # container_health_state is ungated and always emitted.
+  # Chiefly drops `disk`, which stat()s every mount cadvisor can see —
+  # each overlay2 layer reachable via several nested paths through the
+  # /rootfs bind, plus the multi-TB NFS media mount.
+  - "--enable_metrics=cpu,memory,network,diskIO,oom_event"
   volumes:
   - "/:/rootfs:ro"
   - "/var/run:/var/run:ro"
@@ -37,4 +59,7 @@ docker_config:
   devices:
   - "/dev/kmsg"
   restart: unless-stopped
+  # Backstop: a leak gets OOM-killed and restarted rather than pushing
+  # the host into swap. Steady-state RSS is ~150-200M.
+  mem_limit: 1g
 order: 140

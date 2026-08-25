@@ -23,6 +23,33 @@ cadvisor runs under `--url_base_prefix=/cadvisor`, so `CADVISOR_HEALTHCHECK_URL`
 is overridden to `/cadvisor/healthz` — the image default `/healthz`
 404s under the prefix and leaves the container perpetually unhealthy.
 
+## Resource ceiling
+
+Default flags are the wrong shape for this host: cadvisor's `disk`
+collector stat()s every mount it can see, and the `/rootfs` bind makes
+each overlay2 layer reachable by several nested paths on top of the
+multi-TB NFS media mount. Left at defaults it settles at ~6 of 8 cores
+and leaks RSS past 1.5G within a week, which is enough to hold the CPU
+package near 90°C indefinitely.
+
+`service.yml.elp` therefore pins housekeeping to 30s, restricts
+collection to docker containers, drops container labels from the metric
+set, and allowlists metric families with `--enable_metrics` (an
+allowlist so a future image's new default-on family can't silently
+reappear). `mem_limit: 1g` is the backstop.
+
+**Accepted risk:** the `disk` family is off, so `container_fs_usage_bytes`,
+`container_fs_limit_bytes`, and `container_fs_inodes_*` are not
+collected — per-container filesystem *usage* is unobservable here.
+Nothing alerts on them; `VolumeFillingUp` reads node-exporter's
+`node_filesystem_avail_bytes`, which measures the host filesystems the
+containers actually write to. `diskIO` stays on, so
+`container_fs_writes_bytes_total` (the top-talkers dashboard) is intact.
+
+**Not covered:** nothing alerts on a container consuming sustained CPU.
+cadvisor's own runaway was invisible until the host was inspected by
+hand.
+
 ## More
 
 - Upstream: <https://github.com/google/cadvisor>
