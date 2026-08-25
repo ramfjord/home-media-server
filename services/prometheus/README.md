@@ -27,11 +27,12 @@ deciding "would a regression here be caught?"
 | `TargetDown` | `up == 0` for 5m — Prometheus can't scrape a target at all | [rules.yaml.elp](rules/rules.yaml.elp) |
 | `BlackboxProbeFailed` | `probe_success == 0` for 5m — an HTTP probe came back non-2xx | [blackbox.yaml.elp](rules/blackbox.yaml.elp) |
 | `BlackboxSslCertificate*` | tailnet cert <20d / <3d / expired | [blackbox.yaml.elp](rules/blackbox.yaml.elp) |
-| `SystemdUnitFailed` | a unit stays in `failed` state for ≥5m (level-triggered, not edge — sub-5m flaps don't page) | [mediaserver.yaml.elp](rules/mediaserver.yaml.elp) |
+| `SystemdUnitFailed` | **inert** — node-exporter runs without `--collector.systemd`, so `node_systemd_unit_state` does not exist and this can never fire | [mediaserver.yaml.elp](rules/mediaserver.yaml.elp) |
 | `VolumeFillingUp` | `predict_linear` on 24h of `node_filesystem_avail_bytes` projects exhaustion within 5d (won't fire on full-but-stable) | [mediaserver.yaml.elp](rules/mediaserver.yaml.elp) |
 | `ServiceLogErrors` | journald error rate for a unit exceeds threshold | [journal.yaml.elp](rules/journal.yaml.elp) |
 | `Prometheus*` / `Blackbox*Reload*` | self-monitoring: crashloop, config reload failure | [rules.yaml.elp](rules/rules.yaml.elp) |
 | `WireGuardTunnelStale` | no WireGuard handshake in >3m for 5m — tunnel dead, containment now on the killswitch alone (does **not** mean a leak; the killswitch fails closed) | [vpn.yaml.elp](rules/vpn.yaml.elp) |
+| `StackStarting` / `ServiceStarting` | **never page** — markers routed to a `null` receiver that Alertmanager uses as inhibition sources to mute restart noise (see [services/alertmanager/README.md](../alertmanager/README.md#settle-windows-muting-restart-noise)) | [settle.yaml.elp](rules/settle.yaml.elp) |
 
 `ServiceLogErrors` counts journald error lines; unit-less kernel noise
 buckets under `service=alloy`. Per-host noise (e.g. a flaky NIC) can be

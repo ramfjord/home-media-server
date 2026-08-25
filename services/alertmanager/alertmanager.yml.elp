@@ -12,8 +12,20 @@ route:
   group_interval: 5m
   repeat_interval: 4h
   receiver: discord
+  routes:
+    # StackStarting / ServiceStarting exist only to inhibit other
+    # alerts (see inhibit_rules). They are not incidents, so they
+    # terminate here on a receiver with no integrations rather than
+    # posting to Discord.
+    - matchers:
+      - alertname=~"StackStarting|ServiceStarting"
+      receiver: 'null'
 
 receivers:
+  # Terminal sink for the settle markers. A receiver with no
+  # integration configs is a valid drop.
+  - name: 'null'
+
 #   - name: 'web.hook'
 #     webhook_configs:
 #       - url: 'http://127.0.0.1:5001/'
@@ -30,8 +42,17 @@ receivers:
 
 
 inhibit_rules:
-  - equal: ['partof']
-    # source_match:
-    #   severity: 'critical'
-    # target_match:
-    #   severity: 'warning'
+  # Mute the whole stack while the host boots. No `equal`: with no
+  # label names listed the rule applies to every target, which is the
+  # intent — at boot everything is failing for the same reason.
+  - name: boot-settle
+    source_matchers: [ alertname="StackStarting" ]
+    target_matchers: [ alertname!="StackStarting" ]
+
+  # Mute one service while its container restarts. `equal: [service]`
+  # scopes it to the service that actually restarted; every other
+  # service keeps alerting normally.
+  - name: service-settle
+    source_matchers: [ alertname="ServiceStarting" ]
+    target_matchers: [ alertname!="ServiceStarting" ]
+    equal: ['service']

@@ -1,0 +1,39 @@
+groups:
+- name: Settle
+  rules:
+    # Marker alerts. Neither pages: alertmanager routes both to the
+    # `null` receiver and uses them purely as inhibition sources
+    # (services/alertmanager/alertmanager.yml.elp). They exist so a
+    # restart's inevitable probe/scrape failures don't reach Discord.
+    #
+    # Window sizing is the whole design. A settle window only mutes an
+    # alert if it is still firing when that alert's `for:` elapses —
+    # a window equal to the `for:` expires at the exact evaluation the
+    # alert arrives and mutes nothing. The dominant restart noise
+    # (BlackboxProbeFailed, TargetDown) is `for: 5m`, so both windows
+    # are sized past 5m, not at it.
+    #
+    # No `severity` label: these are not incidents.
+    #
+    # No `for:`: the marker must be firing before the alerts it mutes,
+    # so it has to fire on its first evaluation.
+
+    # Whole-host boot. 15m covers every `for:` in the ruleset including
+    # ContainerUnhealthy's 10m — at boot every container is fresh, so
+    # its healthcheck start_period is in play for all of them at once.
+    - alert: StackStarting
+      expr: time() - node_boot_time_seconds < 900
+      annotations:
+        summary: "host booted {{ $value | printf \"%.0f\" }}s ago — alerts muted while the stack settles"
+
+    # Single container (re)start. 10m clears the 5m `for:` alerts with
+    # margin and stops deliberately short of ContainerUnhealthy (10m):
+    # a container still failing its healthcheck 10m after starting is
+    # not settling, it is broken.
+    #
+    # Sourced from cadvisor. If cadvisor is down the markers vanish and
+    # nothing is muted — the failure direction that keeps alerting.
+    - alert: ServiceStarting
+      expr: time() - container_start_time_seconds{service!=""} < 600
+      annotations:
+        summary: "{{ $labels.service }} container started {{ $value | printf \"%.0f\" }}s ago — its alerts are muted while it settles"
