@@ -30,10 +30,19 @@ container's log (and caddy's). Confirm with:
 docker exec blackbox-exporter cat /etc/resolv.conf | grep -i ExtServers
 ```
 
-`dns` is set explicitly in `/etc/docker/daemon.json` to remove the race
-(see `targets/debian/etc/docker/daemon.json.elp`). A container created
-before that setting was in place keeps its old resolvers until it is
-recreated.
+`tailscale-dns-ready.service` closes the race by holding
+`docker.service` until the MagicDNS nameserver is actually in
+`/etc/resolv.conf`, so containers cannot start inside the gap. It is
+bounded at 60s and docker only `Wants=` it, so a Tailscale failure
+delays the boot rather than blocking it — and the failed unit pages via
+`SystemdUnitFailed` instead of degrading silently.
+
+Setting `dns` in `/etc/docker/daemon.json` is the obvious alternative
+and does not work: it takes wireguard down. See the rationale in
+`targets/debian/etc/docker/daemon.json.elp`.
+
+A container that started before the gate existed keeps its old resolvers
+until it is recreated.
 
 The `internal_probe_*` jobs are unaffected — they use container names,
 resolved by Docker's embedded resolver.

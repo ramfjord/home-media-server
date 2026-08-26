@@ -56,6 +56,6 @@ docker_config:
   # <svc>-compose-reload.service, <svc>.path, <svc>-compose.path.
   # Anchoring is added upstream as ^(?:...)$ -- do not add ^ or $ here,
   # a literal $ would be eaten by compose variable interpolation.
-  - '--collector.systemd.unit-include=(<%= (format nil "~{~A~^|~}" (mapcar (field :name) (service-where dockerized))) %>)(-compose)?(-reload)?\.(service|path)|mediaserver-network\.service|tailscale-cert\.(service|timer)'
+  - '--collector.systemd.unit-include=(<%= (format nil "~{~A~^|~}" (mapcar (field :name) (service-where dockerized))) %>)(-compose)?(-reload)?\.(service|path)|mediaserver-network\.service|tailscale-cert\.(service|timer)|tailscale-dns-ready\.service'
   restart: unless-stopped
 order: 145

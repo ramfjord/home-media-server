@@ -1,0 +1,39 @@
+<%- ; Gate: hold docker.service until Tailscale MagicDNS is actually in
+   ; /etc/resolv.conf.
+   ;
+   ; Docker binds a container's upstream resolvers when the container
+   ; STARTS, reading /etc/resolv.conf at that instant, and never
+   ; revisits them. tailscaled reports Started ~11.6s before it writes
+   ; that file, so ordering against tailscaled.service alone is
+   ; useless -- measured on this host, docker began starting 4.4s after
+   ; tailscaled's readiness signal and still lost by ~1.5s. Containers
+   ; that start inside the gap inherit the ISP's resolvers and can
+   ; never resolve the tailnet FQDN.
+   ;
+   ; Setting `dns` in daemon.json is the obvious alternative and does
+   ; not work here -- see targets/debian/etc/docker/daemon.json.elp.
+   ; This fixes WHEN containers start rather than WHAT they are told,
+   ; so resolvers stay host-derived and wireguard keeps the host-dialed
+   ; path it needs to bootstrap through its killswitch.
+   ;
+   ; The condition is the file docker actually reads, not a proxy for
+   ; it. Plain grep, no regex metacharacters: systemd applies its own
+   ; escape processing to ExecStart, and no other line in resolv.conf
+   ; can contain this string.
+   ;
+   ; `timeout` bounds the wait and avoids shell variables entirely
+   ; ($i would be expanded by systemd, not the shell). On timeout this
+   ; exits 124 and the unit fails -- deliberately loud: docker declares
+   ; Wants=, not Requires=, so it still starts, and SystemdUnitFailed
+   ; pages instead of the stack degrading silently.
+-%>
+[Unit]
+Description=Wait for Tailscale MagicDNS in /etc/resolv.conf
+Documentation=https://tailscale.com/kb/1235/resolv-conf
+After=tailscaled.service
+Wants=tailscaled.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/timeout 60 /bin/sh -c 'until grep -q "nameserver 100.100.100.100" /etc/resolv.conf; do sleep 1; done'

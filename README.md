@@ -82,6 +82,14 @@ Two distinct VPNs:
 - **WireGuard** (container) — routes the downloading stack through an external VPN provider for privacy on their outbound traffic.
 - **Tailscale** (host) — encrypted remote access to the box from personal devices. No internet-facing ports.
 
+`docker.service` is held at boot by `tailscale-dns-ready.service` until
+Tailscale's nameserver is in `/etc/resolv.conf`. Docker binds a
+container's upstream resolvers at container start and never revisits
+them, and tailscaled signals ready ~11s before it writes that file — so
+without the gate, containers starting in the gap can never resolve the
+tailnet FQDN. The gate is bounded and advisory (`Wants=`), so it delays
+a boot rather than blocking one.
+
 Caddy is the single HTTPS front door — it terminates TLS for every service and reverse-proxies them under their `/<name>` path. The cert (issued by `tailscale cert` for the host's tailnet FQDN) is renewed automatically by a systemd timer; see [docs/installation.md](docs/installation.md).
 
 ## Storage
