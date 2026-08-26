@@ -68,11 +68,11 @@
   '(:install_base "/opt/mediaserver"
     :media_path   "/data"
     :hostname     "localhost"
-    ;; Container logs flow to journald (driver-level) -> Alloy -> Loki.
-    ;; Stops growth on /var/lib/docker/containers/*-json.log entirely.
-    ;; Per-host additions (e.g. nvidia runtime for jellyfin GPU
-    ;; transcoding) merge in from config.local.yml's docker_daemon block.
-    :docker_daemon (:log-driver "journald"))
+    ;; docker_daemon intentionally has no default here: the defaults for
+    ;; /etc/docker/daemon.json live in targets/debian/etc/docker/daemon.json.elp,
+    ;; next to the file they describe. config.local.yml's docker_daemon
+    ;; block deep-merges onto them.
+    )
   "Fallback values for globals not set in any config file.")
 
 (defun load-config-from-args (service-paths override-paths)
