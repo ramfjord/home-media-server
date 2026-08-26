@@ -136,6 +136,37 @@ That asymmetry is the standing reason Jellyfin/qBittorrent user
 provisioning is *not* folded into this gateway; revisit only with a
 real secret store, not `config.local.yml`.
 
+## Cold-boot NTP race
+
+Authelia runs an NTP check at startup and exits `fatal` when the clock
+is not synced closely enough. On a cold boot it loses that race to
+`systemd-timesyncd`:
+
+```
+level=error msg="Error occurred running a startup check"
+  error="the system clock is not synchronized accurately enough" provider=ntp
+level=fatal providers="[ntp]"
+```
+
+The compose wrapper exits 0, so `Restart=on-failure` does not retry, and
+authelia stays dead. Every gated service then 502s — caddy's
+`forward_auth` cannot resolve `authelia`, and the symptom presents as
+the *gated* service being broken rather than authelia.
+
+`after_host_units: [systemd-time-wait-sync.service]` orders the unit
+after the clock is actually synced. Ordering against `time-sync.target`
+is not sufficient: on this host that target only pulls `time-set.target`
+(clock *set*, possibly from the RTC), not clock *synced*.
+
+Do not fix this with `ntp.disable_startup_check: true`. The check exists
+because TOTP is clock-dependent; disabling it trades a loud startup
+failure for silently wrong 2FA codes.
+
+**Accepted risk:** `systemd-time-wait-sync.service` has no built-in
+timeout. On a boot with no working network it waits, delaying authelia
+rather than failing it. `Wants=` (not `Requires=`) keeps a failed wait
+unit from blocking authelia, but it does not bound a hang.
+
 ## Why a dedicated port, not `/authelia`
 
 Authelia officially recommends a dedicated subdomain/root; subpath

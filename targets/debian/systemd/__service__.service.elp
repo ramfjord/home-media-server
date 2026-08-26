@@ -1,9 +1,18 @@
 <%- (when (and dockerized (not has_unit)) -%>
 [Unit]
 Description=<%= desc %> (<%= name %>)
-After=docker.service mediaserver-network.service<% (when use_vpn %> wireguard.service<% ) %>
+<%- ; after_host_units: units outside the manifest (host services,
+   ; systemd targets) this service must not start before. Wants= as well
+   ; as After=, because ordering alone does nothing for a unit that ships
+   ; disabled -- Wants= pulls it in. Weak on purpose: if the unit is
+   ; absent or fails, this service still starts.
+-%>
+After=docker.service mediaserver-network.service<% (when use_vpn %> wireguard.service<% ) %><%= (format nil "~{ ~A~}" (getf service :after_host_units)) %>
 Requires=docker.service mediaserver-network.service
 PartOf=mediaserver-network.service mediaserver.target
+<%- (let ((hu (getf service :after_host_units))) (when hu -%>
+Wants=<%= (format nil "~{~A~^ ~}" hu) %>
+<%- )) -%>
 <%- (when use_vpn -%>
 BindsTo=wireguard.service
 <% ) -%>

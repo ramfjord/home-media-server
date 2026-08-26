@@ -55,6 +55,29 @@ manifest-diff deletion on the host. The list is rendered to
 `config/.sync-exclude` from `targets/debian/.sync-exclude.elp`; you
 don't need to touch the template to add entries.
 
+## Ordering against units outside the manifest: `after_host_units:`
+
+The generated unit already orders against what the manifest knows —
+`docker.service`, `mediaserver-network.service`, and `wireguard.service`
+for `use_vpn` services. `after_host_units:` extends that to units the
+manifest cannot see: host services and systemd targets.
+
+```yaml
+after_host_units:
+- systemd-time-wait-sync.service
+```
+
+Each entry is appended to `After=` **and** emitted as `Wants=`. Both are
+needed: ordering alone does nothing for a unit that ships disabled
+(`systemd-time-wait-sync.service` does), and `Wants=` is what pulls it
+in. `Wants=` is deliberately weak — if the unit is missing or fails,
+this service still starts.
+
+`systemd_override:` can express the same thing by hand, since `After=`
+and `Wants=` accumulate across drop-ins rather than replacing. Prefer
+the field: a declared dependency is enumerable across services, a
+drop-in body is not.
+
 ## Per-service systemd drop-ins
 
 The default `__service__.service.elp` template generates a `Type=simple` + `Restart=on-failure` unit suitable for long-running containers. To override directives without forking the template, set `systemd_override:` in `service.yml.elp` to a literal drop-in body — it's emitted to `<svc>.service.d/override.conf` and composed by systemd at load time. To replace an inherited `ExecStart` (a list-valued directive), reset it with an empty `ExecStart=` line before the new one. ELP tags in the body render in the manifest's **top-level scope**: globals like `<%= install_base %>` resolve, but per-service and derived fields (`compose_file`, `name`) do **not** bind there — build paths from a global plus the literal service name. See `services/api-config/service.yml.elp` for the canonical use (oneshot reconcile job, ExecStart→`compose run --rm` so the exit code propagates).
