@@ -25,11 +25,15 @@ RestartSec=10
 <%- (when use_vpn -%>
 ExecStartPre=/bin/sh -c 'for i in {1..30}; do docker inspect wireguard --format="{{.State.Health.Status}}" 2>/dev/null | grep -q healthy && exit 0; sleep 1; done; exit 1'
 <% ) -%>
-<%- ; --force-recreate: VPN services use network_mode: container:wireguard,
-   ; which caches wireguard's container id at create time. If wireguard
-   ; was recreated, this reference breaks, and these services can't spin up.
+<%- ; --force-recreate covers two unrelated needs.
+   ; use_vpn: network_mode: container:wireguard caches wireguard's
+   ; container id at create time. If wireguard was recreated, that
+   ; reference breaks and these services can't spin up.
+   ; recreate_on_start: the service carries state in its container's
+   ; read-write layer that a stop/start cycle does not clear, so
+   ; reusing the container wedges it. Only a new layer resets it.
 -%>
-ExecStart=/usr/bin/docker compose -f <%= compose_file %> up <% (when use_vpn %>--force-recreate <% ) %><%= name %>
+ExecStart=/usr/bin/docker compose -f <%= compose_file %> up <% (when (or use_vpn (getf service :recreate_on_start)) %>--force-recreate <% ) %><%= name %>
 ExecStop=/usr/bin/docker compose -f <%= compose_file %> stop <%= name %>
 <%- (when sighup_reload -%>
 ExecReload=/usr/bin/docker compose -f <%= compose_file %> kill --signal SIGHUP <%= name %>

@@ -78,6 +78,28 @@ and `Wants=` accumulate across drop-ins rather than replacing. Prefer
 the field: a declared dependency is enumerable across services, a
 drop-in body is not.
 
+## Forcing a fresh container each unit start: `recreate_on_start:`
+
+The generated unit runs `docker compose up <name>`, which reuses an
+existing container. Some images carry state in the container's
+read-write layer that a stop/start cycle does not clear, and reusing
+the container replays a broken state. `recreate_on_start: true` adds
+`--force-recreate`, so the unit gets a new layer every start.
+
+```yaml
+recreate_on_start: true
+```
+
+`use_vpn` services already pass `--force-recreate` for an unrelated
+reason (their `network_mode: container:wireguard` pins wireguard's
+container id at create time), so setting this on them is redundant.
+
+Reach for it only when a stop/start demonstrably differs from a
+recreate. It is not free: the container is destroyed and rebuilt on
+every unit start, so anything the image writes outside a mounted volume
+is discarded. `services/wireguard/service.yml.elp` is the canonical
+use.
+
 ## Per-service systemd drop-ins
 
 The default `__service__.service.elp` template generates a `Type=simple` + `Restart=on-failure` unit suitable for long-running containers. To override directives without forking the template, set `systemd_override:` in `service.yml.elp` to a literal drop-in body — it's emitted to `<svc>.service.d/override.conf` and composed by systemd at load time. To replace an inherited `ExecStart` (a list-valued directive), reset it with an empty `ExecStart=` line before the new one. ELP tags in the body render in the manifest's **top-level scope**: globals like `<%= install_base %>` resolve, but per-service and derived fields (`compose_file`, `name`) do **not** bind there — build paths from a global plus the literal service name. See `services/api-config/service.yml.elp` for the canonical use (oneshot reconcile job, ExecStart→`compose run --rm` so the exit code propagates).
