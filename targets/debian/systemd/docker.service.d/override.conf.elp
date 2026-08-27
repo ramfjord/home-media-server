@@ -1,0 +1,20 @@
+<%- ; Drop-in on the distro's docker.service. Attached to docker rather
+   ; than to the stack's units because there are TWO paths that start
+   ; containers -- systemd's <svc>.service units, and dockerd's own
+   ; `restart: unless-stopped` policy at daemon start. Gating the stack
+   ; units would leave the second path unguarded.
+   ;
+   ; Wants=, never Requires=: a failed or timed-out gate must not be
+   ; able to keep docker down. Worst case is a ~60s delayed boot with
+   ; the pre-existing race still present, which is strictly better than
+   ; a host that boots with no containers.
+   ;
+   ; Only containers using docker's embedded resolver are affected by
+   ; the race this closes. use_vpn services share wireguard's netns and
+   ; its resolv.conf (one inode, bind-mounted from wireguard's
+   ; container dir) and resolve through the tunnel at 10.128.0.1, so
+   ; they never consult MagicDNS.
+-%>
+[Unit]
+Wants=tailscale-dns-ready.service
+After=tailscale-dns-ready.service

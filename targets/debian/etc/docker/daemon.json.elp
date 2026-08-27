@@ -1,1 +1,37 @@
-<%= (plist-tree->json-string docker_daemon) %>
+<%- ; Defaults for /etc/docker/daemon.json live here rather than in
+   ; lisp/src, so the file's contents are readable where the file is
+   ; defined. A host adds to them via config.local.yml's docker_daemon
+   ; block (e.g. runtimes.nvidia for GPU transcoding); deep-merge
+   ; recurses on plists and unions lists, so host config extends these
+   ; rather than replacing them.
+   ;
+   ; Output stays machine-generated. Nothing in checks/ validates JSON,
+   ; and a malformed daemon.json fails `systemctl restart docker` --
+   ; which this file's rule in targets/debian/Makefile.elp fires on
+   ; change, taking every container down with it.
+   ;
+   ; NO `dns` KEY HERE -- deliberately. Setting one is the obvious fix
+   ; for the tailscaled boot race (docker binds a container's upstream
+   ; resolvers when it STARTS, from /etc/resolv.conf as it reads at that
+   ; instant, and tailscaled reports Started ~11s before it writes that
+   ; file, so containers starting inside the gap can never resolve the
+   ; tailnet FQDN). It cannot be used here.
+   ;
+   ; Why: docker's embedded resolver forwards upstream from inside the
+   ; container's netns, so wireguard's default-DROP killswitch blocks
+   ; it. What makes wireguard work today is that servers parsed from the
+   ; HOST's resolv.conf can be marked host-dialed -- they render as
+   ; `host(...)` in a container's ExtServers comment -- and those are
+   ; dialed from the host namespace, out of the killswitch's reach.
+   ; Explicitly configured servers are NEVER marked that way, whatever
+   ; address they hold. So any `dns` here removes wireguard's only path
+   ; to resolving its own Endpoint: no tunnel, and all four use_vpn
+   ; services fail on the dependency.
+   ;
+   ; Fixing the boot race therefore has to happen somewhere else -- a
+   ; killswitch pinhole for the resolver's upstream, or recreating
+   ; affected containers after tailscaled settles.
+-%>
+<%= (plist-tree->json-string
+      (deep-merge '(:log-driver "journald")
+                  (getf globals :docker_daemon))) %>

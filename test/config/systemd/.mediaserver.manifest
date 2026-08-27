@@ -1,5 +1,6 @@
 debian-host-config.path
 debian-host-config.service
+docker.service.d/override.conf
 fx-caddy-compose.path
 fx-caddy-compose-reload.service
 fx-caddy.path
@@ -24,3 +25,4 @@ mediaserver-network.service
 mediaserver.target
 tailscale-cert.service
 tailscale-cert.timer
+tailscale-dns-ready.service

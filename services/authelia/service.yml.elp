@@ -4,6 +4,15 @@ partof: security
 desc: Single sign-on / forward-auth portal
 port: 9091
 healthz: /api/health
+# Authelia runs an NTP startup check and exits fatal if the clock is not
+# synced. On a cold boot it loses that race to systemd-timesyncd, and
+# because the compose wrapper exits 0, Restart=on-failure never retries
+# -- authelia stays dead and caddy's forward_auth 502s every gated
+# service. Ordering after the wait unit makes the check run against a
+# synced clock. The unit ships disabled, so Wants= (emitted alongside
+# After=) is what actually pulls it in.
+after_host_units:
+- systemd-time-wait-sync.service
 # Authelia doesn't serve cleanly under a path prefix (officially
 # recommends a dedicated subdomain/root; subpath needs server.path +
 # dynamic base-tag handling). This tailnet host has no subdomains, so

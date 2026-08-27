@@ -7,13 +7,55 @@ scrape_target:
   host: host.docker.internal
   port: 9100
   service: operating-system
+  # Every node-exporter series is stamped service=operating-system by
+  # the line above, which is right for host-level metrics (cpu, disk,
+  # boot time) but wrong for the systemd collector: those describe one
+  # stack service each. Rewrite `service` from the unit name so
+  # SystemdUnitFailed groups under the offending service and
+  # alertmanager's service-settle inhibition (equal: [service]) can
+  # scope to it. Non-systemd metrics have no `name` label, do not
+  # match, and keep operating-system.
+  metric_relabel_configs:
+  - source_labels: [__name__, name]
+    regex: 'node_systemd_.+;(.+?)(?:-compose)?(?:-reload)?\.(?:service|path)'
+    target_label: service
+    replacement: '$1'
 docker_config:
   image: prom/node-exporter:latest
   network_mode: host
   pid: host
+  environment:
+  # godbus defaults the system bus to /var/run/dbus/system_bus_socket,
+  # which relies on a /var/run -> /run symlink this image does not
+  # have. Point it at the mount above explicitly.
+  - "DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket"
   volumes:
   - "/:/host:ro,rslave"
+  # The systemd collector talks to systemd over dbus. --path.rootfs
+  # does not redirect that -- the socket has to exist at its real path
+  # inside the container. Not :ro; connecting to a unix socket needs
+  # write access to the inode.
+  - "/run/dbus/system_bus_socket:/run/dbus/system_bus_socket"
   command:
   - "--path.rootfs=/host"
+  # The systemd collector is defaultDisabled upstream. Without it
+  # node_systemd_unit_state has no series at all and SystemdUnitFailed
+  # cannot fire.
+  - "--collector.systemd"
+  # unit_start_time_seconds is opt-in behind its own flag. It is what
+  # ServiceStarting keys on to mute a service while it restarts;
+  # cadvisor's container_start_time_seconds reports docker's .Created
+  # and so is blind to an in-place `systemctl restart`.
+  - "--collector.systemd.enable-start-time-metrics"
+  # Scope to units this repo generates. Not a cardinality measure --
+  # the default unit-exclude already drops mounts/scopes/slices. It is
+  # what keeps SystemdUnitFailed actionable: the host carries failed
+  # units the stack neither owns nor can fix (stray distro packages,
+  # leftover units from removed services), and every one of them would
+  # page permanently. Units are <svc>.service, <svc>-reload.service,
+  # <svc>-compose-reload.service, <svc>.path, <svc>-compose.path.
+  # Anchoring is added upstream as ^(?:...)$ -- do not add ^ or $ here,
+  # a literal $ would be eaten by compose variable interpolation.
+  - '--collector.systemd.unit-include=(<%= (format nil "~{~A~^|~}" (mapcar (field :name) (service-where dockerized))) %>)(-compose)?(-reload)?\.(service|path)|mediaserver-network\.service|tailscale-cert\.(service|timer)|tailscale-dns-ready\.service'
   restart: unless-stopped
 order: 145

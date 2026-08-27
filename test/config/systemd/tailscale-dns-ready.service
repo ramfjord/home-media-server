@@ -1,0 +1,10 @@
+[Unit]
+Description=Wait for Tailscale MagicDNS in /etc/resolv.conf
+Documentation=https://tailscale.com/kb/1235/resolv-conf
+After=tailscaled.service
+Wants=tailscaled.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/timeout 60 /bin/sh -c 'until grep -q "nameserver 100.100.100.100" /etc/resolv.conf; do sleep 1; done'

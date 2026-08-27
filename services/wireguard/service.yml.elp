@@ -20,9 +20,12 @@ docker_config:
     # Verify the tunnel is actually negotiated (fresh handshake), not
     # mere reachability. `ping 1.1.1.1` false-greened (eth0 path before
     # the killswitch) AND false-redded (provider drops ICMP through the
-    # tunnel). With the killswitch, a fresh wg0 handshake IS the egress
-    # guarantee: eth0 egress is dropped, so tunnel-up <-> exiting via
-    # the VPN. ($$ escapes compose interpolation -> $ at deploy.)
+    # tunnel). With the killswitch, a fresh wg0 handshake is the egress
+    # guarantee for ROUTED traffic: eth0 egress is dropped, so
+    # tunnel-up <-> routed packets exit via the VPN. It does not cover
+    # DNS -- docker's embedded resolver forwards from outside the netns
+    # and no OUTPUT rule reaches it; see services/wireguard/README.md.
+    # ($$ escapes compose interpolation -> $ at deploy.)
     test:
     - CMD-SHELL
     - >-
@@ -36,6 +39,18 @@ docker_config:
     # premature green.
     start_period: 30s
   restart: unless-stopped
+# wg-quick registers wg0 with openresolv as an *exclusive* record.
+# /run is not a tmpfs in this image, so /run/resolvconf/ lives in the
+# container's read-write layer; a SIGTERM/SIGKILL stop skips
+# `resolvconf -d wg0` and the record leaks into it. On the next start
+# the image seeds a `control` record from docker's freshly-restored
+# /etc/resolv.conf, then `resolvconf -u` regenerates -- and the stale
+# exclusive wg0 record wins, pinning resolv.conf to the VPN's internal
+# resolver before wg-quick runs. The endpoint hostname then cannot be
+# resolved (that resolver is only reachable through the tunnel it is
+# blocking), and the tunnel never comes up. Only a fresh read-write
+# layer clears it: stop/start does not, recreate does.
+recreate_on_start: true
 # Default Type=simple marks the unit Active the instant docker compose
 # forks, well before the container is healthy. Dependents
 # (network_mode: container:wireguard) clear After=wireguard.service

@@ -1,0 +1,432 @@
+<%- ; Stack Health: one row per service, sorted by how many alert
+   ; episodes it produced over the dashboard's time range.
+   ;
+   ; `re` is a regex of every service name we consider real, built from
+   ; the manifest plus the host-side units that carry a `service` label
+   ; but aren't manifest services. It exists to keep dead label values
+   ; out of the table: Prometheus holds `service` labels from throwaway
+   ; containers (dnstest, cadvisor-test) and from removed services
+   ; (lazylibrarian) for the full 15d retention, and each one would
+   ; otherwise render as a permanently-blank row.
+   (let ((re (format nil "~{~A~^|~}"
+                     (append (mapcar (field :name) services)
+                             '("docker" "operating-system"
+                               "mediaserver-network"
+                               "tailscale-cert" "tailscale-dns-ready"))))
+      ; Links out of Grafana must be absolute. GF_SERVER_SERVE_FROM_SUB_PATH
+      ; makes Grafana's app sub-path /grafana, and it prepends that to any
+      ; data link starting with "/" -- so a relative "/alertmanager/..."
+      ; resolves to "/grafana/alertmanager/..." and 404s. public_url from
+      ; the manifest carries scheme+host+route-prefix (with trailing slash),
+      ; same source the Discord template uses.
+      ;
+      ; The one link that stays relative is the Service dashboard: it is
+      ; internal, so "/d/service" is what the sub-path prepend is FOR, and
+      ; it keeps working if the tailnet FQDN changes.
+      (am (for-service :alertmanager public_url))
+      (prom (for-service :prometheus public_url))
+      (cadv (for-service :cadvisor public_url)))
+-%>
+{
+  "id": null,
+  "uid": "stack-health",
+  "title": "Stack Health",
+  "tags": ["mediaserver"],
+  "timezone": "",
+  "schemaVersion": 38,
+  "version": 0,
+  "refresh": "1m",
+  "time": { "from": "now-7d", "to": "now" },
+  "links": [
+    {
+      "type": "dashboards",
+      "title": "Dashboards",
+      "tags": ["mediaserver"],
+      "asDropdown": true,
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Systemd units failed",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(node_systemd_unit_state{service=~\"<%= re %>\", state=\"failed\"} == 1) or vector(0)",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Probes failing",
+      "description": "probe_success == 0. Only the 16 proxied web UIs are probed, so a green tile here does not mean the whole stack is reachable.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(probe_success{service=~\"<%= re %>\"} == 0) or vector(0)",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Containers unhealthy",
+      "description": "container_health_state == 0. Most images declare no HEALTHCHECK and report -1, which is not counted here — see the Health column's \"n/a\" rows.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(container_health_state{service=~\"<%= re %>\"} == 0) or vector(0)",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Alerts firing now",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(ALERTS{alertstate=\"firing\", alertname!~\"ServiceStarting|StackStarting\"}) or vector(0)",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      }
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Service health — sorted by alert episodes over the dashboard range",
+      "description": "One row per service. `Episodes` counts how many times an alert *started* firing in the selected range, via changes(ALERTS_FOR_STATE[range]) — not how many scrapes it was firing for, so a single alert stuck for a day counts once. ServiceStarting/StackStarting are excluded: they are inhibition markers, not incidents, and they fire on every restart.\n\nClick a service name for its logs, its Prometheus alert history, or its Grafana dashboards.\n\nColumn coverage differs on purpose: `Unit` covers every service, `Up` only the scraped ones, `Probe` only the proxied web UIs, `Health` only images that declare a HEALTHCHECK. Blank and n/a mean not measured, not healthy.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 18, "w": 24, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "instant": true,
+          "expr": "sum by (service) (changes(ALERTS_FOR_STATE{service=~\"<%= re %>\", alertname!~\"ServiceStarting|StackStarting\"}[$__range]))"
+        },
+        {
+          "refId": "B",
+          "format": "table",
+          "instant": true,
+          "expr": "sum by (service) (ALERTS{service=~\"<%= re %>\", alertstate=\"firing\", alertname!~\"ServiceStarting|StackStarting\"})"
+        },
+        {
+          "refId": "C",
+          "format": "table",
+          "instant": true,
+          "expr": "max by (service) (node_systemd_unit_state{service=~\"<%= re %>\", state=\"failed\"})"
+        },
+        {
+          "refId": "D",
+          "format": "table",
+          "instant": true,
+          "expr": "min by (service) (up{service=~\"<%= re %>\"})"
+        },
+        {
+          "refId": "E",
+          "format": "table",
+          "instant": true,
+          "expr": "min by (service) (probe_success{service=~\"<%= re %>\"})"
+        },
+        {
+          "refId": "F",
+          "format": "table",
+          "instant": true,
+          "expr": "min by (service) (container_health_state{service=~\"<%= re %>\"})"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": { "include": { "pattern": "^(service|Value #.*)$" } }
+        },
+        {
+          "id": "joinByField",
+          "options": { "byField": "service", "mode": "outer" }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {},
+            "renameByName": {
+              "service": "Service",
+              "Value #A": "Episodes",
+              "Value #B": "Firing",
+              "Value #C": "Unit",
+              "Value #D": "Up",
+              "Value #E": "Probe",
+              "Value #F": "Health"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "align": "left", "cellOptions": { "type": "auto" }, "filterable": true },
+          "noValue": "—"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Service" },
+            "properties": [
+              { "id": "custom.width", "value": 220 },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Logs (Service dashboard)",
+                    "url": "/d/service?var-service=${__value.raw}&${__url_time_range}",
+                    "targetBlank": false
+                  },
+                  {
+                    "title": "Alert history (Prometheus)",
+                    "url": "<%= prom %>graph?g0.expr=ALERTS%7Bservice%3D%22${__value.raw}%22%2Calertname!~%22ServiceStarting%7CStackStarting%22%7D&g0.tab=0&g0.range_input=7d",
+                    "targetBlank": true
+                  },
+                  {
+                    "title": "Container CPU/memory (cAdvisor)",
+                    "url": "<%= cadv %>docker/${__value.raw}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Episodes" },
+            "properties": [
+              { "id": "custom.width", "value": 110 },
+              { "id": "custom.cellOptions", "value": { "type": "color-background", "mode": "gradient" } },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "yellow", "value": 1 },
+                    { "color": "orange", "value": 4 },
+                    { "color": "red", "value": 8 }
+                  ]
+                }
+              },
+              { "id": "noValue", "value": "0" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Firing" },
+            "properties": [
+              { "id": "custom.width", "value": 90 },
+              { "id": "custom.cellOptions", "value": { "type": "color-background", "mode": "basic" } },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "red", "value": 1 }
+                  ]
+                }
+              },
+              { "id": "noValue", "value": "0" },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Alertmanager",
+                    "url": "<%= am %>#/alerts?silenced=false&inhibited=false&muted=false&active=true&filter=%7Bservice%3D%22${__data.fields.Service}%22%7D",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Unit" },
+            "properties": [
+              { "id": "custom.width", "value": 100 },
+              { "id": "custom.cellOptions", "value": { "type": "color-background", "mode": "basic" } },
+              {
+                "id": "mappings",
+                "value": [
+                  { "type": "value", "options": { "0": { "text": "ok", "color": "green", "index": 0 } } },
+                  { "type": "value", "options": { "1": { "text": "FAILED", "color": "red", "index": 1 } } }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Up" },
+            "properties": [
+              { "id": "custom.width", "value": 100 },
+              { "id": "custom.cellOptions", "value": { "type": "color-background", "mode": "basic" } },
+              {
+                "id": "mappings",
+                "value": [
+                  { "type": "value", "options": { "1": { "text": "ok", "color": "green", "index": 0 } } },
+                  { "type": "value", "options": { "0": { "text": "DOWN", "color": "red", "index": 1 } } }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Probe" },
+            "properties": [
+              { "id": "custom.width", "value": 100 },
+              { "id": "custom.cellOptions", "value": { "type": "color-background", "mode": "basic" } },
+              {
+                "id": "mappings",
+                "value": [
+                  { "type": "value", "options": { "1": { "text": "ok", "color": "green", "index": 0 } } },
+                  { "type": "value", "options": { "0": { "text": "FAIL", "color": "red", "index": 1 } } }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Health" },
+            "properties": [
+              { "id": "custom.width", "value": 110 },
+              { "id": "custom.cellOptions", "value": { "type": "color-background", "mode": "basic" } },
+              {
+                "id": "mappings",
+                "value": [
+                  { "type": "value", "options": { "1": { "text": "ok", "color": "green", "index": 0 } } },
+                  { "type": "value", "options": { "0": { "text": "UNHEALTHY", "color": "red", "index": 1 } } },
+                  { "type": "value", "options": { "-1": { "text": "n/a", "color": "text", "index": 2 } } }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "footer": { "show": false, "reducer": ["sum"], "fields": "" },
+        "sortBy": [ { "displayName": "Episodes", "desc": true } ]
+      }
+    },
+    {
+      "id": 6,
+      "type": "state-timeline",
+      "title": "Alert history — when each alert was firing",
+      "description": "Every non-marker alert that fired in the range, one lane per service+alert. This is the visual companion to the Episodes column: the table says how often, this says when, and whether several services broke at the same instant (a shared cause, e.g. a boot) or independently.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 22 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "ALERTS{service=~\"<%= re %>\", alertstate=\"firing\", alertname!~\"ServiceStarting|StackStarting\"}",
+          "legendFormat": "{{service}} — {{alertname}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "fillOpacity": 80, "lineWidth": 0 },
+          "mappings": [
+            { "type": "value", "options": { "1": { "text": "firing", "color": "red", "index": 0 } } }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "mergeValues": true,
+        "showValue": "never",
+        "alignValue": "left",
+        "rowHeight": 0.9,
+        "legend": { "showLegend": false, "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      }
+    }
+  ]
+}
+<%- ) -%>
