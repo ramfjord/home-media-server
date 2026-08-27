@@ -9,6 +9,7 @@ groups:
       # as having failed.
       expr: node_systemd_unit_state{service=~".+", state="failed"} == 1
       for: 5m
+      keep_firing_for: <%= (for-service :prometheus alert_keep_firing_for) %>
       annotations:
         summary: "{{ $labels.service }} - systemd unit {{ $labels.name }} failed"
 
@@ -21,6 +22,7 @@ groups:
       # start_period/restart window so recreates don't flap.
       expr: container_health_state{service!=""} == 0
       for: 10m
+      keep_firing_for: <%= (for-service :prometheus alert_keep_firing_for) %>
       annotations:
         summary: "{{ $labels.service }} - container failing its Docker healthcheck for 10m"
 
@@ -28,6 +30,7 @@ groups:
       expr: |
         predict_linear(node_filesystem_avail_bytes{fstype=~"ext4|xfs|btrfs|zfs|vfat|exfat|ntfs|fuseblk"}[24h], 5 * 24 * 3600) <= 0
         and node_filesystem_avail_bytes{fstype=~"ext4|xfs|btrfs|zfs|vfat|exfat|ntfs|fuseblk"} > 0
+      keep_firing_for: <%= (for-service :prometheus alert_keep_firing_for) %>
       labels:
         partof: streaming
         service: disk

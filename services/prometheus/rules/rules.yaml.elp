@@ -5,6 +5,7 @@ groups:
   - alert: TargetDown
     expr: up == 0
     for: 5m
+    keep_firing_for: <%= (for-service :prometheus alert_keep_firing_for) %>
     labels:
       severity: warning
     annotations:
@@ -16,6 +17,7 @@ groups:
   - alert: PrometheusTooManyRestarts
     expr: changes(process_start_time_seconds{job=~"prometheus|pushgateway|alertmanager"}[15m]) > 2
     for: 0m
+    keep_firing_for: <%= (for-service :prometheus alert_keep_firing_for) %>
     labels:
       severity: warning
     annotations:
@@ -25,6 +27,7 @@ groups:
   - alert: PrometheusConfigurationReloadFailure
     expr: prometheus_config_last_reload_successful != 1
     for: 0m
+    keep_firing_for: <%= (for-service :prometheus alert_keep_firing_for) %>
     labels:
       severity: warning
     annotations:
@@ -34,6 +37,7 @@ groups:
   - alert: PrometheusRuleEvaluationFailures
     expr: increase(prometheus_rule_evaluation_failures_total[3m]) > 0
     for: 0m
+    keep_firing_for: <%= (for-service :prometheus alert_keep_firing_for) %>
     labels:
       severity: critical
     annotations:
@@ -43,6 +47,7 @@ groups:
   - alert: PrometheusTemplateTextExpansionFailures
     expr: increase(prometheus_template_text_expansion_failures_total[3m]) > 0
     for: 0m
+    keep_firing_for: <%= (for-service :prometheus alert_keep_firing_for) %>
     labels:
       severity: critical
     annotations:
@@ -52,6 +57,7 @@ groups:
   - alert: PrometheusRuleEvaluationSlow
     expr: prometheus_rule_group_last_duration_seconds > prometheus_rule_group_interval_seconds
     for: 5m
+    keep_firing_for: <%= (for-service :prometheus alert_keep_firing_for) %>
     labels:
       severity: warning
     annotations:
@@ -70,6 +76,7 @@ groups:
   - alert: PrometheusAlertmanagerConfigurationReloadFailure
     expr: alertmanager_config_last_reload_successful != 1
     for: 0m
+    keep_firing_for: <%= (for-service :prometheus alert_keep_firing_for) %>
     labels:
       severity: warning
     annotations:

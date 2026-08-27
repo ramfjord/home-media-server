@@ -12,6 +12,7 @@ groups:
       # exporter-up-but-tunnel-dead.
       expr: time() - wireguard_latest_handshake_seconds > 180
       for: 5m
+      keep_firing_for: <%= (for-service :prometheus alert_keep_firing_for) %>
       labels:
         partof: vpn
         service: wireguard

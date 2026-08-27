@@ -33,6 +33,7 @@ groups:
           "service", "$1", "config_target", "(.+)"
         )
       for: 0m
+      keep_firing_for: <%= (for-service :prometheus alert_keep_firing_for) %>
       labels:
         severity: warning
       annotations:

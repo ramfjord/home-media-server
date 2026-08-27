@@ -10,6 +10,7 @@ port: 9090
 internal_path: /prometheus
 healthz: /-/healthy
 sighup_reload: true
+alert_keep_firing_for: 30m
 scrape_target: true
 docker_config:
   image: prom/prometheus:latest
