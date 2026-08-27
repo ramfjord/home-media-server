@@ -1,49 +1,27 @@
 {{/*
-  Link to Alertmanager's New Silence form, prefilled with this group's
-  common labels (alerts are grouped by `service`, so the silence is
-  scoped to exactly the offending service). Base URL is baked at render
-  from (for-service :alertmanager public_url) — the caddy /alertmanager
-  route — rather than .ExternalURL, so it's consistent with the rest of
-  this file's ELP and independent of AM's --web.external-url.
+  One post per incident, not per alert. The route groups every alert
+  into a single group (group_by: []), so .Alerts is the whole set of
+  what is currently wrong with the host.
 
-  filter syntax is `{a="b", c="d"}`: open %7B, %2C%20-join the matchers
-  (separator only *between* items via the $i guard — a trailing comma
-  leaves an empty matcher that AM's parser rejects, blanking the form),
-  close %7D. " is %22, = is %3D, , is %2C, space is %20.
+  Short host name is the FQDN's first label, computed at render.
+  Links are absolute and built from each service's public_url.
 */ -}}
-{{ define "__alert_silence_link" -}}
-<%= (for-service :alertmanager public_url) %>/#/silences/new?filter=%7B
-{{- range $i, $p := .CommonLabels.SortedPairs -}}
-{{- if $i }}%2C%20{{ end -}}
-{{- $p.Name }}%3D%22{{ $p.Value }}%22
-{{- end -}}
-%7D
-{{- end }}
 
 {{ define "discord.title" -}}
-[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ if .CommonLabels.service }}{{ .CommonLabels.service }}{{ else }}untagged{{ end }}
+{{ if eq .Status "firing" }}⚠️  <%= hostname %> is having trouble{{ else }}✅  <%= hostname %> has recovered{{ end }}
 {{- end }}
 
-{{/*
-  Each bullet renders the alertname as a Discord markdown link to a
-  Prometheus *graph* of the triggering query over the last 3 days,
-  plus a `logs` link to the Service dashboard scoped to this alert's
-  service label.
-
-  Prometheus bakes `<external_url>/graph?g0.expr=<query>&g0.tab=1`
-  into .GeneratorURL — tab=1 is the table view. We rewrite to tab=0
-  (graph) and append range_input=3d. No need to plumb the expression
-  in by hand; .GeneratorURL already has it URL-encoded.
-
-  The dashboard's middle panel filters by `_SYSTEMD_UNIT=$service.service`,
-  but the third panel shows all priority-≤3 entries on the host
-  regardless of unit — that's where service-less alerts (everything
-  bucketed under service=alloy: kernel, scope/slice units) land. So
-  the same link works for tagged services and the alloy catch-all.
-*/ -}}
 {{ define "discord.body" -}}
-{{ range .Alerts -}}
-* [**{{ .Labels.alertname }}**]({{ reReplaceAll "g0\\.tab=1" "g0.tab=0" .GeneratorURL }}&g0.range_input=3d){{ if .Labels.severity }} _({{ .Labels.severity }})_{{ end }}{{ with .Annotations.summary }} — {{ . }}{{ end }} • [logs](https://<%= hostname %>/grafana/d/service?var-service={{ .Labels.service | urlquery }}&from=now-1h&to=now)
+[health dashboard](<%= (for-service :grafana public_url) %>/d/stack-health)
+
+{{ if eq .Status "firing" -}}
+{{ range $i, $a := .Alerts.Firing -}}
+{{ if lt $i 15 }}• `{{ if $a.Labels.service }}{{ $a.Labels.service }}{{ else }}host{{ end }}` — {{ $a.Labels.alertname }}{{ with $a.Annotations.summary }} — {{ . }}{{ end }}
+{{ end }}{{- end -}}
+{{ if gt (len .Alerts.Firing) 15 }}…and more — see the dashboard
 {{ end }}
-🔇 [mute this group]({{ template "__alert_silence_link" . }})
+
+{{- else -}}
+**<%= (subseq hostname 0 (position #\. hostname)) %>** has been stable for <%= (for-service :prometheus alert_keep_firing_for) %>
+{{- end }}
 {{- end }}

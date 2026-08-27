@@ -1,5 +1,5 @@
 groups:
-- name: MediaServer
+- name: Services
   rules:
     - alert: SystemdUnitFailed
       # Alert on failed, not "not active": oneshot units (e.g.
@@ -12,6 +12,16 @@ groups:
       keep_firing_for: <%= (for-service :prometheus alert_keep_firing_for) %>
       annotations:
         summary: "{{ $labels.service }} - systemd unit {{ $labels.name }} failed"
+
+    - alert: ServiceCrashLooping
+      # node_systemd_service_restart_total is NRestarts, which counts
+      # automatic restarts only -- deploys and manual restarts do not
+      # increment it
+      expr: increase(node_systemd_service_restart_total{service=~".+"}[30m]) > 2
+      for: 0m
+      keep_firing_for: <%= (for-service :prometheus alert_keep_firing_for) %>
+      annotations:
+        summary: "{{ $labels.service }} - unit {{ $labels.name }} restarted {{ $value | printf \"%.0f\" }} times in 1h (crash loop)"
 
     - alert: ContainerUnhealthy
       # cadvisor's container_health_state: 1 healthy, 0 unhealthy, -1 no

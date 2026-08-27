@@ -2,14 +2,12 @@ templates:
   - templates/*.tmpl
 
 route:
-  # group_by: ['service'] — collapse all alerts touching the same
-  # service into one notification thread. An exporter scrape failing
-  # (TargetDown) and that service's blackbox probe failing
-  # (BlackboxProbeFailed) end up in the same Discord post instead of
-  # two separate posts. Alerts with no `service` label group under "".
-  group_by: ['service']
-  group_wait: 30s
-  group_interval: 5m
+  # group_by: [] — every alert lands in ONE group.  For this server, the
+  # discord notifications serve primarily as a bulk notification that
+  # something should be investigated.
+  group_by: []
+  group_wait: 5m
+  group_interval: 30m
   repeat_interval: 24h
   receiver: discord
   routes:
@@ -31,7 +29,10 @@ receivers:
 #       - url: 'http://127.0.0.1:5001/'
   - name: discord
     discord_configs:
-      - webhook_url: 'https://discord.com/api/webhooks/1302064758228254812/JEYtJUxH4yt_KBJ8cZqvZI8SWQ7WWDoJeem3PZDdbLiu155Gp-HNRLQc5c-xZn1OFBY4'
+      # Explicit: the recovery post is half the point of the single
+      # group, not an incidental default.
+      - send_resolved: true
+        webhook_url: 'https://discord.com/api/webhooks/1302064758228254812/JEYtJUxH4yt_KBJ8cZqvZI8SWQ7WWDoJeem3PZDdbLiu155Gp-HNRLQc5c-xZn1OFBY4'
         # Alertmanager's built-in discord templates are
         # `discord.default.title` / `discord.default.message`; ours
         # are named differently so we have to reference them
@@ -52,7 +53,16 @@ inhibit_rules:
   # Mute one service while its container restarts. `equal: [service]`
   # scopes it to the service that actually restarted; every other
   # service keeps alerting normally.
+  #
+  # SystemdUnitFailed and ServiceCrashLooping are exempt. A service
+  # that restarts faster than ServiceStarting's 10m window keeps the
+  # marker permanently true and would otherwise be permanently muted --
+  # the crash loop, the loudest failure there is, would be the one
+  # thing this rule hides. Both are immune to restart noise by
+  # construction: SystemdUnitFailed needs 5 continuous minutes in
+  # `failed`, and ServiceCrashLooping counts only automatic restarts,
+  # so neither fires for an ordinary restart.
   - name: service-settle
     source_matchers: [ alertname="ServiceStarting" ]
-    target_matchers: [ alertname!="ServiceStarting" ]
+    target_matchers: [ alertname!~"ServiceStarting|SystemdUnitFailed|ServiceCrashLooping" ]
     equal: ['service']

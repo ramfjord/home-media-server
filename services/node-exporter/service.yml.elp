@@ -47,6 +47,12 @@ docker_config:
   # cadvisor's container_start_time_seconds reports docker's .Created
   # and so is blind to an in-place `systemctl restart`.
   - "--collector.systemd.enable-start-time-metrics"
+  # service_restart_total is a second opt-in flag. It exposes systemd's
+  # NRestarts, which counts only *automatic* restarts -- a manual
+  # `systemctl restart` and the deploy's own restarts do not increment
+  # it, so with Restart=on-failure it counts exactly the unexpected
+  # exits. ServiceCrashLooping keys on it.
+  - "--collector.systemd.enable-restarts-metrics"
   # Scope to units this repo generates. Not a cardinality measure --
   # the default unit-exclude already drops mounts/scopes/slices. It is
   # what keeps SystemdUnitFailed actionable: the host carries failed
